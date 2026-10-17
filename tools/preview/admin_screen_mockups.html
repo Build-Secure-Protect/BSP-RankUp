@@ -1,0 +1,311 @@
+<title>RankUp Admin Screen</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: three Minecraft screens (GUI scale 2, 856 x 480) stacked, each with a short brief, then the decisions list. Single dark look: this is a game HUD, BSP Core's Holo HUD style as in Region Guard's mock-ups. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0e13;          /* page ground, deeper than the panel */
+  --panel: #10151c;       /* Holo HUD panel */
+  --inset: #0c0e12;       /* slots and insets */
+  --line: #2a2f3a;        /* dim lines */
+  --accent: #19d3b0;      /* turquoise */
+  --violet: #b58cff;      /* operator / other */
+  --gold: #ffd23a;        /* coins, values */
+  --bad: #ff6b5c;         /* blocked */
+  --text: #e6eaf2;
+  --muted: #9aa3b5;
+  --mc: 'VT323', 'Courier New', monospace;         /* the in-game face, 20px = 10 GUI px */
+  --ui: 'IBM Plex Sans', system-ui, sans-serif;    /* the brief around the screens */
+}
+body { background: var(--bg); color: var(--text); font-family: var(--ui); padding-block: 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); line-height: 1.5; }
+.wrap { max-width: 920px; margin: 0 auto; display: grid; gap: 40px; }
+h1 { font-family: var(--mc); font-size: 40px; font-weight: 400; letter-spacing: 1px; color: var(--accent); margin: 0; text-wrap: balance; }
+h2 { font-family: var(--mc); font-size: 32px; font-weight: 400; margin: 0; color: var(--text); }
+h2 small { color: var(--muted); font-size: 24px; margin-left: 8px; }
+p { max-width: 68ch; margin: 0; }
+.lead { color: var(--muted); }
+.option { display: grid; gap: 14px; }
+.brief { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 32px; }
+.brief p { font-size: 15px; }
+.brief b { color: var(--accent); font-weight: 600; }
+.brief .con b { color: var(--gold); }
+.frame { overflow-x: auto; border: 1px solid var(--line); background: #06080c; padding: 12px; }
+.screen { position: relative; width: 856px; height: 480px; font-family: var(--mc); font-size: 20px; line-height: 1; color: var(--text);
+  background:
+    radial-gradient(ellipse at 30% 20%, #16331f 0, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, #2a2316 0, transparent 50%),
+    #1a2230; image-rendering: pixelated; }
+.panel { position: absolute; background: rgba(16,21,28,.94); border: 2px solid var(--accent); box-sizing: border-box; }
+.title { position: absolute; left: 20px; top: 16px; color: var(--accent); letter-spacing: 2px; }
+.help { position: absolute; color: var(--muted); font-size: 15px; }
+.inset { position: absolute; background: var(--inset); border: 2px solid var(--line); box-sizing: border-box; }
+.row { position: absolute; left: 0; right: 0; height: 28px; padding: 4px 10px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; }
+.row.sel { background: rgba(25,211,176,.14); box-shadow: inset 2px 0 0 var(--accent); }
+.row .n { color: var(--muted); width: 18px; }
+.row .pts { margin-left: auto; color: var(--gold); font-variant-numeric: tabular-nums; }
+.pill { font-size: 15px; padding: 2px 6px; border: 2px solid var(--line); color: var(--muted); line-height: 1; }
+.pill.season { border-color: var(--violet); color: var(--violet); }
+.pill.perm { border-color: var(--line); color: var(--muted); }
+.pill.ok { border-color: var(--accent); color: var(--accent); }
+.pill.off { border-color: var(--line); color: var(--muted); }
+.pill.gold { border-color: var(--gold); color: var(--gold); }
+.tabs { position: absolute; display: flex; gap: 4px; }
+.tab { padding: 6px 12px; border: 2px solid var(--line); border-bottom: none; color: var(--muted); background: var(--inset); }
+.tab.on { color: var(--accent); border-color: var(--accent); background: rgba(25,211,176,.1); }
+.btn { position: absolute; padding: 6px 14px; border: 2px solid var(--accent); color: var(--accent); background: rgba(25,211,176,.08); }
+.btn.bad { border-color: var(--bad); color: var(--bad); background: rgba(255,107,92,.08); }
+.btn.gold { border-color: var(--gold); color: var(--gold); background: rgba(255,210,58,.08); }
+.btn.dim { border-color: var(--line); color: var(--muted); background: transparent; }
+.btn.violet { border-color: var(--violet); color: var(--violet); background: rgba(181,140,255,.08); }
+.seg { display: inline-flex; border: 2px solid var(--line); }
+.seg span { padding: 2px 8px; color: var(--muted); font-size: 17px; border-right: 2px solid var(--line); }
+.seg span:last-child { border-right: none; }
+.seg .on { color: var(--accent); background: rgba(25,211,176,.2); }
+.seg .vio { color: var(--violet); background: rgba(181,140,255,.2); }
+.seg .red { color: var(--bad); background: rgba(255,107,92,.2); }
+.frow { position: absolute; left: 0; right: 0; height: 26px; padding: 2px 10px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; }
+.frow .n { color: var(--text); }
+.frow .n i { color: var(--muted); font-style: normal; font-size: 15px; margin-left: 8px; }
+.frow .v { color: var(--gold); font-variant-numeric: tabular-nums; }
+.ghead { position: absolute; left: 10px; color: var(--accent); font-size: 17px; letter-spacing: 2px; }
+.field { position: absolute; display: grid; gap: 4px; }
+.field label { color: var(--muted); font-size: 15px; letter-spacing: 1px; }
+.field .box { background: var(--inset); border: 2px solid var(--line); padding: 4px 8px; box-sizing: border-box; color: var(--text); height: 28px; display: flex; align-items: center; }
+.field .box.focus { border-color: var(--accent); }
+.field .box.focus::after { content: '_'; color: var(--accent); margin-left: 2px; }
+.rrow { position: absolute; left: 0; right: 0; height: 28px; padding: 2px 10px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; }
+.rrow .kind { width: 86px; color: var(--violet); font-size: 17px; letter-spacing: 1px; }
+.rrow .val { color: var(--text); }
+.rrow .val i { color: var(--muted); font-style: normal; font-size: 15px; margin-left: 6px; }
+.rrow .x { margin-left: auto; color: var(--bad); font-size: 17px; }
+.card { position: absolute; border: 2px solid var(--line); background: var(--inset); box-sizing: border-box; padding: 6px 8px; }
+.card .cn { color: var(--text); display: flex; align-items: center; gap: 8px; }
+.card .cn .pts { margin-left: auto; color: var(--gold); font-size: 17px; }
+.card .cd { color: var(--muted); font-size: 15px; margin-top: 3px; }
+.card.sel { border-color: var(--accent); background: rgba(25,211,176,.1); }
+.card .players { position: absolute; right: 8px; bottom: 6px; color: var(--muted); font-size: 15px; }
+.track { position: absolute; width: 4px; background: var(--line); }
+.track.lit { background: var(--accent); }
+.node { position: absolute; width: 14px; height: 14px; border: 2px solid var(--line); background: var(--panel); box-sizing: border-box; }
+.node.lit { border-color: var(--accent); background: var(--accent); }
+.node.sea { border-color: var(--violet); }
+.bar { position: absolute; height: 10px; background: rgba(25,211,176,.14); border: 2px solid var(--line); box-sizing: border-box; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+.bar.off i { background: var(--line); }
+.pane { position: absolute; border: 2px solid var(--line); background: rgba(12,14,18,.7); box-sizing: border-box; }
+.pane .ph { position: absolute; left: 8px; top: 6px; color: var(--accent); letter-spacing: 2px; font-size: 17px; }
+.pane .ph i { color: var(--muted); font-style: normal; letter-spacing: 0; margin-left: 8px; }
+.pane .open { position: absolute; right: 8px; top: 6px; color: var(--muted); font-size: 15px; }
+.pane.hot { border-color: var(--accent); }
+.feed { position: absolute; left: 8px; right: 8px; height: 22px; display: flex; gap: 8px; align-items: center; font-size: 17px; }
+.feed .who { color: var(--text); }
+.feed .to { color: var(--accent); }
+.feed .ago { margin-left: auto; color: var(--muted); font-size: 15px; }
+.kv { position: absolute; left: 10px; right: 10px; font-size: 17px; line-height: 1.35; }
+.kv span { color: var(--muted); }
+.pick { border: 1px solid var(--line); padding: 20px 24px; display: grid; gap: 10px; }
+.pick h2 { font-size: 28px; }
+.pick ol { margin: 0; padding-left: 22px; color: var(--text); font-size: 15px; display: grid; gap: 8px; }
+.pick li b { color: var(--accent); font-weight: 600; }
+.pick li .def { color: var(--gold); }
+.pick .note { color: var(--muted); font-size: 15px; }
+@media (max-width: 700px) { .brief { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:10px">
+    <h1>RankUp admin screen: three options</h1>
+    <p class="lead">Each mock-up is one Minecraft screen at GUI scale 2 (856 by 480 pixels) in BSP Core's Holo HUD style, the look Region Guard's screens already use. The same example ladder appears in all three, five ranks on the LuckPerms track <b style="color:var(--text)">rankup</b>: Settler (0 points), Raider (500), Warden (1 500), Vanguard (4 000, seasonal) and Legend (10 000, seasonal); the same signals and their points; the same options. Everything the mod does is set here (decision D11): the config file keeps only the database connection (D19). Pick one, or name the parts you want combined.</p>
+  </header>
+
+  <!-- ============================================================ OPTION A -->
+  <section class="option" id="a">
+    <h2>A. Ledger <small>four tabs, a list on the left, the chosen rank on the right</small></h2>
+    <div class="brief">
+      <p>Region Guard's shape. Tabs in the header: LADDER, SIGNALS, PLAYERS, OPTIONS. On LADDER the ranks are a list in track order with their points and a seasonal pill; the chosen rank's fields sit on the right: group, display name, points needed, permanent or seasonal, and its rewards as typed rows (coins, pieces, item, title, command) with ADD REWARD and FROM HAND (adds the stack you hold). SIGNALS is a table of every signal with on/off and points each; PLAYERS a search with set, add and reset; OPTIONS the track name, announcements, titles and the storage lines.</p>
+      <p><b>Good at:</b> many ranks and many rewards; one tab per job keeps each screen simple; the fastest to build, since every piece has a Region Guard twin. <span class="con"><b>Weak at:</b></span> seeing the ladder as a whole while you edit one rank; signals and ranks are never on screen together.</p>
+    </div>
+    <div class="frame">
+      <div class="screen">
+        <div class="panel" style="left:12px;top:12px;width:832px;height:456px">
+          <div class="title">RANKUP ADMIN</div>
+          <div class="help" style="right:20px;top:18px">track rankup - 5 ranks - LuckPerms Bukkit - MySQL + Redis</div>
+          <div class="tabs" style="left:16px;top:44px">
+            <span class="tab on">LADDER</span><span class="tab">SIGNALS</span><span class="tab">PLAYERS</span><span class="tab">OPTIONS</span>
+          </div>
+          <!-- left: rank list -->
+          <div class="inset" style="left:16px;top:76px;width:270px;height:300px">
+            <div class="row" style="top:4px"><span class="n">1</span><span>Settler</span><span class="pill perm">permanent</span><span class="pts">0</span></div>
+            <div class="row" style="top:32px"><span class="n">2</span><span>Raider</span><span class="pill perm">permanent</span><span class="pts">500</span></div>
+            <div class="row sel" style="top:60px"><span class="n">3</span><span>Warden</span><span class="pill perm">permanent</span><span class="pts">1 500</span></div>
+            <div class="row" style="top:88px"><span class="n">4</span><span>Vanguard</span><span class="pill season">seasonal</span><span class="pts">4 000</span></div>
+            <div class="row" style="top:116px"><span class="n">5</span><span>Legend</span><span class="pill season">seasonal</span><span class="pts">10 000</span></div>
+            <div class="help" style="left:10px;top:160px">Order is the LuckPerms track's order.<br>Points are totals a player must reach.</div>
+          </div>
+          <div class="btn" style="left:16px;top:384px">+ ADD RANK</div>
+          <div class="btn dim" style="left:150px;top:384px">UP</div>
+          <div class="btn dim" style="left:200px;top:384px">DOWN</div>
+          <div class="btn bad" style="left:16px;top:422px">REMOVE</div>
+          <div class="help" style="left:132px;top:430px">removing keeps players' points</div>
+          <!-- right: rank editor -->
+          <div style="position:absolute;left:304px;top:80px;font-size:24px">Warden <span style="color:var(--muted);font-size:17px">rank 3 of 5 - 12 players hold it - 3 within 100 points</span></div>
+          <div class="field" style="left:304px;top:112px;width:150px"><label>GROUP</label><div class="box">warden</div></div>
+          <div class="field" style="left:466px;top:112px;width:150px"><label>DISPLAY NAME</label><div class="box focus">Warden</div></div>
+          <div class="field" style="left:628px;top:112px;width:90px"><label>POINTS</label><div class="box">1500</div></div>
+          <div class="field" style="left:730px;top:112px;width:98px"><label>SEASON</label><div class="seg" style="height:28px;box-sizing:border-box"><span class="on">keep</span><span>reset</span></div></div>
+          <div class="ghead" style="left:304px;top:170px">REWARDS WHEN REACHED</div>
+          <div class="inset" style="left:304px;top:190px;width:524px;height:186px">
+            <div class="rrow" style="top:4px"><span class="kind">COINS</span><span class="val">64<i>Gold Shatter Coins, into the hand</i></span><span class="x">x</span></div>
+            <div class="rrow" style="top:32px"><span class="kind">PIECES</span><span class="val">250<i>into the bank</i></span><span class="x">x</span></div>
+            <div class="rrow" style="top:60px"><span class="kind">ITEM</span><span class="val">minecraft:netherite_ingot<i>x 2</i></span><span class="x">x</span></div>
+            <div class="rrow" style="top:88px"><span class="kind">TITLE</span><span class="val">&amp;b[Warden]<i>LuckPerms prefix</i></span><span class="x">x</span></div>
+            <div class="rrow" style="top:116px"><span class="kind">COMMAND</span><span class="val">give %player% minecraft:totem_of_undying</span><span class="x">x</span></div>
+            <div class="help" style="left:10px;top:152px">Given again each season for seasonal ranks (D18).</div>
+          </div>
+          <div class="btn" style="left:304px;top:384px">+ ADD REWARD</div>
+          <div class="btn gold" style="left:452px;top:384px">FROM HAND</div>
+          <div class="btn violet" style="left:580px;top:384px">ANNOUNCE TEST</div>
+          <div class="help" style="left:304px;top:430px">Changes save at once and reach every server. Esc closes.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ OPTION B -->
+  <section class="option" id="b">
+    <h2>B. Ladder board <small>the track drawn down the left, everything else edits on the right</small></h2>
+    <div class="brief">
+      <p>The ladder is the navigation. Down the left the ranks stand on a drawn track from Settler at the foot to Legend at the top, each a card with its points, seasonal mark and how many players hold it; the lit part of the track shows how far most players have come. Below the foot sits SIGNALS, above the top OPTIONS, so one column holds the whole mod. Click anything and the right pane becomes its editor; the rank editor is A's. PLAYERS is a search box in the header that takes the right pane over while you type.</p>
+      <p><b>Good at:</b> seeing the shape of the ladder while editing one rung, which is what a ranking mod is about; signals and the ladder on one screen; the player counts per rank tell you at once whether thresholds are right. <span class="con"><b>Weak at:</b></span> more than seven ranks need the column to scroll; a little more drawing to build than A.</p>
+    </div>
+    <div class="frame">
+      <div class="screen">
+        <div class="panel" style="left:12px;top:12px;width:832px;height:456px">
+          <div class="title">RANKUP ADMIN</div>
+          <div class="inset" style="left:250px;top:12px;width:200px;height:26px"><span style="position:absolute;left:8px;top:3px;color:var(--muted);font-size:17px">find player_</span></div>
+          <div class="help" style="right:20px;top:18px">LuckPerms Bukkit - MySQL + Redis</div>
+          <!-- left: the ladder column -->
+          <div class="inset" style="left:16px;top:44px;width:270px;height:404px">
+            <div class="track" style="left:28px;top:56px;height:300px"></div>
+            <div class="track lit" style="left:28px;top:216px;height:140px"></div>
+            <!-- OPTIONS node at the top -->
+            <div class="node" style="left:23px;top:22px"></div>
+            <div class="card" style="left:46px;top:10px;width:212px;height:36px"><div class="cn">OPTIONS<span class="pts" style="color:var(--muted)">announce: network</span></div></div>
+            <!-- ranks, top = highest -->
+            <div class="node sea" style="left:23px;top:70px"></div>
+            <div class="card" style="left:46px;top:56px;width:212px;height:42px"><div class="cn">Legend<span class="pill season">season</span><span class="pts">10 000</span></div><div class="cd">1 player</div></div>
+            <div class="node sea" style="left:23px;top:124px"></div>
+            <div class="card" style="left:46px;top:110px;width:212px;height:42px"><div class="cn">Vanguard<span class="pill season">season</span><span class="pts">4 000</span></div><div class="cd">4 players</div></div>
+            <div class="node lit" style="left:23px;top:178px"></div>
+            <div class="card sel" style="left:46px;top:164px;width:212px;height:42px"><div class="cn">Warden<span class="pts">1 500</span></div><div class="cd">12 players - 3 within 100 points</div></div>
+            <div class="node lit" style="left:23px;top:232px"></div>
+            <div class="card" style="left:46px;top:218px;width:212px;height:42px"><div class="cn">Raider<span class="pts">500</span></div><div class="cd">31 players</div></div>
+            <div class="node lit" style="left:23px;top:286px"></div>
+            <div class="card" style="left:46px;top:272px;width:212px;height:42px"><div class="cn">Settler<span class="pts">0</span></div><div class="cd">58 players - the start</div></div>
+            <!-- SIGNALS node at the foot -->
+            <div class="node" style="left:23px;top:348px"></div>
+            <div class="card" style="left:46px;top:334px;width:212px;height:36px"><div class="cn">SIGNALS<span class="pts" style="color:var(--muted)">5 of 11 on</span></div></div>
+            <div class="help" style="left:10px;top:380px">Lit track: where most players are. Click a rung to edit it.</div>
+          </div>
+          <div class="btn" style="left:16px;top:410px;display:none">+ ADD RANK</div>
+          <!-- right: the editor for the selected rung -->
+          <div style="position:absolute;left:304px;top:48px;font-size:24px">Warden <span style="color:var(--muted);font-size:17px">rung 3 of 5</span></div>
+          <div class="btn dim" style="right:150px;top:44px;padding:4px 10px;font-size:17px">+ ADD RUNG ABOVE</div>
+          <div class="btn bad" style="right:16px;top:44px;padding:4px 10px;font-size:17px">REMOVE RUNG</div>
+          <div class="field" style="left:304px;top:84px;width:150px"><label>GROUP</label><div class="box">warden</div></div>
+          <div class="field" style="left:466px;top:84px;width:150px"><label>DISPLAY NAME</label><div class="box">Warden</div></div>
+          <div class="field" style="left:628px;top:84px;width:90px"><label>POINTS</label><div class="box focus">1500</div></div>
+          <div class="field" style="left:730px;top:84px;width:98px"><label>SEASON</label><div class="seg" style="height:28px;box-sizing:border-box"><span class="on">keep</span><span>reset</span></div></div>
+          <div class="ghead" style="left:304px;top:142px">REWARDS WHEN REACHED</div>
+          <div class="inset" style="left:304px;top:162px;width:524px;height:158px">
+            <div class="rrow" style="top:4px"><span class="kind">COINS</span><span class="val">64<i>Gold Shatter Coins, into the hand</i></span><span class="x">x</span></div>
+            <div class="rrow" style="top:32px"><span class="kind">PIECES</span><span class="val">250<i>into the bank</i></span><span class="x">x</span></div>
+            <div class="rrow" style="top:60px"><span class="kind">ITEM</span><span class="val">minecraft:netherite_ingot<i>x 2</i></span><span class="x">x</span></div>
+            <div class="rrow" style="top:88px"><span class="kind">TITLE</span><span class="val">&amp;b[Warden]<i>LuckPerms prefix</i></span><span class="x">x</span></div>
+            <div class="rrow" style="top:116px"><span class="kind">COMMAND</span><span class="val">give %player% minecraft:totem_of_undying</span><span class="x">x</span></div>
+          </div>
+          <div class="btn" style="left:304px;top:330px">+ ADD REWARD</div>
+          <div class="btn gold" style="left:452px;top:330px">FROM HAND</div>
+          <div class="ghead" style="left:304px;top:376px">HOW PLAYERS GET HERE</div>
+          <div class="kv" style="left:304px;top:396px;width:524px"><span>From Raider:</span> 1 000 more points = about 7 h played, or 40 player kills, or 7 totems stolen. <span>Median time on Raider:</span> 11 days.</div>
+          <div class="help" style="left:304px;top:446px">Changes save at once and reach every server. Esc closes.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ OPTION C -->
+  <section class="option" id="c">
+    <h2>C. Dashboard <small>four panes at a glance, each opens full size</small></h2>
+    <div class="brief">
+      <p>One screen shows the state of the whole mod: LADDER as a compact table, SIGNALS with their points as bars, PLAYERS with a search and the latest rank-ups across the network, OPTIONS with the switches and the storage health. Nothing is edited in the small panes; clicking a pane's title opens it full size (the ladder then looks like A's LADDER tab) with BACK in the corner.</p>
+      <p><b>Good at:</b> the admin's first question, "is it working?": the feed and the health lines answer it without a click; good when you open the screen to look rather than to edit. <span class="con"><b>Weak at:</b></span> every edit is two clicks away; four dense panes are small at GUI scale 2; the most to build, since each pane has a small and a full form.</p>
+    </div>
+    <div class="frame">
+      <div class="screen">
+        <div class="panel" style="left:12px;top:12px;width:832px;height:456px">
+          <div class="title">RANKUP ADMIN</div>
+          <div class="help" style="right:20px;top:18px">track rankup - everything fine - click a title to open it</div>
+          <!-- LADDER pane -->
+          <div class="pane hot" style="left:16px;top:44px;width:404px;height:196px">
+            <div class="ph">LADDER<i>5 ranks</i></div><div class="open">OPEN &gt;</div>
+            <div class="frow" style="top:30px"><span class="n">1 Settler<i>permanent</i></span><span class="v">0</span></div>
+            <div class="frow" style="top:56px"><span class="n">2 Raider<i>permanent</i></span><span class="v">500</span></div>
+            <div class="frow" style="top:82px"><span class="n">3 Warden<i>permanent - 12 players</i></span><span class="v">1 500</span></div>
+            <div class="frow" style="top:108px"><span class="n">4 Vanguard<i style="color:var(--violet)">seasonal</i></span><span class="v">4 000</span></div>
+            <div class="frow" style="top:134px"><span class="n">5 Legend<i style="color:var(--violet)">seasonal</i></span><span class="v">10 000</span></div>
+            <div class="help" style="left:10px;top:168px">106 players ranked - 58 on Settler</div>
+          </div>
+          <!-- SIGNALS pane -->
+          <div class="pane" style="left:428px;top:44px;width:400px;height:196px">
+            <div class="ph">SIGNALS<i>5 of 11 on</i></div><div class="open">OPEN &gt;</div>
+            <div class="frow" style="top:30px"><span class="n">playtime<i>per 10 min</i></span><span class="v">1</span></div><div class="bar" style="left:150px;top:38px;width:120px"><i style="width:8%"></i></div>
+            <div class="frow" style="top:56px"><span class="n">player kill</span><span class="v">25</span></div><div class="bar" style="left:150px;top:64px;width:120px"><i style="width:30%"></i></div>
+            <div class="frow" style="top:82px"><span class="n">mob kill</span><span class="v">1</span></div><div class="bar" style="left:150px;top:90px;width:120px"><i style="width:4%"></i></div>
+            <div class="frow" style="top:108px"><span class="n">totem stolen</span><span class="v">150</span></div><div class="bar" style="left:150px;top:116px;width:120px"><i style="width:100%"></i></div>
+            <div class="frow" style="top:134px"><span class="n">totem protected</span><span class="v">60</span></div><div class="bar" style="left:150px;top:142px;width:120px"><i style="width:45%"></i></div>
+            <div class="frow" style="top:160px"><span class="n" style="color:var(--muted)">totem lost, deaths, 4 more<i>off</i></span><span class="v" style="color:var(--muted)">-</span></div>
+          </div>
+          <!-- PLAYERS pane -->
+          <div class="pane" style="left:16px;top:252px;width:404px;height:196px">
+            <div class="ph">PLAYERS<i>latest rank-ups, all servers</i></div><div class="open">OPEN &gt;</div>
+            <div class="inset" style="left:8px;top:30px;width:388px;height:26px"><span style="position:absolute;left:8px;top:3px;color:var(--muted);font-size:17px">find player_</span></div>
+            <div class="feed" style="top:66px"><span class="who">Mrgregles</span><span>reached</span><span class="to">Warden</span><span class="ago">4 min - survival-2</span></div>
+            <div class="feed" style="top:90px"><span class="who">Tyler_S</span><span>reached</span><span class="to">Raider</span><span class="ago">26 min - survival-1</span></div>
+            <div class="feed" style="top:114px"><span class="who">Kestrel</span><span>reached</span><span class="to">Vanguard</span><span class="ago">2 h - survival-1</span></div>
+            <div class="feed" style="top:138px"><span class="who">Bramble</span><span>reset to</span><span class="to" style="color:var(--bad)">Settler</span><span class="ago">by Mrgregles - 1 d</span></div>
+            <div class="help" style="left:10px;top:170px">Open to set a rank, add points or reset a player.</div>
+          </div>
+          <!-- OPTIONS pane -->
+          <div class="pane" style="left:428px;top:252px;width:400px;height:196px">
+            <div class="ph">OPTIONS</div><div class="open">OPEN &gt;</div>
+            <div class="frow" style="top:30px"><span class="n">track</span><span class="v" style="color:var(--text)">rankup</span></div>
+            <div class="frow" style="top:56px"><span class="n">announce rank-ups</span><span class="seg"><span>off</span><span>server</span><span class="on">network</span></span></div>
+            <div class="frow" style="top:82px"><span class="n">titles<i>prefix priority</i></span><span class="v">1000</span></div>
+            <div class="frow" style="top:108px"><span class="n">kill cooldown<i>same victim</i></span><span class="v">10 min</span></div>
+            <div class="frow" style="top:134px"><span class="n">LuckPerms</span><span class="pill ok">Bukkit</span></div>
+            <div class="frow" style="top:160px"><span class="n">storage<i>survival-2</i></span><span style="display:flex;gap:4px"><span class="pill ok">MySQL</span><span class="pill ok">Redis</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pick">
+    <h2>Decisions, with defaults</h2>
+    <p class="note">Answer by number in chat; "default" takes the one in gold. The answers go in RankUp - Design Decisions.</p>
+    <ol>
+      <li><b>Layout.</b> A ledger with tabs, B ladder board, C dashboard, or parts combined. <span class="def">Default: B, with C's "latest rank-ups" feed shown in B's PLAYERS pane.</span></li>
+      <li><b>How it opens.</b> A command only, or also an item or key. <span class="def">Default: /rankup admin, for BSP Core admins (the same admin list as the other mods).</span></li>
+      <li><b>Reward rows.</b> Five kinds: coins (Shatter Coins into the hand), pieces (bank), item (an id and count, or FROM HAND), title (a LuckPerms prefix), command (run by the console with %player%). <span class="def">Default: all five, any number per rank.</span></li>
+      <li><b>Destructive buttons.</b> REMOVE RANK and RESET PLAYER: ask again or not. <span class="def">Default: the button turns red and says CLICK AGAIN for 5 seconds; RESET EVERYONE (in OPTIONS) uses Region Guard's typed code.</span></li>
+      <li><b>Players pane.</b> Search by name, including players not online and players last seen on another server; shows rank, points per signal and when they ranked up; SET RANK, ADD POINTS, RESET. <span class="def">Default: yes, all of it.</span></li>
+      <li><b>Points per rank or per signal.</b> One total per rank (D5), or also a minimum per signal (for example "at least 1 totem stolen for Warden"). <span class="def">Default: the total only; per-signal minimums later if wanted.</span></li>
+      <li><b>Make the track in LuckPerms.</b> A button in OPTIONS that creates the track and any missing groups from this ladder (the D2 option). <span class="def">Default: present, behind the CLICK AGAIN confirmation.</span></li>
+      <li><b>Screen size.</b> 428 by 240 GUI pixels as drawn (Region Guard's size), or BSP Core's smaller 360 by 206. <span class="def">Default: 428 by 240.</span></li>
+      <li><b>Saving.</b> Every change saves at once and reaches every server, or a SAVE button. <span class="def">Default: at once, as Region Guard does.</span></li>
+      <li><b>What the player screen gets.</b> Decided in its own mock-ups next, after this pick. <span class="def">Default: the player screen reuses B's ladder drawing with the player's own position lit.</span></li>
+    </ol>
+  </section>
+</div>
