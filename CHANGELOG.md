@@ -4,6 +4,9 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+### Changed (2026-10-19, sibling versions)
+- Compiled against BSP Core 1.3.0 (its 1.1.0 jar is gone; still requires `[1.1.0,)`) and BSP Region Guard 0.2.0 (Region Guard's request RG-R2; still accepts `[0.1.0,)`). No code change; 26 GameTests pass.
+
 ### Added (2026-10-18, claims bought)
 - The `claims_bought` signal counts: with BSP Region Guard installed, every new claim a player buys (not an enlargement) counts one, through Region Guard's `ClaimPurchasedEvent` (its request RG-R1). Off by default like the other optional signals; switching it on gives points for claims already counted. One GameTest (26 in all).
 
