@@ -133,7 +133,7 @@ public class SignalGameTests {
             MinecraftForge.EVENT_BUS.post(new LivingDeathEvent(fallen, level.damageSources().generic()));
             h.assertTrue(ledger.progress(fallen.getUUID()).count(Signal.DEATHS) == 1 && kills(ledger, killer) == 0, "a fall is a death and nobody's kill: " + ledger.progress(fallen.getUUID()));
             Progress p = ledger.progress(killer.getUUID());
-            h.assertTrue(p.counts().size() == 1 && p.counts().get(Signal.MOB_KILLS) == 1, "counts() lists only what was counted: " + p.counts());
+            h.assertTrue(p.counts().get(Signal.MOB_KILLS) == 1 && !p.counts().containsKey(Signal.PLAYER_KILLS), "counts() lists only what was counted: " + p.counts());
         } finally {
             zombie.discard();
             for (ServerPlayer p : List.of(killer, fallen)) {
@@ -195,9 +195,10 @@ public class SignalGameTests {
             ledger.addBonus(player, 40);
             ledger.setRank(player, "warden", 1234L);
             ledger.add(player, Signal.PLAYTIME, 0);
-            h.assertTrue(seen.size() == 4, "every change that moved something told the listener once: " + seen.size());
-            h.assertTrue(seen.get(0).signal() == Signal.PLAYTIME && seen.get(0).amount() == 5, "the first change: " + seen.get(0));
-            h.assertTrue(seen.get(3).signal() == null && seen.get(3).amount() == 40, "a bonus is a change with no signal: " + seen.get(3));
+            h.assertTrue(seen.size() == 5, "every change that moved something told the listener once: " + seen.size());
+            h.assertTrue(seen.get(0).kind() == ProgressLedger.Kind.COUNT && seen.get(0).signal() == Signal.PLAYTIME && seen.get(0).amount() == 5, "the first change: " + seen.get(0));
+            h.assertTrue(seen.get(3).kind() == ProgressLedger.Kind.BONUS && seen.get(3).signal() == null && seen.get(3).amount() == 40, "a bonus is a change with no signal: " + seen.get(3));
+            h.assertTrue(seen.get(4).kind() == ProgressLedger.Kind.RANK, "a rank is a change of its own: " + seen.get(4));
 
             CompoundTag saved = ledger.save(new CompoundTag());
             ProgressLedger loaded = ProgressLedger.load(saved);

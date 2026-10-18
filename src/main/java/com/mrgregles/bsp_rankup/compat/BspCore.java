@@ -2,13 +2,16 @@ package com.mrgregles.bsp_rankup.compat;
 
 import com.mrgregles.bsp_core.api.BspBank;
 import com.mrgregles.bsp_core.api.BspPlayers;
+import com.mrgregles.bsp_core.api.event.SeasonEvent;
 import com.mrgregles.bsp_core.api.event.TotemEvent;
+import com.mrgregles.bsp_rankup.rank.Seasons;
 import com.mrgregles.bsp_rankup.signal.TotemSignals;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.common.MinecraftForge;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -27,6 +30,11 @@ public final class BspCore {
     public static void init() {
         MinecraftForge.EVENT_BUS.addListener(BspCore::onStealEnded);
         MinecraftForge.EVENT_BUS.addListener(BspCore::onPlaced);
+        MinecraftForge.EVENT_BUS.addListener(BspCore::onSeasonEnded);
+    }
+
+    private static void onSeasonEnded(SeasonEvent.Ended event) {
+        Seasons.endSeason(event.getServer(), event.getEndedNumber());
     }
 
     private static void onStealEnded(TotemEvent.StealEnded event) {
@@ -43,6 +51,13 @@ public final class BspCore {
 
     public static boolean isAdmin(Player player) {
         return BspPlayers.isAdmin(player);
+    }
+
+    /** For GameTests only: names BSP-Core's admin list, since mock players are not operators. Returns the previous list. */
+    public static List<? extends String> setAdminNames(List<String> names) {
+        List<? extends String> previous = com.mrgregles.bsp_core.BSPConfig.ADMINS.get();
+        com.mrgregles.bsp_core.BSPConfig.ADMINS.set(names);
+        return previous;
     }
 
     /** Gives Shatter Coins worth {@code copperValue} Copper into the player's inventory. */

@@ -1,0 +1,318 @@
+<title>RankUp Player Screen</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: three Minecraft screens stacked, each with a short brief, then the decisions list. The screens are drawn at the bigger size the owner asked for (D29): 520 x 300 GUI pixels, here at GUI scale 2 (1040 x 600). Single dark look: BSP Core's Holo HUD style. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0e13;          /* page ground, deeper than the panel */
+  --panel: #10151c;       /* Holo HUD panel */
+  --inset: #0c0e12;       /* slots and insets */
+  --line: #2a2f3a;        /* dim lines */
+  --accent: #19d3b0;      /* turquoise */
+  --violet: #b58cff;      /* operator / other */
+  --gold: #ffd23a;        /* coins, values */
+  --bad: #ff6b5c;         /* blocked */
+  --text: #e6eaf2;
+  --muted: #9aa3b5;
+  --mc: 'VT323', 'Courier New', monospace;         /* the in-game face, 20px = 10 GUI px */
+  --ui: 'IBM Plex Sans', system-ui, sans-serif;    /* the brief around the screens */
+}
+body { background: var(--bg); color: var(--text); font-family: var(--ui); padding-block: 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); line-height: 1.5; }
+.wrap { max-width: 1100px; margin: 0 auto; display: grid; gap: 40px; }
+h1 { font-family: var(--mc); font-size: 40px; font-weight: 400; letter-spacing: 1px; color: var(--accent); margin: 0; text-wrap: balance; }
+h2 { font-family: var(--mc); font-size: 32px; font-weight: 400; margin: 0; color: var(--text); }
+h2 small { color: var(--muted); font-size: 24px; margin-left: 8px; }
+p { max-width: 68ch; margin: 0; }
+.lead { color: var(--muted); }
+.option { display: grid; gap: 14px; }
+.brief { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 32px; }
+.brief p { font-size: 15px; }
+.brief b { color: var(--accent); font-weight: 600; }
+.brief .con b { color: var(--gold); }
+.frame { overflow-x: auto; border: 1px solid var(--line); background: #06080c; padding: 12px; }
+.screen { position: relative; width: 1040px; height: 600px; font-family: var(--mc); font-size: 20px; line-height: 1; color: var(--text);
+  background:
+    radial-gradient(ellipse at 30% 20%, #16331f 0, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, #2a2316 0, transparent 50%),
+    #1a2230; image-rendering: pixelated; }
+.panel { position: absolute; background: rgba(16,21,28,.94); border: 2px solid var(--accent); box-sizing: border-box; }
+.title { position: absolute; left: 20px; top: 16px; color: var(--accent); letter-spacing: 2px; }
+.help { position: absolute; color: var(--muted); font-size: 15px; }
+.inset { position: absolute; background: var(--inset); border: 2px solid var(--line); box-sizing: border-box; }
+.row { position: absolute; left: 0; right: 0; height: 28px; padding: 4px 10px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; }
+.row.sel { background: rgba(25,211,176,.14); box-shadow: inset 2px 0 0 var(--accent); }
+.row .n { color: var(--muted); width: 18px; }
+.row .pts { margin-left: auto; color: var(--gold); font-variant-numeric: tabular-nums; }
+.pill { font-size: 15px; padding: 2px 6px; border: 2px solid var(--line); color: var(--muted); line-height: 1; }
+.pill.season { border-color: var(--violet); color: var(--violet); }
+.pill.perm { border-color: var(--line); color: var(--muted); }
+.pill.ok { border-color: var(--accent); color: var(--accent); }
+.pill.off { border-color: var(--line); color: var(--muted); }
+.pill.gold { border-color: var(--gold); color: var(--gold); }
+.tabs { position: absolute; display: flex; gap: 4px; }
+.tab { padding: 6px 12px; border: 2px solid var(--line); border-bottom: none; color: var(--muted); background: var(--inset); }
+.tab.on { color: var(--accent); border-color: var(--accent); background: rgba(25,211,176,.1); }
+.btn { position: absolute; padding: 6px 14px; border: 2px solid var(--accent); color: var(--accent); background: rgba(25,211,176,.08); }
+.btn.bad { border-color: var(--bad); color: var(--bad); background: rgba(255,107,92,.08); }
+.btn.gold { border-color: var(--gold); color: var(--gold); background: rgba(255,210,58,.08); }
+.btn.dim { border-color: var(--line); color: var(--muted); background: transparent; }
+.btn.violet { border-color: var(--violet); color: var(--violet); background: rgba(181,140,255,.08); }
+.seg { display: inline-flex; border: 2px solid var(--line); }
+.seg span { padding: 2px 8px; color: var(--muted); font-size: 17px; border-right: 2px solid var(--line); }
+.seg span:last-child { border-right: none; }
+.seg .on { color: var(--accent); background: rgba(25,211,176,.2); }
+.seg .vio { color: var(--violet); background: rgba(181,140,255,.2); }
+.seg .red { color: var(--bad); background: rgba(255,107,92,.2); }
+.frow { position: absolute; left: 0; right: 0; height: 26px; padding: 2px 10px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; }
+.frow .n { color: var(--text); }
+.frow .n i { color: var(--muted); font-style: normal; font-size: 15px; margin-left: 8px; }
+.frow .v { color: var(--gold); font-variant-numeric: tabular-nums; }
+.ghead { position: absolute; left: 10px; color: var(--accent); font-size: 17px; letter-spacing: 2px; }
+.field { position: absolute; display: grid; gap: 4px; }
+.field label { color: var(--muted); font-size: 15px; letter-spacing: 1px; }
+.field .box { background: var(--inset); border: 2px solid var(--line); padding: 4px 8px; box-sizing: border-box; color: var(--text); height: 28px; display: flex; align-items: center; }
+.field .box.focus { border-color: var(--accent); }
+.field .box.focus::after { content: '_'; color: var(--accent); margin-left: 2px; }
+.rrow { position: absolute; left: 0; right: 0; height: 28px; padding: 2px 10px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; }
+.rrow .kind { width: 86px; color: var(--violet); font-size: 17px; letter-spacing: 1px; }
+.rrow .val { color: var(--text); }
+.rrow .val i { color: var(--muted); font-style: normal; font-size: 15px; margin-left: 6px; }
+.rrow .x { margin-left: auto; color: var(--bad); font-size: 17px; }
+.card { position: absolute; border: 2px solid var(--line); background: var(--inset); box-sizing: border-box; padding: 6px 8px; }
+.card .cn { color: var(--text); display: flex; align-items: center; gap: 8px; }
+.card .cn .pts { margin-left: auto; color: var(--gold); font-size: 17px; }
+.card .cd { color: var(--muted); font-size: 15px; margin-top: 3px; }
+.card.sel { border-color: var(--accent); background: rgba(25,211,176,.1); }
+.card .players { position: absolute; right: 8px; bottom: 6px; color: var(--muted); font-size: 15px; }
+.track { position: absolute; width: 4px; background: var(--line); }
+.track.lit { background: var(--accent); }
+.node { position: absolute; width: 14px; height: 14px; border: 2px solid var(--line); background: var(--panel); box-sizing: border-box; }
+.node.lit { border-color: var(--accent); background: var(--accent); }
+.node.sea { border-color: var(--violet); }
+.bar { position: absolute; height: 10px; background: rgba(25,211,176,.14); border: 2px solid var(--line); box-sizing: border-box; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+.bar.off i { background: var(--line); }
+.pane { position: absolute; border: 2px solid var(--line); background: rgba(12,14,18,.7); box-sizing: border-box; }
+.pane .ph { position: absolute; left: 8px; top: 6px; color: var(--accent); letter-spacing: 2px; font-size: 17px; }
+.pane .ph i { color: var(--muted); font-style: normal; letter-spacing: 0; margin-left: 8px; }
+.pane .open { position: absolute; right: 8px; top: 6px; color: var(--muted); font-size: 15px; }
+.pane.hot { border-color: var(--accent); }
+.feed { position: absolute; left: 8px; right: 8px; height: 22px; display: flex; gap: 8px; align-items: center; font-size: 17px; }
+.feed .who { color: var(--text); }
+.feed .to { color: var(--accent); }
+.feed .ago { margin-left: auto; color: var(--muted); font-size: 15px; }
+.kv { position: absolute; left: 10px; right: 10px; font-size: 17px; line-height: 1.35; }
+.kv span { color: var(--muted); }
+.pick { border: 1px solid var(--line); padding: 20px 24px; display: grid; gap: 10px; }
+.pick h2 { font-size: 28px; }
+.pick ol { margin: 0; padding-left: 22px; color: var(--text); font-size: 15px; display: grid; gap: 8px; }
+.pick li b { color: var(--accent); font-weight: 600; }
+.pick li .def { color: var(--gold); }
+.pick .note { color: var(--muted); font-size: 15px; }
+
+/* player screen pieces */
+.big { position: absolute; font-size: 44px; color: var(--text); letter-spacing: 1px; }
+.big small { font-size: 20px; color: var(--muted); margin-left: 10px; letter-spacing: 0; }
+.tag { display: inline-block; font-size: 15px; padding: 2px 6px; border: 2px solid var(--violet); color: var(--violet); vertical-align: middle; margin-left: 10px; }
+.pbar { position: absolute; height: 22px; background: var(--inset); border: 2px solid var(--line); box-sizing: border-box; }
+.pbar i { display: block; height: 100%; background: linear-gradient(90deg, rgba(25,211,176,.55), var(--accent)); }
+.pbar b { position: absolute; left: 0; right: 0; top: 1px; text-align: center; font-weight: 400; font-size: 17px; color: var(--text); text-shadow: 0 0 4px #000; }
+.srow { position: absolute; left: 0; right: 0; height: 30px; padding: 2px 10px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; }
+.srow .sn { width: 190px; color: var(--text); }
+.srow .sc { width: 90px; color: var(--muted); font-size: 17px; text-align: right; font-variant-numeric: tabular-nums; }
+.srow .sb { flex: 1; height: 10px; background: rgba(25,211,176,.1); border: 2px solid var(--line); box-sizing: border-box; }
+.srow .sb i { display: block; height: 100%; background: var(--accent); }
+.srow .sp { width: 90px; color: var(--gold); text-align: right; font-variant-numeric: tabular-nums; }
+.srow.dim .sn, .srow.dim .sp { color: var(--muted); }
+.path { position: absolute; height: 4px; background: var(--line); }
+.path.lit { background: var(--accent); }
+.pnode { position: absolute; width: 18px; height: 18px; border: 2px solid var(--line); background: var(--panel); box-sizing: border-box; transform: rotate(45deg); }
+.pnode.lit { border-color: var(--accent); background: var(--accent); }
+.pnode.sea { border-color: var(--violet); }
+.pnode.here { border-color: var(--gold); background: var(--gold); box-shadow: 0 0 0 4px rgba(255,210,58,.3); }
+.plabel { position: absolute; width: 140px; margin-left: -70px; text-align: center; font-size: 17px; color: var(--muted); }
+.plabel b { display: block; font-weight: 400; color: var(--text); font-size: 20px; }
+.plabel.on b { color: var(--accent); }
+.tile { position: absolute; border: 2px solid var(--line); background: var(--inset); box-sizing: border-box; padding: 10px 12px; }
+.tile .tl { color: var(--accent); font-size: 15px; letter-spacing: 2px; }
+.tile .tv { font-size: 40px; color: var(--text); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.tile .tv small { font-size: 17px; color: var(--muted); margin-left: 6px; }
+.tile .td { color: var(--muted); font-size: 15px; margin-top: 2px; }
+.gain { position: absolute; left: 10px; right: 10px; height: 24px; display: flex; gap: 8px; align-items: center; font-size: 17px; }
+.gain .gp { color: var(--gold); width: 60px; text-align: right; font-variant-numeric: tabular-nums; }
+.gain .gw { color: var(--text); }
+.gain .ga { margin-left: auto; color: var(--muted); font-size: 15px; }
+@media (max-width: 700px) { .brief { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:10px">
+    <h1>RankUp player screen: three options</h1>
+    <p class="lead">Each mock-up is one Minecraft screen at the bigger size you asked for (decision D29): 520 by 300 GUI pixels, drawn at GUI scale 2, in BSP Core's Holo HUD style. The same player in all three, <b style="color:var(--text)">Mrgregles</b>: a Warden (rank 3 of 5) with 2 140 lifetime points, 640 points this season, on the way to Vanguard at 4 000 (seasonal); 19 h 40 min played, 31 player kills, 212 mob kills, 6 totems stolen, 4 protected; the title <b style="color:var(--text)">[Warden]</b>. The ladder is the one from the admin mock-ups. Pick one, or name the parts you want combined.</p>
+  </header>
+
+  <!-- ============================================================ OPTION A -->
+  <section class="option" id="a">
+    <h2>A. Ladder card <small>the track down the left with your rung lit, your standing on the right</small></h2>
+    <div class="brief">
+      <p>The ladder drawn as rungs on a track, every rung with its name and points, yours lit in gold, the ones below filled, seasonal ones tagged. On the right: your rank in large letters with your title, the points bar to the next rung, what the next rung gives, then every signal that counts with its count, a bar of its share and its points. One line says what would get you there fastest.</p>
+      <p><b>Good at:</b> seeing where you are on the whole ladder at a glance and what to do next; the same drawing can serve the admin screen's LADDER tab later. <span class="con"><b>Weak at:</b></span> long ladders (more than seven rungs scroll); the right side is dense.</p>
+    </div>
+    <div class="frame">
+      <div class="screen">
+        <div class="panel" style="left:12px;top:12px;width:1016px;height:576px">
+          <div class="title">YOUR RANK</div>
+          <div class="help" style="right:20px;top:18px">Mrgregles - survival-2 - season 4</div>
+          <!-- left: the ladder -->
+          <div class="inset" style="left:16px;top:44px;width:300px;height:516px">
+            <div class="track" style="left:30px;top:40px;height:430px"></div>
+            <div class="track lit" style="left:30px;top:250px;height:220px"></div>
+            <div class="node sea" style="left:25px;top:52px"></div>
+            <div class="card" style="left:50px;top:36px;width:234px;height:48px"><div class="cn">Legend<span class="pill season">season</span><span class="pts">10 000</span></div><div class="cd">1 player holds it</div></div>
+            <div class="node sea" style="left:25px;top:156px"></div>
+            <div class="card" style="left:50px;top:140px;width:234px;height:48px"><div class="cn">Vanguard<span class="pill season">season</span><span class="pts">4 000</span></div><div class="cd">next: 3 360 points to go</div></div>
+            <div class="node lit" style="left:25px;top:260px;border-color:var(--gold);background:var(--gold)"></div>
+            <div class="card sel" style="left:50px;top:244px;width:234px;height:48px;border-color:var(--gold)"><div class="cn" style="color:var(--gold)">Warden<span class="pts">1 500</span></div><div class="cd">you, since 11 days</div></div>
+            <div class="node lit" style="left:25px;top:364px"></div>
+            <div class="card" style="left:50px;top:348px;width:234px;height:48px"><div class="cn">Raider<span class="pts">500</span></div><div class="cd">reached 29 days ago</div></div>
+            <div class="node lit" style="left:25px;top:468px"></div>
+            <div class="card" style="left:50px;top:452px;width:234px;height:48px"><div class="cn">Settler<span class="pts">0</span></div><div class="cd">where everyone starts</div></div>
+            <div class="help" style="left:10px;top:500px">Hover a rung for what it gives.</div>
+          </div>
+          <!-- right: standing -->
+          <div class="big" style="left:336px;top:48px">WARDEN<small>rank 3 of 5</small><span class="tag">[Warden]</span></div>
+          <div class="help" style="left:336px;top:98px;font-size:17px">2 140 points - 640 this season (seasonal rungs count these)</div>
+          <div class="ghead" style="left:336px;top:128px">NEXT: VANGUARD AT 4 000 POINTS</div>
+          <div class="pbar" style="left:336px;top:148px;width:676px"><i style="width:16%"></i><b>640 / 4 000 this season</b></div>
+          <div class="help" style="left:336px;top:176px;font-size:17px;color:var(--text)">Vanguard gives: 200 Gold coins, 1 000 pieces, 2 Netherite Ingots, the title [Vanguard]</div>
+          <div class="help" style="left:336px;top:198px;font-size:17px">Fastest: 23 totems stolen, or 134 player kills, or 560 h played.</div>
+          <div class="ghead" style="left:336px;top:232px">WHAT COUNTS</div>
+          <div class="inset" style="left:336px;top:252px;width:676px;height:268px">
+            <div class="srow" style="top:6px"><span class="sn">minutes played</span><span class="sc">1 180</span><span class="sb"><i style="width:6%"></i></span><span class="sp">118</span></div>
+            <div class="srow" style="top:36px"><span class="sn">player kills</span><span class="sc">31</span><span class="sb"><i style="width:36%"></i></span><span class="sp">775</span></div>
+            <div class="srow" style="top:66px"><span class="sn">mob kills</span><span class="sc">212</span><span class="sb"><i style="width:10%"></i></span><span class="sp">212</span></div>
+            <div class="srow" style="top:96px"><span class="sn">totems stolen</span><span class="sc">6</span><span class="sb"><i style="width:42%"></i></span><span class="sp">900</span></div>
+            <div class="srow" style="top:126px"><span class="sn">totems protected</span><span class="sc">4</span><span class="sb"><i style="width:11%"></i></span><span class="sp">240</span></div>
+            <div class="srow dim" style="top:156px"><span class="sn">season score</span><span class="sc">-</span><span class="sb"></span><span class="sp">off</span></div>
+            <div class="srow" style="top:196px"><span class="sn" style="color:var(--muted)">bonus from admins</span><span class="sc"></span><span class="sb" style="visibility:hidden"></span><span class="sp" style="color:var(--muted)">-105</span></div>
+            <div class="srow" style="top:226px"><span class="sn" style="color:var(--accent)">total</span><span class="sc"></span><span class="sb" style="visibility:hidden"></span><span class="sp">2 140</span></div>
+          </div>
+          <div class="help" style="left:336px;top:540px">Updates while open. Esc closes.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ OPTION B -->
+  <section class="option" id="b">
+    <h2>B. Progress sheet <small>numbers first: the table of what counts, and what gets you there</small></h2>
+    <div class="brief">
+      <p>A stats page. The header holds your rank, title, lifetime and season points, and one wide bar to the next rung. Below, a full table: every signal with its count, the points each is worth, the points it has given you, and its share. On the right, the next rung's rewards and three ways to reach it, then the rung after that, so the whole ladder reads as a list of goals.</p>
+      <p><b>Good at:</b> players who want the arithmetic: how much each thing is worth and what to do; the easiest to build (text and bars, no drawing). <span class="con"><b>Weak at:</b></span> the ladder's shape is a list, not a picture; little to look at.</p>
+    </div>
+    <div class="frame">
+      <div class="screen">
+        <div class="panel" style="left:12px;top:12px;width:1016px;height:576px">
+          <div class="title">YOUR RANK</div>
+          <div class="help" style="right:20px;top:18px">Mrgregles - survival-2 - season 4</div>
+          <div class="big" style="left:20px;top:48px">WARDEN<small>rank 3 of 5</small><span class="tag">[Warden]</span></div>
+          <div class="help" style="right:20px;top:58px;font-size:20px;color:var(--text)">2 140 points <span style="color:var(--muted)">- 640 this season</span></div>
+          <div class="pbar" style="left:20px;top:100px;width:992px"><i style="width:16%"></i><b>Vanguard at 4 000 this season: 640 / 4 000</b></div>
+          <div class="ghead" style="left:20px;top:140px">WHAT COUNTS</div>
+          <div class="inset" style="left:20px;top:160px;width:620px;height:360px">
+            <div class="srow" style="top:4px;color:var(--muted);font-size:15px"><span class="sn" style="color:var(--muted)">signal</span><span class="sc">count</span><span class="sc">worth</span><span class="sb" style="visibility:hidden"></span><span class="sp" style="color:var(--muted)">points</span></div>
+            <div class="srow" style="top:34px"><span class="sn">minutes played</span><span class="sc">1 180</span><span class="sc">1 / 10 min</span><span class="sb"><i style="width:6%"></i></span><span class="sp">118</span></div>
+            <div class="srow" style="top:64px"><span class="sn">player kills</span><span class="sc">31</span><span class="sc">25 each</span><span class="sb"><i style="width:36%"></i></span><span class="sp">775</span></div>
+            <div class="srow" style="top:94px"><span class="sn">mob kills</span><span class="sc">212</span><span class="sc">1 each</span><span class="sb"><i style="width:10%"></i></span><span class="sp">212</span></div>
+            <div class="srow" style="top:124px"><span class="sn">totems stolen</span><span class="sc">6</span><span class="sc">150 each</span><span class="sb"><i style="width:42%"></i></span><span class="sp">900</span></div>
+            <div class="srow" style="top:154px"><span class="sn">totems protected</span><span class="sc">4</span><span class="sc">60 each</span><span class="sb"><i style="width:11%"></i></span><span class="sp">240</span></div>
+            <div class="srow dim" style="top:184px"><span class="sn">deaths</span><span class="sc">17</span><span class="sc">off</span><span class="sb"></span><span class="sp">0</span></div>
+            <div class="srow dim" style="top:214px"><span class="sn">totems lost</span><span class="sc">3</span><span class="sc">off</span><span class="sb"></span><span class="sp">0</span></div>
+            <div class="srow" style="top:254px"><span class="sn" style="color:var(--muted)">bonus from admins</span><span class="sc"></span><span class="sc"></span><span class="sb" style="visibility:hidden"></span><span class="sp" style="color:var(--muted)">-105</span></div>
+            <div class="srow" style="top:284px"><span class="sn" style="color:var(--accent)">lifetime points</span><span class="sc"></span><span class="sc"></span><span class="sb" style="visibility:hidden"></span><span class="sp">2 140</span></div>
+            <div class="srow" style="top:314px"><span class="sn" style="color:var(--violet)">this season</span><span class="sc">since 9 days</span><span class="sc"></span><span class="sb" style="visibility:hidden"></span><span class="sp" style="color:var(--violet)">640</span></div>
+          </div>
+          <div class="ghead" style="left:660px;top:140px">GOALS</div>
+          <div class="card" style="left:660px;top:160px;width:352px;height:150px;border-color:var(--accent)">
+            <div class="cn" style="color:var(--accent)">Vanguard<span class="pill season">season</span><span class="pts">4 000</span></div>
+            <div class="cd" style="margin-top:6px;color:var(--text)">200 Gold coins - 1 000 pieces - 2 Netherite Ingots - the title [Vanguard]</div>
+            <div class="cd" style="margin-top:8px">3 360 to go, this season:</div>
+            <div class="cd">23 totems stolen</div>
+            <div class="cd">134 player kills</div>
+            <div class="cd">560 hours played</div>
+          </div>
+          <div class="card" style="left:660px;top:320px;width:352px;height:110px">
+            <div class="cn">Legend<span class="pill season">season</span><span class="pts">10 000</span></div>
+            <div class="cd" style="margin-top:6px;color:var(--text)">1 000 Gold coins - 10 000 pieces - the title [Legend] - a Shatter Totem tier up</div>
+            <div class="cd" style="margin-top:8px">1 player holds it this season</div>
+          </div>
+          <div class="card" style="left:660px;top:440px;width:352px;height:80px">
+            <div class="cn" style="color:var(--muted)">Held: Settler, Raider, Warden</div>
+            <div class="cd">Warden since 11 days - Raider 29 days ago</div>
+          </div>
+          <div class="help" style="left:20px;top:540px">Updates while open. Esc closes.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ OPTION C -->
+  <section class="option" id="c">
+    <h2>C. Journey <small>the ladder as a path across the top, your marker between rungs, big tiles below</small></h2>
+    <div class="brief">
+      <p>The rungs are nodes on a path from left to right, the path lit up to you and a gold marker standing between Warden and Vanguard as far along as your season points go, the next rung's rewards floating under it. Below, four big tiles with the numbers that matter most (time, kills, totems, season) and a feed of your latest gains ("+150 totem stolen from Kestrel, 2 h ago"), so the screen is also a log of what you did.</p>
+      <p><b>Good at:</b> the feel of progress: the marker moving along, the feed of gains, few numbers; a good screen to leave open. <span class="con"><b>Weak at:</b></span> the full arithmetic (worth per signal) is not shown; the feed needs the ledger to keep recent changes (a small addition, kept in memory per session); the most to build.</p>
+    </div>
+    <div class="frame">
+      <div class="screen">
+        <div class="panel" style="left:12px;top:12px;width:1016px;height:576px">
+          <div class="title">YOUR RANK</div>
+          <div class="help" style="right:20px;top:18px">Mrgregles - survival-2 - season 4</div>
+          <!-- the path -->
+          <div class="path" style="left:80px;top:110px;width:860px"></div>
+          <div class="path lit" style="left:80px;top:110px;width:500px"></div>
+          <div class="pnode lit" style="left:71px;top:102px"></div><div class="plabel on" style="left:80px;top:130px"><b>Settler</b>0</div>
+          <div class="pnode lit" style="left:286px;top:102px"></div><div class="plabel on" style="left:295px;top:130px"><b>Raider</b>500</div>
+          <div class="pnode lit" style="left:501px;top:102px"></div><div class="plabel on" style="left:510px;top:130px"><b>Warden</b>1 500</div>
+          <div class="pnode sea" style="left:716px;top:102px"></div><div class="plabel" style="left:725px;top:130px"><b>Vanguard</b>4 000 <span class="pill season" style="margin-left:4px">season</span></div>
+          <div class="pnode sea" style="left:931px;top:102px"></div><div class="plabel" style="left:940px;top:130px"><b>Legend</b>10 000</div>
+          <div class="pnode here" style="left:535px;top:102px"></div>
+          <div style="position:absolute;left:470px;top:60px;width:150px;text-align:center;color:var(--gold);font-size:20px">YOU - 640 / 4 000<br><span style="color:var(--muted);font-size:15px">this season</span></div>
+          <div class="help" style="left:610px;top:170px;width:300px;font-size:15px;color:var(--text)">Vanguard gives 200 Gold coins, 1 000 pieces, 2 Netherite Ingots and the title [Vanguard].</div>
+          <!-- tiles -->
+          <div class="tile" style="left:16px;top:212px;width:240px;height:96px"><div class="tl">PLAYED</div><div class="tv">19 h<small>40 min</small></div><div class="td">118 points - 1 per 10 min</div></div>
+          <div class="tile" style="left:268px;top:212px;width:240px;height:96px"><div class="tl">KILLS</div><div class="tv">31<small>+ 212 mobs</small></div><div class="td">987 points</div></div>
+          <div class="tile" style="left:520px;top:212px;width:240px;height:96px"><div class="tl">TOTEMS</div><div class="tv">6<small>stolen, 4 protected</small></div><div class="td">1 140 points</div></div>
+          <div class="tile" style="left:772px;top:212px;width:240px;height:96px;border-color:var(--violet)"><div class="tl" style="color:var(--violet)">THIS SEASON</div><div class="tv">640<small>of 2 140 lifetime</small></div><div class="td">season 4, day 9</div></div>
+          <div class="ghead" style="left:16px;top:326px">LATEST GAINS</div>
+          <div class="inset" style="left:16px;top:346px;width:996px;height:174px">
+            <div class="gain" style="top:6px"><span class="gp">+150</span><span class="gw">totem stolen from Kestrel</span><span class="ga">2 h ago - survival-1</span></div>
+            <div class="gain" style="top:30px"><span class="gp">+25</span><span class="gw">player kill: Bramble</span><span class="ga">2 h ago</span></div>
+            <div class="gain" style="top:54px"><span class="gp">+60</span><span class="gw">totem protected against Tyler_S</span><span class="ga">yesterday</span></div>
+            <div class="gain" style="top:78px"><span class="gp">+6</span><span class="gw">60 minutes played</span><span class="ga">yesterday</span></div>
+            <div class="gain" style="top:102px"><span class="gp" style="color:var(--bad)">-105</span><span class="gw">points taken by Mrgregles (admin)</span><span class="ga">3 days ago</span></div>
+            <div class="gain" style="top:126px"><span class="gp" style="color:var(--accent)">RANK</span><span class="gw">reached Warden</span><span class="ga">11 days ago</span></div>
+          </div>
+          <div class="help" style="left:16px;top:540px">Updates while open. Esc closes.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pick">
+    <h2>Decisions, with defaults</h2>
+    <p class="note">Answer by number in chat; "default" takes the one in gold. The answers go in RankUp - Design Decisions.</p>
+    <ol>
+      <li><b>Layout.</b> A ladder card, B progress sheet, C journey, or parts combined. <span class="def">Default: A, with B's "worth" column in the signal table.</span></li>
+      <li><b>How it opens.</b> <span class="def">Default: /rank opens the screen; /rank &lt;player&gt; for admins stays chat text; a key binding later if you want one.</span></li>
+      <li><b>Which signals show.</b> Every signal that is on (even at 0), with the off ones hidden; or everything the player has a count for. <span class="def">Default: every signal that is on; off signals with a count shown dimmed, as in B.</span></li>
+      <li><b>How much of the ladder.</b> The whole ladder with every rung's points and rewards, or only the next rung. <span class="def">Default: the whole ladder; a rung's rewards on hover.</span></li>
+      <li><b>Other players' standing.</b> How many hold each rung, who holds the top. <span class="def">Default: the count per rung (as in A), no names; a leaderboard later if wanted.</span></li>
+      <li><b>"Fastest way there".</b> The line that turns the points to go into counts per signal. <span class="def">Default: yes, the three biggest-weight signals that are on.</span></li>
+      <li><b>Latest gains feed (C).</b> Needs the ledger to remember a player's recent changes while they are online. <span class="def">Default: no for now; it can be added to any layout later.</span></li>
+      <li><b>Refresh.</b> <span class="def">Default: the server sends the standing when the screen opens and again every second while it is open.</span></li>
+      <li><b>Size.</b> <span class="def">Default: as the admin screen (D29): fills the window minus a margin, at least 428 by 240, text at the normal size.</span></li>
+    </ol>
+  </section>
+</div>

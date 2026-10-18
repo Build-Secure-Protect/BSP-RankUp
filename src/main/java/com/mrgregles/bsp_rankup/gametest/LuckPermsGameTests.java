@@ -66,6 +66,8 @@ public class LuckPermsGameTests {
             // The dev server's LuckPerms computes the primary group by parents-by-weight; ensureTrack gave the created groups rising weights, so it follows.
             h.assertTrue(LuckPermsBridge.primaryGroupOf(id).equals(Optional.of("ru_test_c")), "the primary group follows: " + LuckPermsBridge.primaryGroupOf(id));
             h.assertFalse(LuckPermsBridge.setGroup(id, TRACK, "ru_test_nowhere").join(), "a group off the track is refused");
+            h.assertTrue(LuckPermsBridge.clearTrack(id, TRACK).join() && LuckPermsBridge.rankOn(id, TRACK).isEmpty(), "clearTrack takes the player off every group of the track: " + LuckPermsBridge.groupsOf(id));
+            h.assertTrue(LuckPermsBridge.setGroup(id, TRACK, "ru_test_c").join(), "and setGroup puts them back");
 
             h.assertTrue(LuckPermsBridge.setPrefix(id, TITLE_PRIORITY, "[Hero] ").join(), "setPrefix adds the title");
             h.assertTrue(LuckPermsBridge.prefixOf(id, TITLE_PRIORITY).equals(Optional.of("[Hero] ")), "prefixOf reads it back: " + LuckPermsBridge.prefixOf(id, TITLE_PRIORITY));

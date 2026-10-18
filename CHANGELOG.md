@@ -4,6 +4,33 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+### Changed (2026-10-18, docs)
+- `README.md` describes the mod, its setup, commands and build; `docs/TESTING.md` opens with the setup for a first pass; the build runs `tools/check_lang.py` (`checkLang`, part of `check`).
+
+### Added (2026-10-18, player screen)
+- The rank screen (owner decisions D38 to D46): the ladder on a track down the left with your rung in gold, the rungs below lit, seasonal ones marked, how many hold each and how far the next is; on the right your rank, title, points (lifetime and this season), the bar to the next rung, what it gives, the fastest ways there (the three heaviest signals), and every signal that counts with its count, worth, share and points; the bonus and the total; rewards waiting. Hovering a rung shows what it gives. Refreshed every second while open.
+- Opens with `/rank`, with a key (default U, "Open your rank" under BSP RankUp in Controls) and with a button in the survival inventory (client config `ui.inventoryButton`, `inventoryButtonX`, `inventoryButtonY` to move it off other mods' buttons). `/rank text` prints the chat lines instead.
+- Two GameTests on the server side (25 in all).
+
+### Added (2026-10-18, admin screen)
+- `/rankup admin` opens the admin screen for BSP Core admins (owner decisions D22 to D31): tabs LADDER (rungs on the left; the chosen rung's group, display name, points and keep/reset on the right with its rewards, + COINS / PIECES / ITEM / TITLE / COMMAND, FROM HAND and an item browser over every item with a search), SIGNALS (on/off and points per units for each), PLAYERS (search; online players and everyone with progress here; a player's counts, points, bonus and waiting rewards; SET RANK, ADD POINTS, RESET) and OPTIONS (track, announcements, kill cooldown, title priority, seasonal rewards each season or once, MAKE TRACK IN LUCKPERMS, EXPORT and IMPORT, the storage and LuckPerms state, RESET EVERYONE with a code typed back within a minute). Every change saves at once and reaches every server; REMOVE RANK, RESET and MAKE TRACK want a second click within five seconds.
+- The screen fills the window (client config `ui.scale`, 0 fills, 1 to 4 fixed), minimum 520 by 300 units; BSP Core's Holo HUD look; text from the language file.
+- The commands and the screen share one set of edits (`admin/AdminEdits`). Channel `bsp_rankup:main`, protocol 1. One GameTest on the server side (23 in all); the screen itself needs the client.
+
+### Added (2026-10-18, seasons)
+- When BSP Core ends a season, a player on a seasonal rung falls back to the highest permanent rung below it (off the ladder when there is none), is told, and a `RankChangedEvent` with cause `SEASON` fires; permanent rungs stay. From then on seasonal rungs are judged on the points earned since (the player's points at the season's end are their base), so the lifetime points that earned the rung do not climb them straight back. Every player with progress has survived one more season (the `seasons_survived` signal, off by default). Players online are handled at once, everyone else on their next login here, so on a network each player is handled once.
+- Rewards on a seasonal rung come again each season, or once only with `/rankup option rewardsagain false`. `/rank` shows this season's points once a season has ended.
+- Shared storage: `season`, `season_base` and `rewarded` on the players row. Two GameTests (22 in all).
+
+### Added (2026-10-18, api)
+- Package `api` (version 1, `docs/API.md`): `RankUpApi` with the ladder (`track`, `ladder`, `rank`), a player's standing (`rankOf`, `hasRank`, `progressOf`, `pointsOf`), `addPoints` for other mods, `signalKeys`, the team hook (`setTeamProvider`, `hasTeamProvider`) and the storage state (`isShared`, `serverId`); records `RankInfo`, `ProgressInfo`; `TeamProvider`. `api.event.RankChangedEvent` on the Forge bus after every rank change (`EARNED`, `ADMIN`, `SEASON`), one per rung passed. Two GameTests (20 in all).
+
+### Added (2026-10-18, shared storage)
+- Server config `bsp_rankup-server.toml`: `storage` (mode none or mysql, host, port, database, user, password, tablePrefix `bsp_ru_`, serverId, pollSeconds) and `storage.redis` (enabled, host, port, username, password, channel, safetyPollSeconds). Nothing else is in the file: the ladder and the rest live in the shared storage and are edited in game.
+- With `storage.mode = mysql`: every change to a player's counts, bonus, rank and waiting rewards is written through as it happens (counts and bonus as additive deltas, so playtime on several servers adds up); a player's row is read on login and replaces the local copy; the settings are one shared document written on every edit and re-read when another server changes them. Tables `bsp_ru_counts`, `bsp_ru_players`, `bsp_ru_settings`, `bsp_ru_notices`. No driver is bundled (BSP Core's full jar or Mohist provides one). `serverId` empty takes BSP Region Guard's server id when it is installed.
+- Notices between servers (a settings change, a player reset elsewhere, a rank-up to announce network-wide when announcements are set to `network`) go through Redis when enabled (RankUp's own small client, as Region Guard's) and are always written to the notice table, which every server reads every `pollSeconds` (every `safetyPollSeconds` while Redis is connected); a notice acts once.
+- `/rankup info` shows the storage's state. Three GameTests on an in-memory backend and a fake Redis (18 in all). The MySQL path itself is untested until a network run.
+
 ### Added (2026-10-17, commands)
 - `/rank`: your rank and where it stands (rank n of m, points, the next rung and the points to go, every counted signal, the bonus, rewards waiting). `/rank <player>` for admins, by name (online, known to the server, or a uuid).
 - `/rankup` for BSP Core admins and the console: `set <player> <group>` (no rewards), `add <player> <points>` (negative takes away; never a demotion), `reset <player>` (starts over on the first rung); `ladder list|add <group> <points> [name]|remove|points|name|seasonal|move <rung>|import` (import makes rungs from the LuckPerms track's groups); `reward list|add <group> coins|pieces|item [count]|item hand|title|command ...|remove <n>|clear`; `signal` (list) and `signal <signal> on|off|points <n> [per <n>]`; `option track|announce off/server/network|cooldown <min>|titlepriority <n>|rewardsagain <bool>`; `export <name>` and `import <name>` as `config/bsp_rankup/<name>.json`; `info`; `reload` (LuckPerms looked up again, everyone online re-checked). Every edit saves at once.

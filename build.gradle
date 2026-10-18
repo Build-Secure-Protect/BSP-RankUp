@@ -117,3 +117,15 @@ tasks.named('jar', Jar).configure {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
+
+// The screen text: every key the client code looks up must exist in the language file (tools/gen_lang.py writes it).
+tasks.register('checkLang', Exec) {
+    group = 'verification'
+    description = 'Checks the client code against the language file (tools/check_lang.py).'
+    commandLine 'python3', 'tools/check_lang.py'
+    inputs.files(fileTree('src/main/java/com/mrgregles/bsp_rankup/client'), 'src/main/resources/assets/bsp_rankup/lang/en_us.json', 'tools/check_lang.py')
+    outputs.upToDateWhen { true }
+}
+tasks.named('check') {
+    dependsOn 'checkLang'
+}

@@ -1,8 +1,30 @@
 # BSP RankUp
 
-A Forge mod for Minecraft 1.20.1 and the Build Secure Protect (BSP) modpack: automatic LuckPerms ranks, raised by what players do on the server (playtime, kills, Shatter Totems stolen and protected, and more).
+A Forge mod for Minecraft 1.20.1 and the Build Secure Protect (BSP) modpack: automatic LuckPerms ranks, raised by what players do on the server. Players earn points for time played, players defeated, Shatter Totems stolen and defended, and more; when their points pass a rung of the ladder they are moved onto that LuckPerms group, told, rewarded and announced. Everything about the ladder is set up in game.
 
-Requires [BSP Core](https://github.com/Build-Secure-Protect/BSP-Core). BSP Region Guard and BSP Teleport are optional. LuckPerms must be installed on the server for ranks to change.
+Requires [BSP Core](https://github.com/Build-Secure-Protect/BSP-Core) 1.1.0 or newer and LuckPerms on the server (the Bukkit plugin on Mohist or the Forge mod; without it ranks are only recorded). [BSP Region Guard](https://github.com/Build-Secure-Protect/BSP-Region-Guard) and BSP Teleport are optional.
+
+## How it works
+
+- **Signals** are what RankUp counts: minutes played, player kills, mob kills, deaths, totems stolen, protected, lost and placed, seasons survived, and (when BSP Core offers them) season score, pieces earned and claims bought. Each is on or off and worth a number of points per so many units.
+- **The ladder** is a LuckPerms track: each rung is a group, a display name, the points it needs, whether it resets each season, and what it gives (Shatter Coins, pieces into the bank, items, a title shown as a LuckPerms prefix, console commands). Reaching a rung's points moves the player onto its group through LuckPerms. Ranks are never taken away by falling points; an admin can reset a player.
+- **Seasons** (BSP Core's): rungs marked seasonal fall back at a season's end to the highest permanent rung below, and are then judged on points earned since. Permanent rungs stay.
+- **A network**: with `storage.mode = "mysql"` every count is written through to shared tables as it happens, so playtime on several servers adds up, a player's row is read when they log in, the settings are shared, and announcements can reach every server (through Redis when enabled).
+
+## Setting it up
+
+1. In LuckPerms, make a track and its groups (`/lp createtrack rankup`, `/lp creategroup warden`, `/lp track rankup append warden` ...), or let RankUp make them from its ladder (OPTIONS, MAKE TRACK IN LUCKPERMS). Give the groups rising weights so LuckPerms reports the highest as the primary group.
+2. As a BSP Core admin, `/rankup admin` opens the admin screen: add rungs on LADDER (or IMPORT from the track), set each rung's points and rewards, switch signals and their worth on SIGNALS, pick announcements and the rest on OPTIONS. Everything saves at once. The same can be done with `/rankup` commands.
+3. Players open their rank screen with `/rank`, the U key, or the R button in their inventory.
+4. For several servers, set `storage` (MySQL) and `storage.redis` in `serverconfig/bsp_rankup-server.toml` on each backend. Nothing else lives in that file.
+
+## Commands
+
+`/rank` (your screen), `/rank text` (the same as chat lines), `/rank <player>` (admins). `/rankup admin|info|reload`, `set|add|reset <player> ...`, `ladder add|remove|list|points|name|seasonal|move|import`, `reward add|list|remove|clear`, `signal ...`, `option track|announce|cooldown|titlepriority|rewardsagain`, `export|import <name>` (files in `config/bsp_rankup/`).
+
+## For other mods
+
+`docs/API.md`: the ladder and a player's standing, points from other mods, a team hook (kills between teammates count for nothing once a teams mod registers it), and `RankChangedEvent`.
 
 ## Build
 
@@ -12,12 +34,12 @@ BSP Core must be built first (its jar is read from `../BSP-Core/build/libs`). Th
 ./gradlew build
 ```
 
-The jar lands in `build/libs/`. `./gradlew runGameTestServer` runs the headless tests.
+The jar lands in `build/libs/`. `./gradlew runGameTestServer` runs the headless tests; the build checks the screen text against the language file (`tools/check_lang.py`), which `tools/gen_lang.py` writes.
 
 ## Docs
 
 - `docs/API.md`: what other mods may call.
-- `docs/TESTING.md`: the in-game checklist.
+- `docs/TESTING.md`: the in-game checklist, one section per feature.
 - `CHANGELOG.md`.
 
 MIT licensed.

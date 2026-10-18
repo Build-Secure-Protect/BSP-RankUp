@@ -1,6 +1,15 @@
 # Testing BSP RankUp in game
 
-What to try after each build. Tick what works, note what does not. Claude cannot run the client, so this list is the hand-off between a build and the owner. Headless checks run by Claude: `./gradlew runGameTestServer`.
+What to try after each build. Tick what works, note what does not. Claude cannot run the client, so this list is the hand-off between a build and the owner. Headless checks run by Claude: `./gradlew runGameTestServer` (25 tests: the LuckPerms bridge, every signal, the ladder engine, the shared storage, the commands, the api, seasons, both screens' server sides).
+
+## Setup for a first pass
+
+A server (Forge, or the Mohist test server from Region Guard's `tools/setup_test_server.sh`) with BSP Core 1.1.0, this jar, and LuckPerms. You as a BSP Core admin (`admin.admins` in BSP Core's config, or an operator with that list empty). A second account helps for kills, steals and `/rankup set`.
+
+1. `/rankup info`: the mod is up, LuckPerms is reached.
+2. `/rankup admin`: build a three-rung ladder (one rung at 0, one at 50, one at 100 marked seasonal) with a few rewards; MAKE TRACK IN LUCKPERMS.
+3. `/rank`: the player screen shows the ladder.
+4. Then the sections below in order: RU-3 signals, RU-4 ladder and rewards, RU-6 commands, RU-8 seasons, RU-9 and RU-10 screens, RU-5 on the network.
 
 ## Skeleton (build 0.1.0, 2026-10-17)
 
@@ -40,3 +49,51 @@ Headless: two GameTests run every `/rankup` subcommand and `/rank` through the d
 - [ ] `/rankup set <other> <group>` moves another player without rewards; `/rankup reset <other>` puts them back on the first rung with 0 points.
 - [ ] `/rankup export mine` writes `config/bsp_rankup/mine.json`; edit a threshold in the file; `/rankup import mine` applies it and `/rankup ladder list` shows the change.
 - [ ] Tab completion offers rung groups, signal keys and online names.
+
+## RU-5: shared storage (2026-10-18)
+
+Headless: three GameTests on an in-memory backend and a fake Redis (write-through as deltas, a row read on login, shared settings and their notice, notices through Redis and through the table during an outage). The MySQL and Redis connections themselves need the network: two backends, the shared database, Redis on the main machine (Region Guard's `docs/NETWORK.md` describes the layout).
+
+- [ ] With `storage.mode = "mysql"` in `serverconfig/bsp_rankup-server.toml` on each backend (and `redis.enabled = true` if Redis runs), the start log shows `RankUp storage connected: mysql ... (this server is '<name>')` and, with Redis, `Redis connected`. `/rankup info` shows the same.
+- [ ] Play 2 minutes on server A and 1 minute on server B: `/rank` on either shows 3 minutes.
+- [ ] Set a rung's points on server A with `/rankup ladder points ...`: within a few seconds `/rankup ladder list` on server B shows it (at once with Redis, within `pollSeconds` without).
+- [ ] With `/rankup option announce network`, a rank-up on server A is announced on server B too.
+- [ ] `/rankup reset <player>` on server A while the player is on server B: their `/rank` on B shows the fresh start within a few seconds.
+- [ ] Stop Redis: the log says it is retrying and the checks above still pass, just slower; start Redis again: `Redis connected again`.
+
+## RU-7: api (2026-10-18)
+
+Headless only: two GameTests cover every call and the event. Nothing to check in game until another mod calls it; `docs/API.md` is the contract.
+
+## RU-8: seasons (2026-10-18)
+
+Headless: two GameTests (a fall from the seasonal top to the highest permanent rung, the base and the seasons-survived count, climbing back with this season's points, rewards again or once, a player away handled on login; a ladder where every rung is seasonal).
+
+- [ ] Mark the top rung seasonal (`/rankup ladder seasonal <group> true`), reach it, then end the season in BSP Core (`/bsp admin`, or its season command): you see `Season n is over: you are <rank> again. Seasonal ranks start afresh.`, `/lp user <you> info` shows the lower group, `/rank` shows `this season: 0 points` and the lifetime points unchanged.
+- [ ] Earn the seasonal rung's points again: you rank up again and (with `rewardsagain` on) get its rewards again.
+- [ ] A player who was offline when the season ended sees the same message on their next login.
+
+## RU-9: admin screen (2026-10-18)
+
+Headless: one GameTest applies every action the screen can send and checks the view and the packets. The screen's drawing, clicks and the item browser are untested until this pass. As a BSP Core admin:
+
+- [ ] `/rankup admin` opens the screen, filling the window with a margin, turquoise border, RANKUP ADMIN top left, the status line top right, four tabs. A player who is not an admin gets a refusal in the action bar.
+- [ ] LADDER: + ADD RANK, type `warden 1500 Warden`, Enter: the rung appears, selected, with its fields; click DISPLAY NAME or POINTS to edit (Enter applies, Esc cancels); keep/reset flips the seasonal flag; UP and DOWN reorder; IMPORT makes rungs from the LuckPerms track.
+- [ ] Rewards: + COINS, + PIECES, + TITLE, + COMMAND open the input with a hint; + ITEM opens the item browser: type to search, click an item, type the count, Enter; FROM HAND adds the held stack; the x removes a row. The item's icon shows on its row.
+- [ ] REMOVE RANK turns to CLICK AGAIN for five seconds and removes on the second click.
+- [ ] SIGNALS: the on/off chip flips at once; clicking the worth box opens the input (`points per`, e.g. `25 1`).
+- [ ] PLAYERS: typing in the search box filters within a second; online players show a turquoise dot; clicking one shows their counts; SET RANK shows the rungs as chips; ADD POINTS takes a number (negative takes); RESET wants a second click.
+- [ ] OPTIONS: the track and the numbers edit through the input; announce and seasonal rewards are chips; MAKE TRACK IN LUCKPERMS (second click) creates the track and groups and the answer line says so; EXPORT and IMPORT take a file name; the info box shows LuckPerms, the track's groups, storage and the player count; RESET EVERYONE shows a code and the seconds left, the input takes it back, CANCEL or Esc drops it.
+- [ ] The answer line at the bottom shows every reply, turquoise for success and red for a refusal; the screen redraws after each.
+- [ ] `config/bsp_rankup-client.toml` `ui.scale = 2` draws it at a fixed size instead.
+
+## RU-10: player screen (2026-10-18)
+
+Headless: two GameTests cover the view the server builds and the fastest-way rows. The screen, the key and the inventory button are untested until this pass. As any player:
+
+- [ ] `/rank` opens YOUR RANK filling the window: the ladder on the left (your rung in gold, the ones below lit turquoise, seasonal ones with an S and a violet node, holder counts), your rank large on the right with the title chip when you have one, the points line, the bar to the next rung with what it gives and the "Fastest:" line, and the WHAT COUNTS table.
+- [ ] The key U (Controls, BSP RankUp) opens it in game; the inventory shows a small R button at the right of the crafting area that opens it; `/rank text` prints the chat lines.
+- [ ] Hover a rung: the bottom line shows what it gives. Scroll the ladder when it has more than six rungs.
+- [ ] Earn points while it is open (a kill, a minute): the numbers move within a second.
+- [ ] After a season ended, the points line shows "this season" and the bar to a seasonal rung counts this season's points.
+- [ ] With Curios or a backpack mod installed, the R button does not sit on theirs; if it does, move it in `config/bsp_rankup-client.toml`.

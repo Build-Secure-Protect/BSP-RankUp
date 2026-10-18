@@ -152,6 +152,7 @@ public class LadderGameTests {
         RankEngine.onRankUp(listener);
         install(server);
         level.addNewPlayer(player);
+        RankEngine.onLogin(player); // any season ended by an earlier test is applied now, with nothing to fall from
         ProgressLedger ledger = ProgressLedger.get(server);
         ledger.setRank(player.getUUID(), "ru_l_c", 1L); // given by an admin, with no points at all
         ledger.add(player.getUUID(), Signal.MOB_KILLS, 1);

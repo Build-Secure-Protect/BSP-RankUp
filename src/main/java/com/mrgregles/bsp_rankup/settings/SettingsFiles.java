@@ -37,21 +37,32 @@ public final class SettingsFiles {
         return directory().resolve(name.toLowerCase(Locale.ROOT) + ".json");
     }
 
+    /** The settings as JSON text (their NBT converted), the form the files and the shared storage hold. */
+    public static String toJson(Settings settings) {
+        return GSON.toJson(NbtOps.INSTANCE.convertTo(JsonOps.INSTANCE, settings.save()));
+    }
+
+    public static Settings fromJson(String text) throws IOException {
+        JsonElement json = JsonParser.parseString(text);
+        Tag tag = JsonOps.INSTANCE.convertTo(NbtOps.INSTANCE, json);
+        if (!(tag instanceof CompoundTag compound)) {
+            throw new IOException("not a settings document");
+        }
+        return Settings.load(compound);
+    }
+
     public static Path export(Settings settings, String name) throws IOException {
         Path path = file(name);
         Files.createDirectories(path.getParent());
-        JsonElement json = NbtOps.INSTANCE.convertTo(JsonOps.INSTANCE, settings.save());
-        Files.writeString(path, GSON.toJson(json) + "\n");
+        Files.writeString(path, toJson(settings) + "\n");
         return path;
     }
 
     public static Settings read(String name) throws IOException {
-        Path path = file(name);
-        JsonElement json = JsonParser.parseString(Files.readString(path));
-        Tag tag = JsonOps.INSTANCE.convertTo(NbtOps.INSTANCE, json);
-        if (!(tag instanceof CompoundTag compound)) {
-            throw new IOException(path.getFileName() + " does not hold settings");
+        try {
+            return fromJson(Files.readString(file(name)));
+        } catch (RuntimeException e) {
+            throw new IOException(file(name).getFileName() + " does not hold settings: " + e.getMessage());
         }
-        return Settings.load(compound);
     }
 }

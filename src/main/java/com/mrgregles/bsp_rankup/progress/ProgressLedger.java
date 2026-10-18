@@ -28,13 +28,21 @@ import java.util.function.Consumer;
 public final class ProgressLedger extends SavedData {
     public static final String NAME = "bsp_rankup_progress";
 
-    /** What changed: the server (null for a ledger loaded outside a server, as in tests), the player, the signal (null for a bonus or a reset) and the amount added. */
-    public record Change(@Nullable MinecraftServer server, UUID player, @Nullable Signal signal, long amount, Progress progress) {
+    /** What kind of change happened. */
+    public enum Kind { COUNT, BONUS, RANK, PENDING, SEASON, REWARDED, RESET, LOAD }
+
+    /**
+     * What changed: the server (null for a ledger loaded outside a server, as in tests), the player, the kind, the
+     * signal (for a COUNT) and the amount added (a COUNT's delta, a BONUS's points), and the progress afterwards.
+     */
+    public record Change(@Nullable MinecraftServer server, UUID player, Kind kind, @Nullable Signal signal, long amount, Progress progress) {
     }
 
     private static final List<Consumer<Change>> LISTENERS = new CopyOnWriteArrayList<>();
 
     private final Map<UUID, Progress> players = new HashMap<>();
+    /** The number of the last season that ended on this server (0: none since this ledger began). */
+    private int lastEndedSeason;
     @Nullable
     private MinecraftServer server;
 
@@ -88,7 +96,7 @@ public final class ProgressLedger extends SavedData {
         Progress p = progress(player);
         p.add(signal, amount);
         setDirty();
-        notify(new Change(server, player, signal, amount, p));
+        notify(new Change(server, player, Kind.COUNT, signal, amount, p));
     }
 
     /** Replaces a count outright (the shared storage, or an admin). */
@@ -97,20 +105,72 @@ public final class ProgressLedger extends SavedData {
         long before = p.count(signal);
         p.set(signal, count);
         setDirty();
-        notify(new Change(server, player, signal, p.count(signal) - before, p));
+        notify(new Change(server, player, Kind.COUNT, signal, p.count(signal) - before, p));
     }
 
     public void addBonus(UUID player, long points) {
         Progress p = progress(player);
         p.setBonus(p.bonus() + points);
         setDirty();
-        notify(new Change(server, player, null, points, p));
+        notify(new Change(server, player, Kind.BONUS, null, points, p));
     }
 
     public void setRank(UUID player, @Nullable String rank, long atMs) {
         Progress p = progress(player);
         p.setRank(rank, atMs);
         setDirty();
+        notify(new Change(server, player, Kind.RANK, null, 0, p));
+    }
+
+    /**
+     * Replaces everything known about a player with what the shared storage holds (read on login). One LOAD change
+     * tells the listeners; the storage itself ignores it.
+     */
+    public void load(UUID player, Map<Signal, Long> counts, long bonus, @Nullable String rank, long rankedAtMs, List<Reward> pending, int season, long seasonBase, java.util.Set<String> rewarded) {
+        Progress p = new Progress();
+        counts.forEach(p::set);
+        p.setBonus(bonus);
+        p.setRank(rank, rankedAtMs);
+        p.addPending(pending);
+        p.setSeason(season, seasonBase);
+        p.setRewarded(rewarded);
+        if (p.isEmpty()) {
+            players.remove(player);
+        } else {
+            players.put(player, p);
+        }
+        setDirty();
+        notify(new Change(server, player, Kind.LOAD, null, 0, p));
+    }
+
+    /** Records that a season's end was applied to the player, with their points at that moment. */
+    public void setSeason(UUID player, int season, long base) {
+        Progress p = progress(player);
+        p.setSeason(season, base);
+        setDirty();
+        notify(new Change(server, player, Kind.SEASON, null, 0, p));
+    }
+
+    /** Records a rung whose rewards the player has now had once. */
+    public void addRewarded(UUID player, String group) {
+        Progress p = progress(player);
+        java.util.Set<String> set = new java.util.LinkedHashSet<>(p.rewarded());
+        if (set.add(group)) {
+            p.setRewarded(set);
+            setDirty();
+            notify(new Change(server, player, Kind.REWARDED, null, 0, p));
+        }
+    }
+
+    public int lastEndedSeason() {
+        return lastEndedSeason;
+    }
+
+    public void setLastEndedSeason(int season) {
+        if (season > lastEndedSeason) {
+            lastEndedSeason = season;
+            setDirty();
+        }
     }
 
     /** Keeps rewards for a player who is not here to receive them; {@link #takePending} hands them out on login. */
@@ -118,17 +178,21 @@ public final class ProgressLedger extends SavedData {
         if (rewards.isEmpty()) {
             return;
         }
-        progress(player).addPending(rewards);
+        Progress p = progress(player);
+        p.addPending(rewards);
         setDirty();
+        notify(new Change(server, player, Kind.PENDING, null, 0, p));
     }
 
     public List<Reward> takePending(UUID player) {
         if (!has(player)) {
             return List.of();
         }
-        List<Reward> out = progress(player).takePending();
+        Progress p = progress(player);
+        List<Reward> out = p.takePending();
         if (!out.isEmpty()) {
             setDirty();
+            notify(new Change(server, player, Kind.PENDING, null, 0, p));
         }
         return out;
     }
@@ -137,7 +201,7 @@ public final class ProgressLedger extends SavedData {
     public void reset(UUID player) {
         players.remove(player);
         setDirty();
-        notify(new Change(server, player, null, 0, new Progress()));
+        notify(new Change(server, player, Kind.RESET, null, 0, new Progress()));
     }
 
     private static void notify(Change change) {
@@ -157,11 +221,13 @@ public final class ProgressLedger extends SavedData {
             }
         });
         tag.put("Players", list);
+        tag.putInt("LastEndedSeason", lastEndedSeason);
         return tag;
     }
 
     public static ProgressLedger load(CompoundTag tag) {
         ProgressLedger ledger = new ProgressLedger();
+        ledger.lastEndedSeason = tag.getInt("LastEndedSeason");
         ListTag list = tag.getList("Players", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
             CompoundTag entry = list.getCompound(i);

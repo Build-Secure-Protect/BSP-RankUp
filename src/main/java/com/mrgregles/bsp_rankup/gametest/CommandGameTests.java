@@ -92,7 +92,7 @@ public class CommandGameTests {
             h.assertTrue(run(console, "rankup export bad/name") == 0, "a bad file name is refused");
             out.lines.clear();
             run(console, "rankup info");
-            h.assertTrue(out.lines.size() == 3 && out.lines.get(0).contains("2 rungs"), "info: " + out);
+            h.assertTrue(out.lines.size() == 4 && out.lines.get(0).contains("2 rungs"), "info: " + out);
         } finally {
             SettingsLedger.get(server).set(Settings.defaults());
             Files.deleteIfExists(SettingsFiles.file("cmdtest"));
@@ -127,7 +127,8 @@ public class CommandGameTests {
                     h.assertTrue(next.getKey().equals("message.bsp_rankup.rank.next") && next.getArgs()[0].equals("C") && next.getArgs()[2].equals(40L), "the next rung and the points to go: " + List.of(next.getArgs()));
                     h.assertTrue(lines.stream().anyMatch(c -> c.getContents() instanceof TranslatableContents t && t.getKey().equals("message.bsp_rankup.rank.bonus")), "the bonus line shows");
                     mine.lines.clear();
-                    h.assertTrue(run(asPlayer, "rank") == 1 && mine.lines.size() == lines.size(), "/rank as the player prints the same lines: " + mine);
+                    h.assertTrue(run(asPlayer, "rank text") == 1 && mine.lines.size() == lines.size(), "/rank text as the player prints the same lines: " + mine);
+                    h.assertTrue(run(asPlayer, "rank") == 1, "/rank alone opens the screen (a packet to the mock)");
                     out.lines.clear();
                     h.assertTrue(run(console, "rank " + name) == 1 && out.lines.size() == lines.size(), "/rank <player> from the console: " + out);
                     h.assertTrue(run(console, "rankup set " + name + " ru_l_zzz") == 0, "setting a rung that is not there is refused: " + out.last());

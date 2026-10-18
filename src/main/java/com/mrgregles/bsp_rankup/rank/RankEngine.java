@@ -1,6 +1,8 @@
 package com.mrgregles.bsp_rankup.rank;
 
 import com.mrgregles.bsp_rankup.BSPRankUp;
+import com.mrgregles.bsp_rankup.api.RankInfo;
+import com.mrgregles.bsp_rankup.api.event.RankChangedEvent;
 import com.mrgregles.bsp_rankup.compat.LuckPermsBridge;
 import com.mrgregles.bsp_rankup.progress.Progress;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
@@ -13,6 +15,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import org.jetbrains.annotations.Nullable;
 
@@ -73,12 +76,14 @@ public final class RankEngine {
     /**
      * The highest rung these points reach, walking the ladder from the first rung and stopping at the first one
      * not reached (so a rung with a lower threshold than the one below it is never skipped to). -1 for none.
+     * Permanent rungs are judged on the lifetime points, seasonal rungs on the points earned this season.
      */
-    public static int rankIndex(Settings settings, long points) {
+    public static int rankIndex(Settings settings, long points, long seasonPoints) {
         int best = -1;
         List<Rank> ranks = settings.ranks();
         for (int i = 0; i < ranks.size(); i++) {
-            if (points >= ranks.get(i).points()) {
+            Rank r = ranks.get(i);
+            if ((r.seasonal() ? seasonPoints : points) >= r.points()) {
                 best = i;
             } else {
                 break;
@@ -87,10 +92,22 @@ public final class RankEngine {
         return best;
     }
 
+    /** The rung lifetime points reach when no season has ended (season points equal lifetime points). */
+    public static int rankIndex(Settings settings, long points) {
+        return rankIndex(settings, points, points);
+    }
+
+    /** The points earned since the last season ended: lifetime points above the base recorded then. */
+    public static long seasonPoints(Settings settings, Progress progress) {
+        return Math.max(0, points(settings, progress) - progress.seasonBase());
+    }
+
     // ------------------------------------------------------------------ triggers
 
     private static void onChange(ProgressLedger.Change change) {
-        if (change.server() != null) {
+        // rank, pending, season and rewarded writes come from the engine itself: reacting to them would rank a player twice
+        if (change.server() != null && change.kind() != ProgressLedger.Kind.RANK && change.kind() != ProgressLedger.Kind.PENDING
+                && change.kind() != ProgressLedger.Kind.SEASON && change.kind() != ProgressLedger.Kind.REWARDED) {
             check(change.server(), change.player());
         }
     }
@@ -141,7 +158,11 @@ public final class RankEngine {
         apply.whenComplete((ok, err) -> server.execute(() -> {
             boolean success = err == null && ok != null && ok;
             if (success) {
-                ProgressLedger.get(server).setRank(player, rank.group(), System.currentTimeMillis());
+                ProgressLedger ledger = ProgressLedger.get(server);
+                Progress before = ledger.peek(player);
+                int from = settings.indexOf(before == null ? null : before.rank());
+                ledger.setRank(player, rank.group(), System.currentTimeMillis());
+                post(server, player, settings, from, settings.indexOf(rank.group()), RankChangedEvent.Cause.ADMIN);
             }
             done.complete(success);
         }));
@@ -167,8 +188,12 @@ public final class RankEngine {
         if (progress == null) {
             progress = new Progress();
         }
+        if (Seasons.due(server, progress) && Players.isOnline(server, player)) {
+            Seasons.apply(server, player); // ends with this check again; a player who is away is handled on login
+            return;
+        }
         int current = settings.indexOf(progress.rank());
-        int target = rankIndex(settings, points(settings, progress));
+        int target = rankIndex(settings, points(settings, progress), seasonPoints(settings, progress));
         if (target <= current) {
             reapply(server, settings, player, current);
             return;
@@ -194,6 +219,12 @@ public final class RankEngine {
         Settings settings = SettingsLedger.settings(server);
         ProgressLedger ledger = ProgressLedger.get(server);
         List<Rank> ranks = settings.ranks();
+        Progress held = ledger.peek(player);
+        int heldIndex = settings.indexOf(held == null ? null : held.rank());
+        if (heldIndex >= target) {
+            return; // an admin or a season moved the player while LuckPerms was answering
+        }
+        from = Math.max(from, heldIndex);
         Rank previous = from < 0 || from >= ranks.size() ? null : ranks.get(from);
         for (int i = from + 1; i <= target && i < ranks.size(); i++) {
             Rank rank = ranks.get(i);
@@ -203,7 +234,11 @@ public final class RankEngine {
             if (online != null && !quiet) {
                 online.sendSystemMessage(Component.translatable("message.bsp_rankup.reached", rank.displayName()));
             }
-            Rewards.give(server, player, rank, settings);
+            Progress now = ledger.progress(player);
+            if (settings.rewardsAgainEachSeason() || !now.rewarded().contains(rank.group())) {
+                Rewards.give(server, player, rank, settings);
+                ledger.addRewarded(player, rank.group());
+            }
             if (!quiet && settings.announce() != Settings.Announce.OFF) {
                 server.getPlayerList().broadcastSystemMessage(Component.translatable("message.bsp_rankup.announce", Players.name(server, player), rank.displayName()), false);
             }
@@ -211,6 +246,7 @@ public final class RankEngine {
             for (Consumer<RankUp> l : LISTENERS) {
                 l.accept(up);
             }
+            post(server, player, settings, i - 1, i, RankChangedEvent.Cause.EARNED);
             previous = rank;
         }
         check(server, player); // counts may have moved while LuckPerms was answering
@@ -227,6 +263,20 @@ public final class RankEngine {
         Rank rank = settings.ranks().get(current);
         IN_FLIGHT.add(player);
         LuckPermsBridge.setGroup(player, settings.track(), rank.group()).whenComplete((ok, err) -> server.execute(() -> IN_FLIGHT.remove(player)));
+    }
+
+    /** Posts the api's event for a move from rung {@code from} to rung {@code to} (-1 for none). */
+    public static void post(MinecraftServer server, UUID player, Settings settings, int from, int to, RankChangedEvent.Cause cause) {
+        MinecraftForge.EVENT_BUS.post(new RankChangedEvent(server, player, info(settings, from), info(settings, to), cause));
+    }
+
+    @Nullable
+    private static RankInfo info(Settings settings, int index) {
+        if (index < 0 || index >= settings.ranks().size()) {
+            return null;
+        }
+        Rank r = settings.ranks().get(index);
+        return new RankInfo(r.group(), r.displayName(), index, r.points(), r.seasonal());
     }
 
     private static void warn(String message) {

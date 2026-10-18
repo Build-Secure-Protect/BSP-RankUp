@@ -26,7 +26,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/** {@code /rank}: a player's own rank, points and what is next; {@code /rank <player>} for admins. */
+/**
+ * {@code /rank} opens the player's rank screen (owner decision D39); {@code /rank text} prints the same as chat
+ * lines; {@code /rank <player>} prints another player's for admins.
+ */
 public final class RankCommand {
     private RankCommand() {
     }
@@ -36,11 +39,16 @@ public final class RankCommand {
         d.register(Commands.literal("rank")
                 .executes(ctx -> {
                     ServerPlayer player = ctx.getSource().getPlayerOrException();
+                    com.mrgregles.bsp_rankup.network.RankSync.open(player);
+                    return 1;
+                })
+                .then(Commands.literal("text").executes(ctx -> {
+                    ServerPlayer player = ctx.getSource().getPlayerOrException();
                     for (Component line : summary(player.server, player.getUUID())) {
                         ctx.getSource().sendSuccess(() -> line, false);
                     }
                     return 1;
-                })
+                }))
                 .then(Commands.argument("player", StringArgumentType.word())
                         .requires(AdminCommands::isAdmin)
                         .executes(ctx -> {
@@ -88,6 +96,9 @@ public final class RankCommand {
             }
             MutableComponent line = Component.translatable("message.bsp_rankup.rank.signal", Component.translatable("signal.bsp_rankup." + s.key()), count, setting.pointsFor(count));
             out.add(line.withStyle(ChatFormatting.GRAY));
+        }
+        if (settings.ranks().stream().anyMatch(Rank::seasonal) && progress.seasonBase() != 0) {
+            out.add(Component.translatable("message.bsp_rankup.rank.season", RankEngine.seasonPoints(settings, progress)).withStyle(ChatFormatting.GRAY));
         }
         if (progress.bonus() != 0) {
             out.add(Component.translatable("message.bsp_rankup.rank.bonus", progress.bonus()).withStyle(ChatFormatting.GRAY));

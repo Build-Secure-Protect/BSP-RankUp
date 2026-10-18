@@ -8,8 +8,10 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * One player's counters: a raw count per {@link Signal}, bonus points an admin added, the rank group last given
@@ -22,6 +24,9 @@ public final class Progress {
     private String rank;
     private long rankedAtMs;
     private final List<Reward> pending = new ArrayList<>();
+    private int season;
+    private long seasonBase;
+    private final Set<String> rewarded = new LinkedHashSet<>();
 
     public long count(Signal signal) {
         return counts.getOrDefault(signal, 0L);
@@ -86,8 +91,33 @@ public final class Progress {
         return out;
     }
 
+    /** The number of the last season whose end was applied to this player (0: none yet). */
+    public int season() {
+        return season;
+    }
+
+    /** The player's points when that season ended; seasonal rungs are judged on points above it. */
+    public long seasonBase() {
+        return seasonBase;
+    }
+
+    void setSeason(int season, long base) {
+        this.season = season;
+        this.seasonBase = base;
+    }
+
+    /** Groups whose rewards this player has received once (for ladders that reward a rung only once). */
+    public Set<String> rewarded() {
+        return Set.copyOf(rewarded);
+    }
+
+    void setRewarded(Set<String> groups) {
+        rewarded.clear();
+        rewarded.addAll(groups);
+    }
+
     public boolean isEmpty() {
-        return counts.isEmpty() && bonus == 0 && rank == null && pending.isEmpty();
+        return counts.isEmpty() && bonus == 0 && rank == null && pending.isEmpty() && season == 0 && rewarded.isEmpty();
     }
 
     public CompoundTag save() {
@@ -108,6 +138,17 @@ public final class Progress {
                 list.add(r.save());
             }
             tag.put("Pending", list);
+        }
+        if (season != 0) {
+            tag.putInt("Season", season);
+            tag.putLong("SeasonBase", seasonBase);
+        }
+        if (!rewarded.isEmpty()) {
+            ListTag list = new ListTag();
+            for (String g : rewarded) {
+                list.add(net.minecraft.nbt.StringTag.valueOf(g));
+            }
+            tag.put("Rewarded", list);
         }
         return tag;
     }
@@ -130,11 +171,17 @@ public final class Progress {
         for (int i = 0; i < list.size(); i++) {
             p.pending.add(Reward.load(list.getCompound(i)));
         }
+        p.season = tag.getInt("Season");
+        p.seasonBase = tag.getLong("SeasonBase");
+        ListTag rewarded = tag.getList("Rewarded", Tag.TAG_STRING);
+        for (int i = 0; i < rewarded.size(); i++) {
+            p.rewarded.add(rewarded.getString(i));
+        }
         return p;
     }
 
     @Override
     public String toString() {
-        return "Progress" + counts + (bonus != 0 ? " bonus " + bonus : "") + (rank != null ? " rank " + rank : "") + (pending.isEmpty() ? "" : " pending " + pending.size());
+        return "Progress" + counts + (bonus != 0 ? " bonus " + bonus : "") + (rank != null ? " rank " + rank : "") + (pending.isEmpty() ? "" : " pending " + pending.size()) + (season == 0 ? "" : " season " + season + " base " + seasonBase);
     }
 }

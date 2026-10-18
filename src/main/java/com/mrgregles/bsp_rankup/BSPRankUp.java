@@ -4,10 +4,15 @@ import com.mojang.logging.LogUtils;
 import com.mrgregles.bsp_rankup.command.AdminCommands;
 import com.mrgregles.bsp_rankup.command.RankCommand;
 import com.mrgregles.bsp_rankup.compat.BspCore;
+import com.mrgregles.bsp_rankup.network.AdminSync;
+import com.mrgregles.bsp_rankup.network.RankUpNetwork;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
 import com.mrgregles.bsp_rankup.signal.KillCooldowns;
 import com.mrgregles.bsp_rankup.signal.KillSignals;
 import com.mrgregles.bsp_rankup.signal.Playtime;
+import com.mrgregles.bsp_rankup.storage.Storage;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
@@ -27,6 +32,9 @@ public class BSPRankUp {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public BSPRankUp(FMLJavaModLoadingContext context) {
+        context.registerConfig(ModConfig.Type.SERVER, RankUpConfig.SPEC);
+        context.registerConfig(ModConfig.Type.CLIENT, RankUpClientConfig.SPEC);
+        RankUpNetwork.register();
         // Signals: what players do, counted into the progress ledger.
         MinecraftForge.EVENT_BUS.addListener(Playtime::onServerTick);
         MinecraftForge.EVENT_BUS.addListener(KillSignals::onDeath);
@@ -34,8 +42,16 @@ public class BSPRankUp {
         // The ladder: points, ranks, rewards, announcements.
         RankEngine.init();
         MinecraftForge.EVENT_BUS.addListener(RankEngine::onLoggedIn);
-        MinecraftForge.EVENT_BUS.addListener((ServerStartedEvent e) -> RankEngine.onServerStarted(e.getServer()));
-        MinecraftForge.EVENT_BUS.addListener((ServerStoppingEvent e) -> RankEngine.onServerStopping(e.getServer()));
+        MinecraftForge.EVENT_BUS.addListener((ServerStartedEvent e) -> {
+            RankEngine.onServerStarted(e.getServer());
+            Storage.start(e.getServer()); // shared MySQL and Redis, when configured
+        });
+        MinecraftForge.EVENT_BUS.addListener((ServerStoppingEvent e) -> {
+            Storage.stop();
+            RankEngine.onServerStopping(e.getServer());
+        });
+        // The shared row is read before the ladder's own login check.
+        MinecraftForge.EVENT_BUS.addListener(EventPriority.HIGH, Storage::onLoggedIn);
         MinecraftForge.EVENT_BUS.addListener(RankCommand::onRegister);
         MinecraftForge.EVENT_BUS.addListener(AdminCommands::onRegister);
         BspCore.init();
@@ -45,5 +61,6 @@ public class BSPRankUp {
     private static void onLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         Playtime.forget(event.getEntity().getUUID());
         KillCooldowns.forget(event.getEntity().getUUID());
+        AdminSync.forget(event.getEntity().getUUID());
     }
 }

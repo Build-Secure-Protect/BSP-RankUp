@@ -375,6 +375,43 @@ public final class LuckPermsBridge {
         }
     }
 
+    /** Takes the player off every group of the track (a season's end below the first permanent rung). */
+    public static CompletableFuture<Boolean> clearTrack(UUID player, String track) {
+        if (!isPresent()) {
+            return CompletableFuture.completedFuture(false);
+        }
+        try {
+            return loadTrack(track).thenCompose(t -> {
+                List<String> onTrack;
+                try {
+                    onTrack = t == null ? List.of() : groupsOfTrack(t);
+                } catch (ReflectiveOperationException | RuntimeException e) {
+                    warn("clear track", e);
+                    return CompletableFuture.completedFuture(false);
+                }
+                AtomicBoolean ok = new AtomicBoolean(false);
+                Consumer<Object> edit = user -> {
+                    try {
+                        Object data = call(user, "data");
+                        for (Object n : new ArrayList<>(nodesOf(user))) {
+                            String key = (String) call(n, "getKey");
+                            if (key.startsWith("group.") && onTrack.contains(key.substring("group.".length()))) {
+                                call(data, "remove", n);
+                            }
+                        }
+                        ok.set(true);
+                    } catch (ReflectiveOperationException | RuntimeException e) {
+                        warn("clear track", e);
+                    }
+                };
+                return modifyUser(player, edit).thenApply(v -> ok.get());
+            });
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            warn("clear track", e);
+            return CompletableFuture.completedFuture(false);
+        }
+    }
+
     /**
      * Sets the player's prefix at the given priority (RankUp's titles), replacing any prefix at that priority;
      * null removes it. Other priorities (the ranks' own prefixes, admin prefixes) are left alone.
