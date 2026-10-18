@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import com.mrgregles.bsp_rankup.command.AdminCommands;
 import com.mrgregles.bsp_rankup.command.RankCommand;
 import com.mrgregles.bsp_rankup.compat.BspCore;
+import com.mrgregles.bsp_rankup.compat.RegionGuard;
 import com.mrgregles.bsp_rankup.network.AdminSync;
 import com.mrgregles.bsp_rankup.network.RankUpNetwork;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
@@ -55,6 +56,7 @@ public class BSPRankUp {
         MinecraftForge.EVENT_BUS.addListener(RankCommand::onRegister);
         MinecraftForge.EVENT_BUS.addListener(AdminCommands::onRegister);
         BspCore.init();
+        RegionGuard.init(); // optional: the "claims bought" signal when Region Guard is installed
         LOGGER.info("BSP RankUp loaded");
     }
 

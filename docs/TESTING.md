@@ -97,3 +97,10 @@ Headless: two GameTests cover the view the server builds and the fastest-way row
 - [ ] Earn points while it is open (a kill, a minute): the numbers move within a second.
 - [ ] After a season ended, the points line shows "this season" and the bar to a seasonal rung counts this season's points.
 - [ ] With Curios or a backpack mod installed, the R button does not sit on theirs; if it does, move it in `config/bsp_rankup-client.toml`.
+
+## RG-R1: claims bought (2026-10-18)
+
+Headless: one GameTest on the plain-data path (Region Guard is not in the dev run). In game, with BSP Region Guard installed and the signal switched on (SIGNALS tab, or `/rankup signal claims_bought on`):
+
+- [ ] Buy a plot at the Land Office: `/rank` shows "claims bought 1" and its points; enlarge it: the count stays.
+- [ ] Without Region Guard installed the signal stays at 0 and the server log shows nothing about it.

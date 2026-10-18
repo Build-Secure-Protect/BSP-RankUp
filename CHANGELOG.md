@@ -4,6 +4,9 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+### Added (2026-10-18, claims bought)
+- The `claims_bought` signal counts: with BSP Region Guard installed, every new claim a player buys (not an enlargement) counts one, through Region Guard's `ClaimPurchasedEvent` (its request RG-R1). Off by default like the other optional signals; switching it on gives points for claims already counted. One GameTest (26 in all).
+
 ### Changed (2026-10-18, docs)
 - `README.md` describes the mod, its setup, commands and build; `docs/TESTING.md` opens with the setup for a first pass; the build runs `tools/check_lang.py` (`checkLang`, part of `check`).
 
