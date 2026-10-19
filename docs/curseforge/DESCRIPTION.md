@@ -2,7 +2,7 @@
 
 **BSP RankUp** ranks your players automatically. The more they play, fight and raid, the higher they climb a ladder of LuckPerms ranks, and every rung pays out: coins, pieces into the bank, items, a title, anything a command can give. Made for the Build Secure Protect server, where Shatter Totems are stolen and defended; works on any Forge 1.20.1 or Mohist server with BSP-Core and LuckPerms.
 
-**Requires:** Minecraft 1.20.1, Forge 47 or newer, Java 17, [BSP-Core](https://www.curseforge.com/minecraft/mc-mods/bsp-core) 1.1.0 or newer, and LuckPerms on the server (the Bukkit plugin on Mohist, or the Forge mod). Needed on the client and the server. **Optional:** BSP-Region Guard, BSP-Teleport.
+**Requires:** Minecraft 1.20.1, Forge 47 or newer, Java 17, [BSP-Core](https://www.curseforge.com/minecraft/mc-mods/bsp-core) 1.1.0 or newer (1.3.0 for kit rewards), and LuckPerms on the server (the Bukkit plugin on Mohist, or the Forge mod). Needed on the client and the server. **Optional:** BSP-Region Guard, BSP-Teleport.
 
 ## How it works
 
@@ -39,6 +39,10 @@ Make the track and its groups in LuckPerms, or let RankUp make them from its lad
 
 **+ ITEM** opens a browser over every item in the game, including every other mod's: type to search by name or id, click one, type the count.
 
+![Picking a kit as a reward](https://raw.githubusercontent.com/Build-Secure-Protect/BSP-RankUp/main/docs/curseforge/images/kit_picker.png)
+
+**+ KIT** shows the kits made in BSP-Core's admin panel; one click makes the kit the rung's reward. BSP-Core owes the kit to the player and hands it over when their inventory has room, at once or at their next login, so a full inventory never loses it.
+
 ![The SIGNALS tab](https://raw.githubusercontent.com/Build-Secure-Protect/BSP-RankUp/main/docs/curseforge/images/admin_signals.png)
 
 **SIGNALS:** what counts and how much. Switch each on or off and set its worth ("25 points per 1 kill", "1 point per 10 minutes"). Counts are kept even while a signal is off, so switching one on later credits what players already did.
@@ -71,7 +75,7 @@ With `storage.mode = "mysql"` in `serverconfig/bsp_rankup-server.toml` on each b
 
 ![What the companions add](https://raw.githubusercontent.com/Build-Secure-Protect/BSP-RankUp/main/docs/curseforge/images/companions.png)
 
-- **BSP-Core (required):** its totem events are the raiding signals (a successful steal is a totem stolen for the thief and lost for the owner; a failed one while the owner is online is a totem protected; totems placed), its bank and coins pay the rewards, its admin list is the admin list, and its season ends drive the seasonal rungs.
+- **BSP-Core (required):** its totem events are the raiding signals (a successful steal is a totem stolen for the thief and lost for the owner; a failed one while the owner is online is a totem protected; totems placed), its bank and coins pay the rewards, its kits can be rewards (BSP-Core 1.3.0), its admin list is the admin list, and its season ends drive the seasonal rungs.
 - **BSP-Region Guard (optional):** buying a plot at the Land Office counts a claim bought; Region Guard's rank-gated regions and mines open for the ranks RankUp hands out, since they are the same LuckPerms groups; on a network RankUp takes Region Guard's server name.
 - **BSP-Teleport (optional):** no link is needed; both run side by side.
 - **LuckPerms:** RankUp promotes along a track and sets prefix titles; it can create the track and its groups from the ladder. Give the groups rising weights and LuckPerms reports the highest as the primary group.

@@ -79,7 +79,7 @@ def rung_list(selected):
 STATUS = "track rankup - 5 rungs - LuckPerms: Bukkit plugin"
 
 
-def admin_ladder():
+def admin_ladder(picking=False):
     s = screen_frame("RANKUP ADMIN", STATUS, 0) + rung_list("warden")
     px, py = 180, 40
     s += t("t1 text", px, py, "WARDEN") + t("t6 hint", W - 10, py + 2, "rung 3 of 5 - 12 players hold it", "transform:translateX(-100%)")
@@ -87,17 +87,34 @@ def admin_ladder():
     s += t("t5 hint", px + 278, py + 14, "SEASON") + chip(px + 278, py + 21, 26, 13, "keep", "on") + chip(px + 305, py + 21, 27, 13, "reset")
     s += t("t5 tq", px, py + 42, "REWARDS WHEN REACHED") + inset(px, py + 50, 332, 108)
     rows = [("COINS", "coins worth 64 Copper"), ("PIECES", "250 pieces into the bank"), ("ITEM", "2 x Netherite Ingot"), ("TITLE", "&amp;b[Warden]"), ("COMMAND", "/give %player% minecraft:totem_of_undying")]
+    if picking:
+        rows.append(("KIT", "the kit Warden's Armour"))
     for i, (k, v) in enumerate(rows):
         ry = 1 + i * 12
         s += t("t5 vio", 4, ry + 3, k) + t("t6 text", 50, ry + 2, v) + chip(332 - 14, ry + 1, 11, 10, "x", "bad")
     s += "</div>"
     ay = py + 50 + 108 + 5
-    for i, k in enumerate(["COINS", "PIECES", "ITEM", "TITLE", "COMMAND"]):
-        s += chip(px + i * 51, ay, 48, 13, "+ " + k)
-    s += btn(px + 255, ay, 64, 13, "FROM HAND", "gold")
-    s += t("t5 hint", px, ay + 21, "Removing a rung keeps the players' points.") + btn(W - 8 - 76, ay + 18, 76, 13, "REMOVE RANK", "bad")
-    s += t("t6 tq", 10, H - 12, "Warden now also gives 2 x Netherite Ingot")
+    s += kind_chips(px, ay, picking)
+    if picking:
+        s += t("t5 hint", px, ay + 20, "pick a kit:")
+        bx = px + 50
+        for name in ["Starter Toolkit", "Warden's Armour", "Raider Rations"]:
+            w = len(name) * 4 + 10
+            s += chip(bx, ay + 17, w, 13, name, "vio")
+            bx += w + 3
+        s += btn(px + 332 - 40, ay + 17, 40, 13, "CANCEL", "")
+        s += t("t6 tq", 10, H - 12, "Warden now also gives the kit Warden's Armour")
+    else:
+        s += t("t5 hint", px, ay + 21, "Removing a rung keeps the players' points.") + btn(W - 8 - 76, ay + 18, 76, 13, "REMOVE RANK", "bad")
+        s += t("t6 tq", 10, H - 12, "Warden now also gives 2 x Netherite Ingot")
     return s + "</div>"
+
+
+def kind_chips(px, ay, picking):
+    s = ""
+    for i, k in enumerate(["COINS", "PIECES", "ITEM", "TITLE", "COMMAND", "KIT"]):
+        s += chip(px + i * 47, ay, 44, 13, "+ " + k, "on" if picking and k == "KIT" else "")
+    return s + btn(px + 282, ay, 50, 13, "FROM HAND", "gold")
 
 
 def item_browser():
@@ -316,7 +333,7 @@ def network():
 
 def companions():
     s = '<div class="world"></div>'
-    s += card(12, 16, 180, 150, "BSP CORE (required)", "Totem events: steals that succeed count as stolen for the thief and lost for the owner, steals that fail while you are online as protected, totems placed. The bank and the coins for rewards. The same admin list as every BSP mod. Season ends drive the seasonal rungs.")
+    s += card(12, 16, 180, 150, "BSP CORE (required)", "Totem events: steals that succeed count as stolen for the thief and lost for the owner, steals that fail while you are online as protected, totems placed. The bank, the coins and (1.3.0) the kits for rewards. The same admin list as every BSP mod. Season ends drive the seasonal rungs.")
     s += card(206, 16, 180, 150, "BSP REGION GUARD (optional)", "Buying a plot at the Land Office counts a claim bought. Region Guard's regions and mines are gated by LuckPerms groups: the ranks RankUp hands out open them. The server id is shared.", "vio")
     s += card(400, 16, 180, 150, "LUCKPERMS and BSP TELEPORT", "LuckPerms holds the ranks (Bukkit plugin on Mohist or the Forge mod): RankUp promotes along a track and sets prefix titles, and can create the track from its ladder. BSP Teleport needs no link; a teams mod can register the team hook so kills between teammates count for nothing.", "gold")
     return s
@@ -365,12 +382,13 @@ def main():
     page("admin_players", PAGE, admin_players())
     page("admin_options", PAGE, admin_options())
     page("item_browser", PAGE, item_browser())
+    page("kit_picker", PAGE, admin_ladder(True))
     page("inventory_button", (350, 200), inventory_button())
     page("rankup_flow", (596, 140), flow())
     page("network", (590, 196), network())
     page("companions", (592, 176), companions())
     page("chat", (400, 120), chat())
-    print("12 pages written to", HERE)
+    print("13 pages written to", HERE)
 
 
 if __name__ == "__main__":
