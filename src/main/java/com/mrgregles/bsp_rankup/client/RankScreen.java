@@ -195,6 +195,7 @@ public class RankScreen extends HoloScreen {
 
     private String rewards(Rank r) {
         List<String> parts = new ArrayList<>();
+        RankViewPacket v = view();
         for (Reward rw : r.rewards()) {
             parts.add(switch (rw.kind()) {
                 case COINS -> Tr.t("coins_worth_copper", rw.amount());
@@ -202,6 +203,7 @@ public class RankScreen extends HoloScreen {
                 case ITEM -> rw.amount() + " x " + itemName(rw.value());
                 case TITLE -> Tr.t("the_title", rw.value());
                 case COMMAND -> Tr.t("a_reward_from_the_server");
+                case KIT -> Tr.t("the_kit", v == null ? rw.value() : v.kits().getOrDefault(rw.value(), rw.value()));
             });
         }
         return String.join(" - ", parts);

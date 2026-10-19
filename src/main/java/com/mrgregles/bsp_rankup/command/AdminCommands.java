@@ -50,6 +50,8 @@ public final class AdminCommands {
             SharedSuggestionProvider.suggest(java.util.Arrays.stream(Signal.values()).map(Signal::key), b);
     private static final SuggestionProvider<CommandSourceStack> ITEMS = (ctx, b) ->
             SharedSuggestionProvider.suggestResource(net.minecraftforge.registries.ForgeRegistries.ITEMS.getKeys(), b);
+    private static final SuggestionProvider<CommandSourceStack> KITS = (ctx, b) ->
+            SharedSuggestionProvider.suggest(BspCore.kits(ctx.getSource().getServer()).stream().map(BspCore.KitInfo::id), b);
     private static final SuggestionProvider<CommandSourceStack> PLAYERS = (ctx, b) ->
             SharedSuggestionProvider.suggest(ctx.getSource().getServer().getPlayerList().getPlayerNamesArray(), b);
 
@@ -127,7 +129,9 @@ public final class AdminCommands {
                 .then(Commands.literal("title").then(Commands.argument("text", StringArgumentType.greedyString())
                         .executes(ctx -> reply(ctx, AdminEdits.rewardAdd(server(ctx), group(ctx), Reward.title(StringArgumentType.getString(ctx, "text")))))))
                 .then(Commands.literal("command").then(Commands.argument("command", StringArgumentType.greedyString())
-                        .executes(ctx -> reply(ctx, AdminEdits.rewardAdd(server(ctx), group(ctx), Reward.command(StringArgumentType.getString(ctx, "command"))))))));
+                        .executes(ctx -> reply(ctx, AdminEdits.rewardAdd(server(ctx), group(ctx), Reward.command(StringArgumentType.getString(ctx, "command")))))))
+                .then(Commands.literal("kit").then(Commands.argument("kit", StringArgumentType.word()).suggests(KITS)
+                        .executes(ctx -> reply(ctx, AdminEdits.rewardAdd(server(ctx), group(ctx), Reward.kit(StringArgumentType.getString(ctx, "kit"))))))));
         reward.then(rewardAdd);
         root.then(reward);
 
@@ -227,7 +231,7 @@ public final class AdminCommands {
             return 0;
         }
         if (r.rewards().isEmpty()) {
-            ctx.getSource().sendSuccess(() -> Component.literal(r.displayName() + " gives nothing. /rankup reward add " + r.group() + " coins|pieces|item|title|command ..."), false);
+            ctx.getSource().sendSuccess(() -> Component.literal(r.displayName() + " gives nothing. /rankup reward add " + r.group() + " coins|pieces|item|title|command|kit ..."), false);
             return 1;
         }
         ctx.getSource().sendSuccess(() -> Component.literal(r.displayName() + " gives:"), false);

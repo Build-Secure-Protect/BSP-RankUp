@@ -127,6 +127,14 @@ public final class AdminEdits {
         if ((reward.kind() == Reward.Kind.TITLE || reward.kind() == Reward.Kind.COMMAND) && reward.value().isBlank()) {
             return Reply.no("The text cannot be empty");
         }
+        if (reward.kind() == Reward.Kind.KIT) {
+            if (!com.mrgregles.bsp_rankup.compat.BspCore.hasKits()) {
+                return Reply.no("This BSP-Core has no kits (needs 1.3.0 or newer)");
+            }
+            if (com.mrgregles.bsp_rankup.compat.BspCore.kits(server).stream().noneMatch(k -> k.id().equals(reward.value()))) {
+                return Reply.no("No kit called " + reward.value() + ". Kits are made in BSP-Core's admin panel, KITS tab");
+            }
+        }
         return edit(server, group, (i, r) -> {
             List<Reward> rewards = new ArrayList<>(r.rewards());
             rewards.add(reward);
@@ -171,6 +179,7 @@ public final class AdminEdits {
             case ITEM -> r.amount() + " x " + r.value();
             case TITLE -> "the title " + r.value();
             case COMMAND -> "the command /" + r.value();
+            case KIT -> "the kit " + r.value();
         };
     }
 

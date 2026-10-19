@@ -33,7 +33,7 @@ Make the track and its groups in LuckPerms, or let RankUp make them from its lad
 
 ![The LADDER tab](https://raw.githubusercontent.com/Build-Secure-Protect/BSP-RankUp/main/docs/curseforge/images/admin_ladder.png)
 
-**LADDER:** the rungs on the left in track order. Add one with its group, points and name (or IMPORT the groups of the LuckPerms track), reorder with UP and DOWN. The chosen rung's display name and points edit in place; **keep** or **reset** says whether a season's end takes it away. Its rewards sit below: **+ COINS** (Shatter Coins into the hand), **+ PIECES** (into the bank), **+ ITEM**, **+ TITLE** (a LuckPerms prefix, colour codes welcome), **+ COMMAND** (run by the console, `%player%` is the player), and **FROM HAND** for whatever you hold. Any number of rewards per rung.
+**LADDER:** the rungs on the left in track order. Add one with its group, points and name (or IMPORT the groups of the LuckPerms track), reorder with UP and DOWN. The chosen rung's display name and points edit in place; **keep** or **reset** says whether a season's end takes it away. Its rewards sit below: **+ COINS** (Shatter Coins into the hand), **+ PIECES** (into the bank), **+ ITEM**, **+ TITLE** (a LuckPerms prefix, colour codes welcome), **+ COMMAND** (run by the console, `%player%` is the player), **+ KIT** (a BSP-Core kit, delivered when the inventory has room), and **FROM HAND** for whatever you hold. Any number of rewards per rung.
 
 ![The item browser](https://raw.githubusercontent.com/Build-Secure-Protect/BSP-RankUp/main/docs/curseforge/images/item_browser.png)
 

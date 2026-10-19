@@ -14,10 +14,11 @@ import java.util.function.Supplier;
 /**
  * Server to client: everything the admin screen shows. The settings as their NBT, how many players hold each rung,
  * the players matching the last search, the selected player's standing, the lines of the OPTIONS tab's info, the
- * reset-everyone code waiting (empty when none) and its seconds, the server's last answer, and whether to open the screen.
+ * reset-everyone code waiting (empty when none) and its seconds, the server's last answer, whether to open the screen,
+ * and BSP-Core's kits (id to name) for the reward editor.
  */
 public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders, List<PlayerRow> players, PlayerDetail selected,
-                              List<String> info, String resetCode, int resetSeconds, String message, boolean ok, boolean open) {
+                              List<String> info, String resetCode, int resetSeconds, String message, boolean ok, boolean open, Map<String, String> kits) {
     /** One row of the PLAYERS tab. */
     public record PlayerRow(UUID uuid, String name, String rank, long points, boolean online) {
     }
@@ -59,6 +60,7 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
         buf.writeUtf(msg.message, 512);
         buf.writeBoolean(msg.ok);
         buf.writeBoolean(msg.open);
+        buf.writeMap(msg.kits, (b, k) -> b.writeUtf(k, 64), (b, v) -> b.writeUtf(v, 64));
     }
 
     public static AdminViewPacket decode(FriendlyByteBuf buf) {
@@ -68,7 +70,12 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
         PlayerDetail d = new PlayerDetail(buf.readUUID(), buf.readUtf(48), buf.readMap(b -> b.readUtf(32), FriendlyByteBuf::readVarLong),
                 buf.readVarLong(), buf.readUtf(64), buf.readVarLong(), buf.readVarInt(), buf.readVarLong(), buf.readVarLong());
         List<String> info = buf.readList(b -> b.readUtf(512));
-        return new AdminViewPacket(settings == null ? new CompoundTag() : settings, holders, players, d, info, buf.readUtf(8), buf.readVarInt(), buf.readUtf(512), buf.readBoolean(), buf.readBoolean());
+        String code = buf.readUtf(8);
+        int seconds = buf.readVarInt();
+        String message = buf.readUtf(512);
+        boolean ok = buf.readBoolean(), open = buf.readBoolean();
+        Map<String, String> kits = buf.readMap(b -> b.readUtf(64), b -> b.readUtf(64));
+        return new AdminViewPacket(settings == null ? new CompoundTag() : settings, holders, players, d, info, code, seconds, message, ok, open, kits);
     }
 
     public static void handle(AdminViewPacket msg, Supplier<NetworkEvent.Context> ctx) {

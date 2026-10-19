@@ -5,11 +5,12 @@ import net.minecraft.nbt.CompoundTag;
 /**
  * One thing a rank gives when reached (owner decisions D9, D24): Shatter Coins into the hand ({@code amount} in
  * Copper value), Shatter Pieces into the bank, an item ({@code value} is the item id, {@code amount} the count),
- * a title (a LuckPerms prefix, {@code value} the text) or a console command ({@code value}, with {@code %player%}
- * replaced by the player's name).
+ * a title (a LuckPerms prefix, {@code value} the text), a console command ({@code value}, with {@code %player%}
+ * replaced by the player's name), or a BSP-Core kit ({@code value} the kit id; BSP-Core owes it to the player and
+ * delivers it when it fits, so it needs no online check).
  */
 public record Reward(Kind kind, String value, long amount) {
-    public enum Kind { COINS, PIECES, ITEM, TITLE, COMMAND }
+    public enum Kind { COINS, PIECES, ITEM, TITLE, COMMAND, KIT }
 
     public static Reward coins(long copperValue) {
         return new Reward(Kind.COINS, "", copperValue);
@@ -29,6 +30,10 @@ public record Reward(Kind kind, String value, long amount) {
 
     public static Reward command(String command) {
         return new Reward(Kind.COMMAND, command, 0);
+    }
+
+    public static Reward kit(String kitId) {
+        return new Reward(Kind.KIT, kitId, 0);
     }
 
     /** True for rewards that need the player on this server to be handed over (coins, items, commands). */

@@ -75,6 +75,8 @@ public class AdminScreen extends HoloScreen {
     private List<Item> browseItems = List.of();
     private String browseQuery = "\u0000";
     private boolean settingRank;
+    /** The kit picker (K-1) open under the reward kinds. */
+    private boolean pickingKit;
     private int ticks;
     private String lastSearch = "";
 
@@ -368,6 +370,7 @@ public class AdminScreen extends HoloScreen {
         tab = t;
         closeInput();
         browsing = false;
+        pickingKit = false;
         armed = null;
         if (t == 2 && view() != null && view().players().isEmpty()) {
             act(AdminActionPacket.PLAYER_SEARCH, search.getValue());
@@ -402,6 +405,7 @@ public class AdminScreen extends HoloScreen {
                 selectedGroup = r.group();
                 closeInput();
                 browsing = false;
+                pickingKit = false;
                 armed = null;
             }));
         }
@@ -468,14 +472,19 @@ public class AdminScreen extends HoloScreen {
         }
         scrollbar(g, lx + lw, ly, lh, rewards.size(), rv, rewardScroll);
         int ay = ly + lh + 5;
-        String[] kinds = {"coins", "pieces", "item", "title", "command"};
+        String[] kinds = {"coins", "pieces", "item", "title", "command", "kit"};
         int ax = px;
         for (String kind : kinds) {
-            boolean on = inputMode == Input.REWARD && inputTarget.equals(kind) || kind.equals("item") && browsing;
-            chip(g, ax, ay, 48, 13, "+ " + Tr.t("kind." + kind), on, TQ, 0.6f, () -> {
+            boolean on = inputMode == Input.REWARD && inputTarget.equals(kind) || kind.equals("item") && browsing || kind.equals("kit") && pickingKit;
+            chip(g, ax, ay, 44, 13, "+ " + Tr.t("kind." + kind), on, TQ, 0.6f, () -> {
+                pickingKit = false;
                 if (kind.equals("item")) {
                     closeInput();
                     openBrowser();
+                } else if (kind.equals("kit")) {
+                    closeInput();
+                    browsing = false;
+                    pickingKit = true;
                 } else {
                     browsing = false;
                     inputTarget = kind;
@@ -483,11 +492,38 @@ public class AdminScreen extends HoloScreen {
                     inputTarget = kind;
                 }
             });
-            ax += 51;
+            ax += 47;
         }
-        button(g, ax, ay, 64, 13, Tr.t("from_hand"), GOLD, () -> act(AdminActionPacket.REWARD_HAND, sel.group()));
-        dangerButton(g, px + PANE_W - 76, ay + 18, 76, 13, Tr.t("remove_rank"), "remove-rank", () -> act(AdminActionPacket.LADDER_REMOVE, sel.group()));
-        text(g, Tr.t("removing_keeps_players_points"), px, ay + 21, MUTED, 0.6f);
+        button(g, ax, ay, 50, 13, Tr.t("from_hand"), GOLD, () -> act(AdminActionPacket.REWARD_HAND, sel.group()));
+        if (pickingKit) {
+            drawKitPicker(g, px, ay + 17, sel, v);
+        } else {
+            dangerButton(g, px + PANE_W - 76, ay + 18, 76, 13, Tr.t("remove_rank"), "remove-rank", () -> act(AdminActionPacket.LADDER_REMOVE, sel.group()));
+            text(g, Tr.t("removing_keeps_players_points"), px, ay + 21, MUTED, 0.6f);
+        }
+    }
+
+    /** BSP-Core's kits as chips; one click adds the kit as a reward (K-1). */
+    private void drawKitPicker(GuiGraphics g, int px, int y, Rank sel, AdminViewPacket v) {
+        if (v.kits().isEmpty()) {
+            text(g, Tr.t("no_kits_yet"), px, y + 3, MUTED, 0.6f);
+        } else {
+            text(g, Tr.t("pick_a_kit"), px, y + 3, MUTED, 0.6f);
+        }
+        int bx = px + 50;
+        for (Map.Entry<String, String> kit : v.kits().entrySet()) {
+            String label = clip(kit.getValue(), 70, 0.6f);
+            int w = (int) (font.width(label) * 0.6f) + 10;
+            if (bx + w > px + PANE_W - 44) {
+                break;
+            }
+            chip(g, bx, y, w, 13, label, false, VIO, 0.6f, () -> {
+                pickingKit = false;
+                send(new AdminActionPacket(AdminActionPacket.REWARD_ADD, sel.group(), "kit", kit.getKey()));
+            });
+            bx += w + 3;
+        }
+        button(g, px + PANE_W - 40, y, 40, 13, Tr.t("cancel"), MUTED, () -> pickingKit = false);
     }
 
     private String describe(Reward r) {
@@ -497,6 +533,7 @@ public class AdminScreen extends HoloScreen {
             case ITEM -> r.amount() + " x " + itemName(r.value());
             case TITLE -> r.value();
             case COMMAND -> "/" + r.value();
+            case KIT -> Tr.t("the_kit", view() == null ? r.value() : view().kits().getOrDefault(r.value(), r.value()));
         };
     }
 

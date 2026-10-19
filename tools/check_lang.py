@@ -34,8 +34,8 @@ def main():
         needed |= {k + ".one", k + ".many"}
     families = {
         "tab.": array(admin, "TABS"),
-        "kind.": ["coins", "pieces", "item", "title", "command"],
-        "hint.": ["coins", "pieces", "item", "title", "command"],
+        "kind.": ["coins", "pieces", "item", "title", "command", "kit"],
+        "hint.": ["coins", "pieces", "item", "title", "command", "kit"],
         "announce.": ["off", "server", "network"],
         "source.": ["rankup", "bsp_core", "region_guard"],
     }

@@ -65,8 +65,12 @@ public final class RankSync {
         }
         String title = LuckPermsBridge.isPresent() ? LuckPermsBridge.prefixOf(player, settings.titlePriority()).orElse("") : "";
         String serverId = Storage.active() == null ? "" : Storage.active().serverId();
+        Map<String, String> kits = new LinkedHashMap<>();
+        for (com.mrgregles.bsp_rankup.compat.BspCore.KitInfo k : com.mrgregles.bsp_rankup.compat.BspCore.kits(server)) {
+            kits.put(k.id(), k.name());
+        }
         return new RankViewPacket(settings.save(), holders, counts, p.bonus(), points, seasonPoints, p.seasonBase() != 0 || p.season() != 0,
-                p.rank() == null ? "" : p.rank(), p.rankedAtMs(), title, p.pending().size(), fastest, serverId, ledger.lastEndedSeason() + 1, open);
+                p.rank() == null ? "" : p.rank(), p.rankedAtMs(), title, p.pending().size(), fastest, serverId, ledger.lastEndedSeason() + 1, open, kits);
     }
 
     /**

@@ -7,7 +7,7 @@ The first public release of BSP RankUp for Minecraft 1.20.1 (Forge 47.4.10 and M
 - **The ladder:** a LuckPerms track. Each rung is a group, a display name, the points it needs, a seasonal flag, and what it gives. Pass a rung's points and you are moved onto its group, told, rewarded and announced. A jump over several rungs gives each one's rewards.
 - **Never down by points alone:** falling points take no rank away; an admin can reset a player.
 - **Anti-farming:** a repeat kill of the same player counts again only after a cooldown (ten minutes by default); kills of yourself never count; once a teams mod registers the team hook, kills between teammates count for nothing.
-- **Rewards:** Shatter Coins into the hand, Shatter Pieces into the bank, items, a title (a LuckPerms prefix), console commands with `%player%`. Rewards for a player who is away wait for their next login.
+- **Rewards:** Shatter Coins into the hand, Shatter Pieces into the bank, items, a title (a LuckPerms prefix), console commands with `%player%`, and BSP-Core kits (delivered when the inventory has room). Rewards for a player who is away wait for their next login.
 - **Announcements:** off, this server, or the whole network.
 
 ## Seasons

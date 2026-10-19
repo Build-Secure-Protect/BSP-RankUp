@@ -187,6 +187,7 @@ public final class AdminSync {
             }
             case TITLE -> Reward.title(value);
             case COMMAND -> Reward.command(value.startsWith("/") ? value.substring(1) : value);
+            case KIT -> Reward.kit(value.trim());
         };
     }
 
@@ -232,7 +233,11 @@ public final class AdminSync {
         }
         info.add("Storage: " + (Storage.active() == null ? "this server only" : Storage.active().status()));
         info.add("Players with progress here: " + ledger.all().size());
-        return new AdminViewPacket(settings.save(), holders, rows, detail, info, ResetAll.pending(admin.getUUID()), ResetAll.secondsLeft(admin.getUUID()), message, ok, open);
+        Map<String, String> kits = new LinkedHashMap<>();
+        for (BspCore.KitInfo k : BspCore.kits(server)) {
+            kits.put(k.id(), k.name());
+        }
+        return new AdminViewPacket(settings.save(), holders, rows, detail, info, ResetAll.pending(admin.getUUID()), ResetAll.secondsLeft(admin.getUUID()), message, ok, open, kits);
     }
 
     /** Players online here plus every player with progress whose name matches; online first, then by points. */

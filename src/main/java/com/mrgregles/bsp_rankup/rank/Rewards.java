@@ -108,6 +108,12 @@ public final class Rewards {
                     String command = r.value().replace("%player%", online.getGameProfile().getName());
                     server.getCommands().performPrefixedCommand(source, command);
                 }
+                case KIT -> {
+                    if (!BspCore.giveKit(server, player, r.value())) {
+                        BSPRankUp.LOGGER.warn("Kit {} is unknown to BSP-Core (or this BSP-Core has no kits); skipped for {}", r.value(), player);
+                        return false;
+                    }
+                }
             }
             return true;
         } catch (RuntimeException e) {
@@ -129,6 +135,19 @@ public final class Rewards {
         return new ItemStack(item, (int) Math.max(1, Math.min(r.amount(), item.getMaxStackSize() * 36L)));
     }
 
+    /** The kit's name as BSP-Core knows it, or the id. Needs a server; the chat line is built on the server thread. */
+    private static String kitName(String id) {
+        MinecraftServer server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
+        if (server != null) {
+            for (BspCore.KitInfo k : BspCore.kits(server)) {
+                if (k.id().equals(id)) {
+                    return k.name();
+                }
+            }
+        }
+        return id;
+    }
+
     /** One line for the player: what a reward is. */
     public static Component describe(Reward r) {
         return switch (r.kind()) {
@@ -140,6 +159,7 @@ public final class Rewards {
             }
             case TITLE -> Component.translatable("message.bsp_rankup.reward.title", r.value());
             case COMMAND -> Component.translatable("message.bsp_rankup.reward.command");
+            case KIT -> Component.translatable("message.bsp_rankup.reward.kit", kitName(r.value()));
         };
     }
 }

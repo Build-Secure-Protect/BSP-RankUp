@@ -104,3 +104,11 @@ Headless: one GameTest on the plain-data path (Region Guard is not in the dev ru
 
 - [ ] Buy a plot at the Land Office: `/rank` shows "claims bought 1" and its points; enlarge it: the count stays.
 - [ ] Without Region Guard installed the signal stays at 0 and the server log shows nothing about it.
+
+## K-1: kit rewards (2026-10-19)
+
+Headless: one GameTest (the kit kind round trip, an unknown kit refused, a kit made in BSP Core given on a rank-up). In game, with BSP Core 1.3.0 and a kit made in its admin panel's KITS tab:
+
+- [ ] `/rankup admin`, LADDER, + KIT: the kits show as chips by name; click one: the reward row says "the kit <name>".
+- [ ] Reach the rung: the chat says `+ the kit <name> (it comes when your inventory has room)`; with room it lands at once, with a full inventory BSP Core's WAITING card holds it.
+- [ ] `/rankup reward add <group> kit <id>` tab-completes the kit ids; an unknown id is refused.

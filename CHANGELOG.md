@@ -4,6 +4,9 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+### Added (2026-10-19, kit rewards)
+- A sixth reward kind, **KIT**: a rung can give a BSP Core kit by id (BSP Core 1.3.0 or newer; its request K-1). BSP Core owes the kit and delivers it when the inventory has room, at once or at the next login, so it needs no online check. The admin screen's + KIT picks from BSP Core's kits by name; `/rankup reward add <group> kit <id>` with tab completion; a kit that BSP Core does not know is refused. On an older BSP Core the kind is refused and does nothing.
+
 ### Changed (2026-10-19, sibling versions)
 - Compiled against BSP Core 1.3.0 (its 1.1.0 jar is gone; still requires `[1.1.0,)`) and BSP Region Guard 0.2.0 (Region Guard's request RG-R2; still accepts `[0.1.0,)`). No code change; 26 GameTests pass.
 

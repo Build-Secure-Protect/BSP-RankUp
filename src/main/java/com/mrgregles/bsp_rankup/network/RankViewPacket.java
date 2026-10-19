@@ -17,7 +17,7 @@ import java.util.function.Supplier;
  */
 public record RankViewPacket(CompoundTag settings, Map<String, Integer> holders, Map<String, Long> counts, long bonus, long points,
                              long seasonPoints, boolean seasonStarted, String rank, long rankedAt, String title, int pending,
-                             List<Fastest> fastest, String server, int season, boolean open) {
+                             List<Fastest> fastest, String server, int season, boolean open, Map<String, String> kits) {
     /** One way to the next rung: this many more units of a signal would do it alone. */
     public record Fastest(String signal, long units) {
     }
@@ -41,6 +41,7 @@ public record RankViewPacket(CompoundTag settings, Map<String, Integer> holders,
         buf.writeUtf(msg.server, 64);
         buf.writeVarInt(msg.season);
         buf.writeBoolean(msg.open);
+        buf.writeMap(msg.kits, (b, k) -> b.writeUtf(k, 64), (b, v) -> b.writeUtf(v, 64));
     }
 
     public static RankViewPacket decode(FriendlyByteBuf buf) {
@@ -49,7 +50,8 @@ public record RankViewPacket(CompoundTag settings, Map<String, Integer> holders,
                 buf.readMap(b -> b.readUtf(64), FriendlyByteBuf::readVarInt),
                 buf.readMap(b -> b.readUtf(32), FriendlyByteBuf::readVarLong),
                 buf.readVarLong(), buf.readVarLong(), buf.readVarLong(), buf.readBoolean(), buf.readUtf(64), buf.readVarLong(), buf.readUtf(64), buf.readVarInt(),
-                buf.readList(b -> new Fastest(b.readUtf(32), b.readVarLong())), buf.readUtf(64), buf.readVarInt(), buf.readBoolean());
+                buf.readList(b -> new Fastest(b.readUtf(32), b.readVarLong())), buf.readUtf(64), buf.readVarInt(), buf.readBoolean(),
+                buf.readMap(b -> b.readUtf(64), b -> b.readUtf(64)));
     }
 
     public static void handle(RankViewPacket msg, Supplier<NetworkEvent.Context> ctx) {
