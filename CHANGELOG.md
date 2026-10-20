@@ -4,6 +4,9 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+### Changed (2026-10-20, sibling versions)
+- Compiled against BSP Region Guard 0.3.0 (its request RG-R3; API 5 unchanged, still accepts `[0.1.0,)`). No code change; 27 GameTests pass.
+
 ## [0.2.0] - 2026-10-19
 
 ### Added (2026-10-19, kit rewards)
