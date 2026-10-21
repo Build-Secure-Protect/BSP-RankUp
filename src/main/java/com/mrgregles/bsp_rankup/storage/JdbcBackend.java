@@ -1,8 +1,10 @@
 package com.mrgregles.bsp_rankup.storage;
 
+import com.mrgregles.bsp_rankup.BSPRankUp;
 import org.jetbrains.annotations.Nullable;
 
 import java.sql.Connection;
+import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -12,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.UUID;
 
 /**
@@ -19,8 +22,18 @@ import java.util.UUID;
  * jar provides one on Forge servers and Mohist ships its own. One connection, reopened when it fails. Tables:
  * {@code <prefix>counts} (uuid, signal, count), {@code <prefix>players} (uuid, bonus, rank, ranked_at, pending),
  * {@code <prefix>settings} (one row), {@code <prefix>notices}.
+ *
+ * <p>The driver is created directly, as BSP Core's {@code MySqlStore} does: {@link DriverManager} refuses drivers
+ * loaded by a mod class loader, so it never finds the one inside BSP Core's jar. BSP Core relocates that driver
+ * under its own package, so its class name is tried first, then the plain one (Mohist's).
  */
 public final class JdbcBackend implements StorageBackend {
+    /** Driver classes, tried in order: BSP Core's full jar (Forge servers), then the plain driver (Mohist). */
+    public static final List<String> DRIVERS = List.of("com.mrgregles.bsp_core.shaded.mysql.cj.jdbc.Driver", "com.mysql.cj.jdbc.Driver");
+    @Nullable
+    private static Driver driver;
+    private static boolean driverLooked;
+
     private final String url, user, password, prefix;
     private Connection connection;
 
@@ -40,9 +53,43 @@ public final class JdbcBackend implements StorageBackend {
                     // reopening anyway
                 }
             }
-            connection = DriverManager.getConnection(url, user, password);
+            Driver d = driver();
+            if (d == null) {
+                // neither class is visible: whatever driver the server registered itself
+                connection = DriverManager.getConnection(url, user, password);
+            } else {
+                Properties props = new Properties();
+                props.setProperty("user", user);
+                props.setProperty("password", password);
+                Connection c = d.connect(url, props);
+                if (c == null) {
+                    throw new SQLException("The MySQL driver " + d.getClass().getName() + " does not accept " + url);
+                }
+                connection = c;
+            }
         }
         return connection;
+    }
+
+    /** The first driver of {@link #DRIVERS} that loads, created once; null when none does. */
+    @Nullable
+    public static synchronized Driver driver() {
+        if (!driverLooked) {
+            driverLooked = true;
+            for (String name : DRIVERS) {
+                try {
+                    driver = (Driver) Class.forName(name).getDeclaredConstructor().newInstance();
+                    BSPRankUp.LOGGER.info("MySQL driver: {}", name);
+                    break;
+                } catch (ReflectiveOperationException | LinkageError | ClassCastException notInstalled) {
+                    // not on this server: try the next
+                }
+            }
+            if (driver == null) {
+                BSPRankUp.LOGGER.warn("No MySQL driver found among {}; falling back to DriverManager", DRIVERS);
+            }
+        }
+        return driver;
     }
 
     @Override
