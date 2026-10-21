@@ -112,3 +112,11 @@ Headless: one GameTest (the kit kind round trip, an unknown kit refused, a kit m
 - [ ] `/rankup admin`, LADDER, + KIT: the kits show as chips by name; click one: the reward row says "the kit <name>".
 - [ ] Reach the rung: the chat says `+ the kit <name> (it comes when your inventory has room)`; with room it lands at once, with a full inventory BSP Core's WAITING card holds it.
 - [ ] `/rankup reward add <group> kit <id>` tab-completes the kit ids; an unknown id is refused.
+
+## MySQL driver lookup (2026-10-21)
+
+Headless: one GameTest. In the dev run (BSP Core's full jar) the driver found is BSP Core's relocated one, and a connection to a closed port fails inside it. A real database has not been reached yet.
+
+- [ ] On a plain Forge backend with BSP Core's **full** jar and `storage.mode = "mysql"`, the start log shows `MySQL driver: com.mrgregles.bsp_core.shaded.mysql.cj.jdbc.Driver`, then `RankUp storage connected: mysql ...`.
+- [ ] On a Mohist backend (BSP Core's slim jar), the log shows `MySQL driver: com.mysql.cj.jdbc.Driver` and the storage connects.
+- [ ] If neither shows and the log says `No MySQL driver found`, note which BSP Core jar and server type it was.

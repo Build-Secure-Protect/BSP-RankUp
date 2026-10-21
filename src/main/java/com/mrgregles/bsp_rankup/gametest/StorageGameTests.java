@@ -8,6 +8,7 @@ import com.mrgregles.bsp_rankup.settings.Reward;
 import com.mrgregles.bsp_rankup.settings.Settings;
 import com.mrgregles.bsp_rankup.settings.SettingsFiles;
 import com.mrgregles.bsp_rankup.settings.SettingsLedger;
+import com.mrgregles.bsp_rankup.storage.JdbcBackend;
 import com.mrgregles.bsp_rankup.storage.MemoryBackend;
 import com.mrgregles.bsp_rankup.storage.RedisLink;
 import com.mrgregles.bsp_rankup.storage.Storage;
@@ -19,6 +20,9 @@ import net.minecraftforge.gametest.GameTestHolder;
 import net.minecraftforge.gametest.PrefixGameTestTemplate;
 
 import java.io.IOException;
+import java.net.ServerSocket;
+import java.sql.Driver;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -80,6 +84,33 @@ public class StorageGameTests {
         } finally {
             alpha.close();
             ledger.reset(player);
+        }
+        h.succeed();
+    }
+
+    /**
+     * The MySQL driver inside BSP Core's full jar (the dev run's BSP Core) is found and used: a connection to a
+     * closed port fails inside that driver, not with DriverManager's "No suitable driver". No database is needed.
+     */
+    @GameTest(template = EMPTY, batch = "storage-driver")
+    public void the_mysql_driver_in_bsp_cores_full_jar_is_found_and_used(GameTestHelper h) throws Exception {
+        Driver driver = JdbcBackend.driver();
+        h.assertTrue(driver != null && driver.getClass().getName().equals(JdbcBackend.DRIVERS.get(0)),
+                "BSP Core's relocated driver is picked first: " + (driver == null ? "none" : driver.getClass().getName()));
+        int port;
+        try (ServerSocket free = new ServerSocket(0)) {
+            port = free.getLocalPort(); // closed again before the connection is tried
+        }
+        JdbcBackend db = new JdbcBackend("127.0.0.1", port, "bsp", "bsp", "", "bsp_ru_test_");
+        try {
+            db.init();
+            h.fail("a connection to a closed port succeeded");
+        } catch (SQLException e) {
+            h.assertFalse(String.valueOf(e.getMessage()).contains("No suitable driver"), "the driver was found: " + e);
+            h.assertTrue(e.getClass().getName().startsWith("com.mrgregles.bsp_core.shaded.mysql."),
+                    "the failure comes from inside BSP Core's driver (the port is closed): " + e.getClass().getName() + ": " + e.getMessage());
+        } finally {
+            db.close();
         }
         h.succeed();
     }
