@@ -4,6 +4,8 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-21
+
 ### Changed (2026-10-21, MySQL driver)
 - The MySQL connection creates its driver directly, as BSP Core does, instead of asking `java.sql.DriverManager`: BSP Core's relocated driver (`com.mrgregles.bsp_core.shaded.mysql.cj.jdbc.Driver`, in its full jar on Forge servers) first, then the plain `com.mysql.cj.jdbc.Driver` (Mohist's), then `DriverManager` as before. The start log names the driver used. `DriverManager` did find BSP Core's driver in the Forge dev run, but only through its one-time service scan, which depends on which thread first touches it. One GameTest (28 in all): a connection to a closed port fails inside BSP Core's driver, not with "No suitable driver".
 
