@@ -4,6 +4,43 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-23
+
+### Added (2026-10-23, score signal)
+- The `score` signal counts BSP-Core's points (BSP-Core 1.4.5's `BspScores` and `ScoreEvent.Changed`, RankUp's request RU-R1): each season's peak, added up (owner decision D48). The count rises only when a player's points pass their highest this season, by the amount they pass it; a season's end starts the peak again. Taking a totem down and putting it back gains nothing, and a stolen totem takes nothing already counted. Counted on the server the player is on, and checked again on login and after a season's end. Off by default like the other optional signals. With an older BSP-Core it counts nothing.
+- The peak is shared through MySQL with the season values (new column `score_peak` in the players table, added to an existing table on start).
+
+### Changed (2026-10-23, BSP-Core 1.4.5)
+- Compiled against BSP-Core 1.4.5 (still accepts `[1.1.0,)`). BSP-Core now registers its teams with RankUp's team hook itself, so kills between teammates count for nothing; no RankUp change was needed.
+
+### Fixed (2026-10-23, UI and performance pass)
+- Both screens shrink to fit a window too small for them instead of being cut off at the edges (1920 x 1080 at GUI scale 4, Minecraft's automatic choice, is 480 x 270 units; the screens are 520 x 300). Larger windows still fill as before (D29).
+- Admin screen: with the item browser open, a click on an item no longer reaches what lies under the browser (the rung's fields, the reward chips, or REMOVE RANK, which two clicks there could arm and fire). Clicks now go to whatever was drawn last.
+- Admin screen, PLAYERS: the search box no longer covers the LADDER, SIGNALS and PLAYERS tabs (it sat on top of them and took their clicks); it is now the top of the list column. SET RANK lays the rungs out on up to three rows, so all twelve BSP ranks can be picked (only six fitted before); any beyond that are named with the command to use.
+- Text that could run into its neighbour: a rung's points and its season mark on the rank screen, the title chip and the NEXT line beside a long rank name, the header line with a long server id, rewards waiting beside a big total, a player's rank beside big points, the rank line beside a long player name, signal names beside big counts, reward descriptions beside the item icon, and IMPORT in its button.
+- The rank screen asked the server for a fresh view every 20 frames (seven times a second at 144 fps) and the admin screen every 40; both now count game ticks (once a second and once every two seconds). The server answers a player's refresh at most every 10 ticks.
+- The screens read the settings once when a view arrives instead of every frame (the admin screen read them several times a frame); reward texts and the item browser's stacks are built once, not every frame.
+- Views count rank holders and players without copying every player's progress; the admin view did that three times per refresh.
+- MySQL: while the database is unreachable, writes fail at once for 10 seconds after a failed connect instead of each waiting out the 5-second connect timeout, so the storage queue does not back up; a connection used in the last 30 seconds is no longer pinged before every statement.
+- LuckPerms bridge: reflective method lookups are cached (the title lookup scanned every node's whole method table every second for each open rank screen).
+- The kill cooldown forgets victims whose cooldown has passed once a killer has 64 remembered.
+- The rank screen opens with the player's own rung and the next one in view; with nine or more rungs it used to open on the top rungs, so a new player saw neither.
+- A title longer than 64 characters (a colour gradient passes that quickly) made the rank screen's packet fail, so the screen never opened; the title, server id and kit names are cut to what the packet holds. `&#RRGGBB` colour codes are stripped from the title chip too.
+- Admin info lines and replies are cut to one line of 500 characters, under the packet's 512 (a storage error with a long host name could pass it and stop the admin screen answering).
+- The kit picker lays kits out on up to three rows (about four fitted before) and names the rest with the command to use.
+- The inventory button follows the inventory when the recipe book opens or closes (it stayed where it was, over the player preview or outside the panel). Its default place in code now matches the config default (128).
+- The item browser builds every item's stack and search text once when it first opens, not again for every search.
+- The rank screen's ladder box ends with the right pane, so the hint line under it no longer crosses its border.
+- Kit names for the screens are read from BSP-Core at most once a second (BSP-Core copies every kit's items to list them).
+- A player search that matches nobody here asks the profile cache off the server thread; the answer shows on the next refresh.
+- The LuckPerms check made on every count change asks for the player's groups once instead of twice.
+
+### Fixed (2026-10-23, storage reliability)
+- Shared MySQL storage keeps players' progress through a database outage. Count and bonus changes are merged per player and signal in memory and written every 5 seconds as one transaction (one JDBC batch per statement); a write that fails is kept and tried again after 10, 20, 40, then every 60 seconds. Before, each kill or playtime minute was its own write, and one made while MySQL was down was dropped, then overwritten from the database at the player's next login. Rank, waiting rewards, season and rewarded rungs are kept the same way, the latest value winning. A row read at login gets the changes not yet written added on top. A reset deletes the row before any later change and tells the other servers once the delete is written. Notices older than a day are deleted every hour. `/rankup info` shows how many players' changes are waiting. Four GameTests (39 in all).
+
+### Changed (2026-10-23, sibling versions)
+- Compiled against BSP Region Guard 0.5.0 (its request RG-R5; the 0.4.0 jar is gone). Still accepts `[0.1.0,)`.
+
 ### Changed (2026-10-23, sibling versions)
 - Compiled against BSP Region Guard 0.4.0 (its request RG-R4; API 5 unchanged, still accepts `[0.1.0,)`). No code change; 28 GameTests pass.
 

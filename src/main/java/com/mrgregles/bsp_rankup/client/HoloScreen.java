@@ -9,7 +9,8 @@ import org.joml.Vector4f;
 
 /**
  * A RankUp screen drawn larger than Minecraft's GUI scale (copied from BSP Region Guard; client setting {@code ui.scale},
- * default 0 = fills the window, owner decision D29): as large as asked or as fits the window, never below the original size.
+ * default 0 = fills the window, owner decision D29): as large as asked or as fits the window, never below the original size
+ * unless the window cannot hold it (then shrunk to fit, so nothing is cut off at the edges).
  * Subclasses lay out in their own units ({@code width} and {@code height} are the window in those units), draw in
  * {@link #draw} and take clicks in {@link #onClick} and {@link #onScroll}, all with the mouse already converted.
  */

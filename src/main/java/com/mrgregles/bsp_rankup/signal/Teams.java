@@ -25,6 +25,12 @@ public final class Teams {
         return provider != null;
     }
 
+    /** The registered answer, or null (tests put back what was there). */
+    @Nullable
+    public static BiPredicate<UUID, UUID> provider() {
+        return provider;
+    }
+
     public static boolean sameTeam(UUID a, UUID b) {
         BiPredicate<UUID, UUID> p = provider;
         return p != null && p.test(a, b);

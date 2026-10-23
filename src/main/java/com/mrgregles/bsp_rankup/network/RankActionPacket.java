@@ -21,7 +21,11 @@ public record RankActionPacket(String action) {
     public static void handle(RankActionPacket msg, Supplier<NetworkEvent.Context> ctx) {
         ServerPlayer player = ctx.get().getSender();
         if (player != null) {
-            RankSync.send(player, msg.action.equals(OPEN));
+            if (msg.action.equals(OPEN)) {
+                RankSync.send(player, true);
+            } else {
+                RankSync.refresh(player);
+            }
         }
         ctx.get().setPacketHandled(true);
     }

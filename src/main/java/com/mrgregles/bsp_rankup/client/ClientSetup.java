@@ -7,6 +7,7 @@ import com.mrgregles.bsp_rankup.RankUpConfig;
 import com.mrgregles.bsp_rankup.network.RankActionPacket;
 import com.mrgregles.bsp_rankup.network.RankUpNetwork;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -64,13 +65,34 @@ public final class ClientSetup {
         if (!(event.getScreen() instanceof InventoryScreen inv) || !RankUpConfig.getOr(RankUpClientConfig.INVENTORY_BUTTON, true)) {
             return;
         }
-        int x = inv.getGuiLeft() + RankUpConfig.getOr(RankUpClientConfig.INVENTORY_BUTTON_X, 132);
-        int y = inv.getGuiTop() + RankUpConfig.getOr(RankUpClientConfig.INVENTORY_BUTTON_Y, 61);
-        Button button = Button.builder(Component.literal(Tr.t("inventory_button")), b -> openRank())
-                .bounds(x, y, 20, 14)
-                .tooltip(Tooltip.create(Component.literal(Tr.t("your_rank_tooltip"))))
-                .build();
-        event.addListener(button);
+        int dx = RankUpConfig.getOr(RankUpClientConfig.INVENTORY_BUTTON_X, 128);
+        int dy = RankUpConfig.getOr(RankUpClientConfig.INVENTORY_BUTTON_Y, 61);
+        Button.Builder builder = Button.builder(Component.literal(Tr.t("inventory_button")), b -> openRank())
+                .bounds(inv.getGuiLeft() + dx, inv.getGuiTop() + dy, 20, 14)
+                .tooltip(Tooltip.create(Component.literal(Tr.t("your_rank_tooltip"))));
+        event.addListener(new InventoryButton(builder, inv, dx, dy));
+    }
+
+    /**
+     * The inventory button, kept on the inventory's corner: opening or closing the recipe book moves the inventory
+     * without telling other mods' buttons, so the place is taken again every frame.
+     */
+    private static final class InventoryButton extends Button {
+        private final InventoryScreen inv;
+        private final int dx, dy;
+
+        InventoryButton(Button.Builder builder, InventoryScreen inv, int dx, int dy) {
+            super(builder);
+            this.inv = inv;
+            this.dx = dx;
+            this.dy = dy;
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partial) {
+            setPosition(inv.getGuiLeft() + dx, inv.getGuiTop() + dy);
+            super.renderWidget(g, mouseX, mouseY, partial);
+        }
     }
 
     private static void onLoggingOut(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {

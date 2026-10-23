@@ -15,6 +15,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +23,33 @@ import java.util.UUID;
 
 /** The server side of the player's rank screen: builds the view. Nothing here changes anything. */
 public final class RankSync {
+    /** A screen asks once a second; asks closer together than this (a modified client) are not answered. */
+    public static final int MIN_REFRESH_TICKS = 10;
+    private static final Map<UUID, Integer> LAST_REFRESH = new HashMap<>();
+
     private RankSync() {
+    }
+
+    /** Answers a refresh from an open screen, at most once every {@link #MIN_REFRESH_TICKS} ticks per player. */
+    static void refresh(ServerPlayer player) {
+        if (allowRefresh(player.getUUID(), player.server.getTickCount())) {
+            send(player, false);
+        }
+    }
+
+    /** Whether a refresh asked at server tick {@code now} is answered, and if so remembers it. */
+    public static boolean allowRefresh(UUID player, int now) {
+        Integer last = LAST_REFRESH.get(player);
+        if (last != null && now - last >= 0 && now - last < MIN_REFRESH_TICKS) {
+            return false;
+        }
+        LAST_REFRESH.put(player, now);
+        return true;
+    }
+
+    /** Forgets a player's last refresh (on logout). */
+    public static void forget(UUID player) {
+        LAST_REFRESH.remove(player);
     }
 
     /** Opens the screen for a player. */
@@ -45,11 +72,11 @@ public final class RankSync {
         for (Rank r : settings.ranks()) {
             holders.put(r.group(), 0);
         }
-        for (Progress other : ledger.all().values()) {
+        ledger.forEach((id, other) -> {
             if (other.rank() != null) {
                 holders.merge(other.rank(), 1, Integer::sum);
             }
-        }
+        });
         Map<String, Long> counts = new LinkedHashMap<>();
         for (Signal s : Signal.values()) {
             counts.put(s.key(), p.count(s));
@@ -63,14 +90,20 @@ public final class RankSync {
             long toGo = next.points() - (next.seasonal() ? seasonPoints : points);
             fastest = fastest(settings, Math.max(0, toGo));
         }
-        String title = LuckPermsBridge.isPresent() ? LuckPermsBridge.prefixOf(player, settings.titlePriority()).orElse("") : "";
-        String serverId = Storage.active() == null ? "" : Storage.active().serverId();
+        // the packet carries at most 64 characters of each (a colour-coded title passes that quickly)
+        String title = cut(LuckPermsBridge.isPresent() ? LuckPermsBridge.prefixOf(player, settings.titlePriority()).orElse("") : "", 64);
+        String serverId = cut(Storage.active() == null ? "" : Storage.active().serverId(), 64);
         Map<String, String> kits = new LinkedHashMap<>();
-        for (com.mrgregles.bsp_rankup.compat.BspCore.KitInfo k : com.mrgregles.bsp_rankup.compat.BspCore.kits(server)) {
-            kits.put(k.id(), k.name());
+        for (com.mrgregles.bsp_rankup.compat.BspCore.KitInfo k : com.mrgregles.bsp_rankup.compat.BspCore.kitsForViews(server)) {
+            kits.put(cut(k.id(), 64), cut(k.name(), 64));
         }
         return new RankViewPacket(settings.save(), holders, counts, p.bonus(), points, seasonPoints, p.seasonBase() != 0 || p.season() != 0,
                 p.rank() == null ? "" : p.rank(), p.rankedAtMs(), title, p.pending().size(), fastest, serverId, ledger.lastEndedSeason() + 1, open, kits);
+    }
+
+    /** {@code s} cut to {@code max} characters, for a packet field of that size. */
+    public static String cut(String s, int max) {
+        return s.length() <= max ? s : s.substring(0, max);
     }
 
     /**

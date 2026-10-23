@@ -21,8 +21,10 @@ import net.minecraftforge.registries.ForgeRegistries;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static com.mrgregles.bsp_rankup.client.AdminScreen.BAD;
 import static com.mrgregles.bsp_rankup.client.AdminScreen.BG;
@@ -40,18 +42,24 @@ import static com.mrgregles.bsp_rankup.client.AdminScreen.inset;
  * The player's rank screen (owner decisions D38 to D46, the "ladder card"): the ladder drawn on a track down the
  * left with the player's rung in gold, and on the right their rank, title, points, the bar to the next rung, what
  * it gives, the fastest ways there, and every signal that counts with its count, worth, share and points. Read
- * only; the server sends a fresh view every second while it is open.
+ * only; while it is open it asks the server for a fresh view once a second (counted in game ticks, not frames).
  */
 public class RankScreen extends HoloScreen {
     static final int W = 520, H = 300;
-    private static final int LADDER_X = 8, LADDER_Y = 24, LADDER_W = 172, LADDER_H = 268;
+    private static final int LADDER_X = 8, LADDER_Y = 24, LADDER_W = 172, LADDER_H = 260; // ends with the right pane, above the hint line
     private static final int PANE_X = 190, PANE_W = 322;
     private static final int REFRESH_TICKS = 20;
 
     private int ticks;
     private int ladderScroll;
+    /** False until the ladder has been scrolled to the player's own rung once (it opens on the top rungs otherwise). */
+    private boolean ladderPlaced;
     @Nullable
     private String hovered;
+    /** What each rung gives, as text, for the view it was built from (rebuilt when a new view arrives). */
+    private final Map<String, String> rewardText = new HashMap<>();
+    @Nullable
+    private RankViewPacket rewardTextFor;
 
     public RankScreen() {
         super(Component.literal(Tr.t("your_rank")), W, H);
@@ -100,13 +108,23 @@ public class RankScreen extends HoloScreen {
             super.draw(g, mouseX, mouseY, partial);
             return;
         }
-        Settings s = Settings.load(v.settings());
+        Settings s = RankUpClient.rankSettings();
+        if (s == null) {
+            return;
+        }
         String who = Minecraft.getInstance().player == null ? "" : Minecraft.getInstance().player.getGameProfile().getName();
-        textRight(g, Tr.t("name_server_season", who, v.server().isEmpty() ? Tr.t("this_server") : v.server(), v.season()), x + W - 10, y + 10, MUTED, 0.6f);
+        String head = Tr.t("name_server_season", who, v.server().isEmpty() ? Tr.t("this_server") : v.server(), v.season());
+        int headRoom = W - 20 - (int) font.width(Tr.t("your_rank")) - 8;
+        textRight(g, clip(head, headRoom, 0.6f), x + W - 10, y + 10, MUTED, 0.6f);
         hovered = null;
         drawLadder(g, x, y, mouseX, mouseY, s, v);
         drawStanding(g, x, y, s, v);
         super.draw(g, mouseX, mouseY, partial);
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
         if (++ticks % REFRESH_TICKS == 0) {
             RankUpNetwork.CHANNEL.sendToServer(new RankActionPacket(RankActionPacket.REFRESH));
         }
@@ -127,6 +145,12 @@ public class RankScreen extends HoloScreen {
         int n = ranks.size();
         int step = Mth.clamp((LADDER_H - 12) / n, 30, 44);
         int visible = Math.max(1, (LADDER_H - 12) / step);
+        if (!ladderPlaced) {
+            // open with the player's rung and the next one in view: the top row shows the rung half a screen above theirs
+            ladderPlaced = true;
+            int top = Math.min(n - 1, Math.max(current + 1, 0) + visible / 2);
+            ladderScroll = n - 1 - top;
+        }
         ladderScroll = Mth.clamp(ladderScroll, 0, Math.max(0, n - visible));
         int trackX = lx + 16;
         // the track: top rung first (highest), the lit part from the bottom up to the player's rung
@@ -152,11 +176,16 @@ public class RankScreen extends HoloScreen {
             boolean hover = mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch;
             g.fill(cx, cy, cx + cw, cy + ch, mine ? 0x22FFD23A : hover ? 0x14FFFFFF : INSET);
             frame(g, cx, cy, cw, ch, mine ? GOLD : hover ? TEXT : LINE);
-            text(g, clip(r.displayName(), cw - 44, 0.85f), cx + 4, cy + 3, mine ? GOLD : below ? TEXT : MUTED, 0.85f);
+            // the threshold at the right, the season mark just left of it, the name in what is left
+            String threshold = String.valueOf(r.points());
+            int pointsLeft = cx + cw - 4 - (int) (font.width(threshold) * 0.7f);
+            int nameRight = pointsLeft - 4;
             if (r.seasonal()) {
-                textRight(g, Tr.t("season_short"), cx + cw - 30, cy + 4, VIO, 0.6f);
+                textRight(g, Tr.t("season_short"), pointsLeft - 3, cy + 4, VIO, 0.6f);
+                nameRight -= 3 + (int) (font.width(Tr.t("season_short")) * 0.6f);
             }
-            textRight(g, String.valueOf(r.points()), cx + cw - 4, cy + 4, GOLD, 0.7f);
+            text(g, clip(r.displayName(), nameRight - cx - 4, 0.85f), cx + 4, cy + 3, mine ? GOLD : below ? TEXT : MUTED, 0.85f);
+            textRight(g, threshold, cx + cw - 4, cy + 4, GOLD, 0.7f);
             int holders = v.holders().getOrDefault(r.group(), 0);
             String line;
             if (mine) {
@@ -194,8 +223,16 @@ public class RankScreen extends HoloScreen {
     }
 
     private String rewards(Rank r) {
-        List<String> parts = new ArrayList<>();
         RankViewPacket v = view();
+        if (v != rewardTextFor) {
+            rewardText.clear();
+            rewardTextFor = v;
+        }
+        return rewardText.computeIfAbsent(r.group(), k -> describeRewards(r, v));
+    }
+
+    private static String describeRewards(Rank r, @Nullable RankViewPacket v) {
+        List<String> parts = new ArrayList<>();
         for (Reward rw : r.rewards()) {
             parts.add(switch (rw.kind()) {
                 case COINS -> Tr.t("coins_worth_copper", rw.amount());
@@ -228,7 +265,7 @@ public class RankScreen extends HoloScreen {
             bx += (int) (font.width(Tr.t("rank_i_of_n", current + 1, s.ranks().size())) * 0.6f) + 6;
         }
         if (!v.title().isEmpty()) {
-            String t = v.title().replaceAll("[&§].", "").trim();
+            String t = clip(v.title().replaceAll("[&§]#[0-9a-fA-F]{6}", "").replaceAll("[&§].", "").trim(), PANE_W - (bx - px) - 6, 0.6f);
             int tw = (int) (font.width(t) * 0.6f) + 6;
             frame(g, bx, py + 3, tw, 11, VIO);
             text(g, t, bx + 3, py + 5, VIO, 0.6f);
@@ -240,7 +277,7 @@ public class RankScreen extends HoloScreen {
         if (current + 1 < s.ranks().size()) {
             Rank next = s.ranks().get(current + 1);
             long have = next.seasonal() ? v.seasonPoints() : v.points();
-            text(g, Tr.t("next_rank_at_points", next.displayName().toUpperCase(Locale.ROOT), next.points()) + (next.seasonal() ? "  " + Tr.t("this_season_counts") : ""), px, ny, TQ, 0.6f);
+            text(g, clip(Tr.t("next_rank_at_points", next.displayName().toUpperCase(Locale.ROOT), next.points()) + (next.seasonal() ? "  " + Tr.t("this_season_counts") : ""), PANE_W, 0.6f), px, ny, TQ, 0.6f);
             int bw = PANE_W, bh = 12;
             inset(g, px, ny + 9, bw, bh);
             int fill = (int) ((bw - 2) * Mth.clamp((double) have / Math.max(1, next.points()), 0, 1));
@@ -306,7 +343,8 @@ public class RankScreen extends HoloScreen {
         text(g, Tr.t("total"), px + 6, fy + 10, TQ, 0.6f);
         textRight(g, String.valueOf(v.points()), px + PANE_W - 6, fy + 10, GOLD, 0.6f);
         if (v.pending() > 0) {
-            text(g, Tr.n("rewards_waiting_for_you", v.pending()), px + 60, fy + 10, GOLD, 0.6f);
+            int totalLeft = px + PANE_W - 6 - (int) (font.width(String.valueOf(v.points())) * 0.6f);
+            text(g, clip(Tr.n("rewards_waiting_for_you", v.pending()), totalLeft - 4 - (px + 60), 0.6f), px + 60, fy + 10, GOLD, 0.6f);
         }
     }
 

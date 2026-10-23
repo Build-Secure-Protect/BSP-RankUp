@@ -26,6 +26,8 @@ public final class Progress {
     private final List<Reward> pending = new ArrayList<>();
     private int season;
     private long seasonBase;
+    /** The highest BSP-Core points seen this season (owner decision D48); the score signal counts what passes it. */
+    private long scorePeak;
     private final Set<String> rewarded = new LinkedHashSet<>();
 
     public long count(Signal signal) {
@@ -106,6 +108,15 @@ public final class Progress {
         this.seasonBase = base;
     }
 
+    /** The highest BSP-Core points seen this season (D48); 0 at the start of each season. */
+    public long scorePeak() {
+        return scorePeak;
+    }
+
+    void setScorePeak(long peak) {
+        this.scorePeak = Math.max(0, peak);
+    }
+
     /** Groups whose rewards this player has received once (for ladders that reward a rung only once). */
     public Set<String> rewarded() {
         return Set.copyOf(rewarded);
@@ -117,7 +128,7 @@ public final class Progress {
     }
 
     public boolean isEmpty() {
-        return counts.isEmpty() && bonus == 0 && rank == null && pending.isEmpty() && season == 0 && rewarded.isEmpty();
+        return counts.isEmpty() && bonus == 0 && rank == null && pending.isEmpty() && season == 0 && scorePeak == 0 && rewarded.isEmpty();
     }
 
     public CompoundTag save() {
@@ -142,6 +153,9 @@ public final class Progress {
         if (season != 0) {
             tag.putInt("Season", season);
             tag.putLong("SeasonBase", seasonBase);
+        }
+        if (scorePeak != 0) {
+            tag.putLong("ScorePeak", scorePeak);
         }
         if (!rewarded.isEmpty()) {
             ListTag list = new ListTag();
@@ -173,6 +187,7 @@ public final class Progress {
         }
         p.season = tag.getInt("Season");
         p.seasonBase = tag.getLong("SeasonBase");
+        p.scorePeak = tag.getLong("ScorePeak");
         ListTag rewarded = tag.getList("Rewarded", Tag.TAG_STRING);
         for (int i = 0; i < rewarded.size(); i++) {
             p.rewarded.add(rewarded.getString(i));
@@ -182,6 +197,6 @@ public final class Progress {
 
     @Override
     public String toString() {
-        return "Progress" + counts + (bonus != 0 ? " bonus " + bonus : "") + (rank != null ? " rank " + rank : "") + (pending.isEmpty() ? "" : " pending " + pending.size()) + (season == 0 ? "" : " season " + season + " base " + seasonBase);
+        return "Progress" + counts + (bonus != 0 ? " bonus " + bonus : "") + (rank != null ? " rank " + rank : "") + (pending.isEmpty() ? "" : " pending " + pending.size()) + (season == 0 ? "" : " season " + season + " base " + seasonBase) + (scorePeak == 0 ? "" : " score peak " + scorePeak);
     }
 }

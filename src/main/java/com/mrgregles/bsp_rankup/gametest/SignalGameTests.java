@@ -98,8 +98,9 @@ public class SignalGameTests {
         ServerPlayer killer = TestPlayers.mockServerPlayer(h);
         ServerPlayer mate = TestPlayers.mockServerPlayer(h);
         ProgressLedger ledger = ProgressLedger.get(level.getServer());
+        var registered = Teams.provider(); // BSP-Core 1.4.5 and newer registers its teams at server start
         try {
-            h.assertFalse(Teams.isRegistered(), "no team provider is registered by default");
+            h.assertTrue(Teams.isRegistered(), "BSP-Core registered its teams at server start");
             Teams.setProvider((a, b) -> true);
             MinecraftForge.EVENT_BUS.post(new LivingDeathEvent(mate, level.damageSources().playerAttack(killer)));
             h.assertTrue(kills(ledger, killer) == 0, "a teammate's death is no kill: " + ledger.progress(killer.getUUID()));
@@ -108,7 +109,7 @@ public class SignalGameTests {
             MinecraftForge.EVENT_BUS.post(new LivingDeathEvent(mate, level.damageSources().playerAttack(killer)));
             h.assertTrue(kills(ledger, killer) == 1, "not teammates: the kill counts: " + ledger.progress(killer.getUUID()));
         } finally {
-            Teams.setProvider(null);
+            Teams.setProvider(registered);
             for (ServerPlayer p : List.of(killer, mate)) {
                 KillCooldowns.forget(p.getUUID());
                 ledger.reset(p.getUUID());

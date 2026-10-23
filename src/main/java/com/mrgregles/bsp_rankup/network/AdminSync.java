@@ -1,5 +1,6 @@
 package com.mrgregles.bsp_rankup.network;
 
+import com.mrgregles.bsp_rankup.BSPRankUp;
 import com.mrgregles.bsp_rankup.admin.AdminEdits;
 import com.mrgregles.bsp_rankup.admin.Reply;
 import com.mrgregles.bsp_rankup.admin.ResetAll;
@@ -39,6 +40,8 @@ public final class AdminSync {
     private static final int MAX_ROWS = 100;
     private static final Map<UUID, String> SEARCH = new HashMap<>();
     private static final Map<UUID, UUID> SELECTED = new HashMap<>();
+    /** Names looked up for searches that matched nobody here, by search text (see {@link #find}). */
+    private static final Map<String, Optional<UUID>> LOOKUPS = new HashMap<>();
 
     private AdminSync() {
     }
@@ -217,11 +220,11 @@ public final class AdminSync {
         for (var r : settings.ranks()) {
             holders.put(r.group(), 0);
         }
-        for (Progress p : ledger.all().values()) {
+        ledger.forEach((id, p) -> {
             if (p.rank() != null) {
                 holders.merge(p.rank(), 1, Integer::sum);
             }
-        }
+        });
         List<AdminViewPacket.PlayerRow> rows = search(server, SEARCH.getOrDefault(admin.getUUID(), ""));
         UUID sel = SELECTED.get(admin.getUUID());
         AdminViewPacket.PlayerDetail detail = sel == null ? AdminViewPacket.PlayerDetail.none() : detail(server, sel);
@@ -232,12 +235,15 @@ public final class AdminSync {
             info.add("Track " + settings.track() + (groups.isEmpty() ? ": missing or empty in LuckPerms" : ": " + String.join(" > ", groups)));
         }
         info.add("Storage: " + (Storage.active() == null ? "this server only" : Storage.active().status()));
-        info.add("Players with progress here: " + ledger.all().size());
+        info.add("Players with progress here: " + ledger.size());
         Map<String, String> kits = new LinkedHashMap<>();
-        for (BspCore.KitInfo k : BspCore.kits(server)) {
-            kits.put(k.id(), k.name());
+        for (BspCore.KitInfo k : BspCore.kitsForViews(server)) {
+            kits.put(RankSync.cut(k.id(), 64), RankSync.cut(k.name(), 64));
         }
-        return new AdminViewPacket(settings.save(), holders, rows, detail, info, ResetAll.pending(admin.getUUID()), ResetAll.secondsLeft(admin.getUUID()), message, ok, open, kits);
+        // the packet carries at most 512 characters a line: a storage error with a long host name can pass that
+        info.replaceAll(line -> RankSync.cut(line.replace('\n', ' ').replace('\r', ' '), 500));
+        return new AdminViewPacket(settings.save(), holders, rows, detail, info, ResetAll.pending(admin.getUUID()), ResetAll.secondsLeft(admin.getUUID()),
+                RankSync.cut(message.replace('\n', ' '), 500), ok, open, kits);
     }
 
     /** Players online here plus every player with progress whose name matches; online first, then by points. */
@@ -255,17 +261,17 @@ public final class AdminSync {
                 }
             }
         }
-        for (Map.Entry<UUID, Progress> e : ledger.all().entrySet()) {
-            if (rows.containsKey(e.getKey())) {
-                continue;
+        ledger.forEach((id, pr) -> {
+            if (rows.containsKey(id)) {
+                return;
             }
-            String name = Players.name(server, e.getKey());
+            String name = Players.name(server, id);
             if (q.isEmpty() || name.toLowerCase(Locale.ROOT).contains(q)) {
-                rows.put(e.getKey(), new AdminViewPacket.PlayerRow(e.getKey(), name, e.getValue().rank() == null ? "" : e.getValue().rank(), RankEngine.points(settings, e.getValue()), false));
+                rows.put(id, new AdminViewPacket.PlayerRow(id, name, pr.rank() == null ? "" : pr.rank(), RankEngine.points(settings, pr), false));
             }
-        }
+        });
         if (rows.isEmpty() && !q.isEmpty()) {
-            Optional<UUID> found = Players.find(server, q);
+            Optional<UUID> found = find(server, q);
             found.ifPresent(id -> rows.put(id, new AdminViewPacket.PlayerRow(id, Players.name(server, id), "", 0, false)));
         }
         List<AdminViewPacket.PlayerRow> out = new ArrayList<>(rows.values());
@@ -285,6 +291,33 @@ public final class AdminSync {
         }
         return new AdminViewPacket.PlayerDetail(player, Players.name(server, player), counts, p.bonus(), p.rank() == null ? "" : p.rank(), p.rankedAtMs(),
                 p.pending().size(), RankEngine.points(settings, p), RankEngine.seasonPoints(settings, p));
+    }
+
+    /**
+     * A name nobody here has, looked up once per search text and off the server thread: the profile cache may ask
+     * Mojang for a name it has not seen, and the open screen asks for a fresh view every two seconds.
+     */
+    private static Optional<UUID> find(MinecraftServer server, String q) {
+        Optional<UUID> known = LOOKUPS.get(q);
+        if (known != null) {
+            return known;
+        }
+        if (LOOKUPS.size() >= 64) {
+            LOOKUPS.clear();
+        }
+        Optional<UUID> here = Players.findHere(server, q);
+        if (here.isPresent() || server.getProfileCache() == null) {
+            LOOKUPS.put(q, here);
+            return here;
+        }
+        // the profile cache may ask Mojang: off the server thread, the answer shows on the next refresh
+        LOOKUPS.put(q, Optional.empty());
+        try {
+            server.getProfileCache().getAsync(q, found -> server.execute(() -> LOOKUPS.put(q, found.map(com.mojang.authlib.GameProfile::getId))));
+        } catch (RuntimeException e) {
+            BSPRankUp.LOGGER.debug("profile lookup for '{}' failed: {}", q, e.toString());
+        }
+        return Optional.empty();
     }
 
     /** Forgets an admin's search and selection (on logout). */

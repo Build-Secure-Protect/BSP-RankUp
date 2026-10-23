@@ -120,3 +120,64 @@ Headless: one GameTest. In the dev run (BSP Core's full jar) the driver found is
 - [ ] On a plain Forge backend with BSP Core's **full** jar and `storage.mode = "mysql"`, the start log shows `MySQL driver: com.mrgregles.bsp_core.shaded.mysql.cj.jdbc.Driver`, then `RankUp storage connected: mysql ...`.
 - [ ] On a Mohist backend (BSP Core's slim jar), the log shows `MySQL driver: com.mysql.cj.jdbc.Driver` and the storage connects.
 - [ ] If neither shows and the log says `No MySQL driver found`, note which BSP Core jar and server type it was.
+
+## UI and performance pass (2026-10-23)
+
+Headless: seven GameTests (`PerformanceGameTests`: the screen scale at small and big windows, the refresh throttle, the database fail-fast, the ledger visitor, the cooldown pruning, over-long lines still encoding, a name looked up off the server thread), 35 in all. Nothing below has been seen in a client.
+
+Window size:
+- [ ] At 1920 x 1080 with GUI scale **Auto** (or 4), open `/rank` and `/rankup admin`: the whole frame shows, nothing cut off at any edge; the text is a little smaller than at GUI scale 3.
+- [ ] At GUI scale 2 on the same window: both screens still fill the window as before.
+- [ ] Resize the window smaller and larger with a screen open: it re-fits each time.
+
+Rank screen (`/rank`):
+- [ ] A seasonal rung with a threshold of 1000000 or more: the season mark sits just left of the number and does not touch it; a long rung name is cut with no overlap.
+- [ ] A long title (`/rankup reward add <group> title &b[A Very Long Title For Testing]`, reach it): the title chip ends inside the frame.
+- [ ] With rewards waiting and a big total, the "rewards wait" text stops before the total.
+- [ ] With the screen open, the server log and network are quiet: one refresh a second, also at a high frame rate (unlock the frame rate in Video Settings).
+- [ ] With twelve rungs and a player on the first one: the screen opens showing their gold rung and the next one, without scrolling.
+- [ ] The hint line at the bottom ("Hover a rung...") sits below the ladder box, not across its border.
+- [ ] A title made of a long `&#RRGGBB` gradient (over 64 characters): the screen still opens, the chip shows the letters without colour-code junk.
+
+Inventory button:
+- [ ] Open the inventory, toggle the recipe book on and off: the R button moves with the inventory each time.
+
+Admin screen (`/rankup admin`):
+- [ ] LADDER, + ITEM: with the browser open, click items in its bottom rows on the right (where REMOVE RANK sits underneath) twice: the item is picked and the rank is **not** removed. Click items in its top row (over the display name field): no rename box opens.
+- [ ] PLAYERS: the search box is under the tabs; LADDER, SIGNALS and PLAYERS tabs all switch with one click.
+- [ ] PLAYERS, pick a player, SET RANK: all twelve BSP ranks show (two rows) and each one sets the rank; with more than fit, a "+N more: /rankup set" line shows.
+- [ ] PLAYERS: a player with 1000000 or more points: their rank name stops before the points.
+- [ ] LADDER: the IMPORT button's label sits inside it; an ITEM reward with a long name stops before its icon.
+- [ ] LADDER, + KIT with eight or more kits in BSP Core: the kits wrap onto up to three rows; any beyond that are named with the command.
+- [ ] LADDER, + ITEM in a big modpack: typing a search does not hitch (the first open may take a moment).
+- [ ] OPTIONS with MySQL down and a long host name: the screen still answers and the storage line is cut, not missing.
+- [ ] Type a name nobody has in the PLAYERS search and leave the screen open for a minute: no server lag. On an online-mode server, the name of someone who has played elsewhere appears after a refresh or two.
+
+Storage (network run):
+- [ ] Stop MySQL while players are online for a minute, then start it: the server does not lag, `/rankup info` shows errors while it is down and connects again within about 10 seconds of it coming back. Counts made while it was down reach the shared table once it is back (see the storage reliability section).
+
+## Storage reliability (2026-10-23)
+
+Headless: four GameTests on an in-memory backend that can be switched to failing (changes kept through an outage and written in one go when it returns, a reset in the outage deleting the old row first; many changes merged into one write; a row read at login with the unsent changes added on top; notices older than a day deleted), 39 in all. MySQL itself has not been run: the transaction and the JDBC batch (`rewriteBatchedStatements=true`) are untested against a real database.
+
+On the network (two backends, shared MySQL):
+- [ ] Note a player's playtime with `/rank`. Stop MySQL, play 3 minutes and get a kill, start MySQL again. Within a minute, `/rankup info` shows no players waiting, and the player's `/rank` on the **other** server shows the 3 minutes and the kill.
+- [ ] Stop MySQL, play 2 minutes, log out and back in on the same server while it is still down: the 2 minutes are still there. Start MySQL, wait a minute, switch servers: still there.
+- [ ] While MySQL is down, `/rankup info` shows errors and "N players' changes waiting to be written"; the server does not lag.
+- [ ] `/rankup reset <player>` while MySQL is down, then start it: the player starts fresh on both servers within a minute.
+- [ ] In MySQL, `SELECT COUNT(*) FROM bsp_ru_notices WHERE created_at < (UNIX_TIMESTAMP() - 86400) * 1000;` is 0 an hour or so after a server starts.
+- [ ] Known limit: a server stopped while MySQL is still down logs "closed with N players' changes unwritten"; those changes stay in that server's own save but are replaced by the database row at the players' next login.
+
+## Score signal and BSP-Core 1.4.5 (2026-10-23)
+
+Headless: three GameTests (`ScoreGameTests`: only points past the season's peak count and a new season starts the peak again, BSP-Core's event counts only for a player on this server, the peak shared through the storage), and the team tests now keep BSP-Core's team provider; 42 in all. Needs BSP-Core 1.4.5 on the server.
+
+- [ ] Server log on start: `BSP-Core's teams registered with BSP-RankUp`.
+- [ ] Two players on one BSP-Core team: a kill between them gives no player kill (`/rank` shows the same count).
+- [ ] `/rankup signal score on` (or ADMIN > SIGNALS, score). Place a totem: after BSP-Core's next board (up to 30 s), `/rank` shows season score rising by your BSP-Core points.
+- [ ] Take that totem down and place it again: the score count does not rise a second time.
+- [ ] Have the totem stolen: the score count does not fall.
+- [ ] Reach more BSP-Core points than before: only the difference is added.
+- [ ] End a season in BSP-Core: the count stays, and the new season's points count again from 0.
+- [ ] Network: with players moving between two backends, the score is not counted twice (the peak travels in `score_peak` of `bsp_ru_players`).
+

@@ -9,6 +9,7 @@ import com.mrgregles.bsp_rankup.progress.Signal;
 import com.mrgregles.bsp_rankup.settings.Rank;
 import com.mrgregles.bsp_rankup.settings.Settings;
 import com.mrgregles.bsp_rankup.settings.SettingsLedger;
+import com.mrgregles.bsp_rankup.signal.ScoreSignal;
 import com.mrgregles.bsp_rankup.util.Players;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -73,6 +74,7 @@ public final class Seasons {
         if (progress == null) {
             ledger.setSeason(player, season, 0); // nothing to fall from: just mark the season as seen
             RankEngine.check(server, player);
+            server.execute(() -> ScoreSignal.check(server, player)); // the new season's peak starts at 0 (D48)
             return;
         }
         if (progress.season() >= season || !IN_FLIGHT.add(player)) {
@@ -81,6 +83,7 @@ public final class Seasons {
         Settings settings = SettingsLedger.settings(server);
         long points = RankEngine.points(settings, progress);
         ledger.setSeason(player, season, points);
+        server.execute(() -> ScoreSignal.check(server, player)); // the new season's peak starts at 0 (D48)
         if (!progress.counts().isEmpty() || progress.bonus() != 0 || progress.rank() != null) {
             ledger.add(player, Signal.SEASONS_SURVIVED, 1);
         }

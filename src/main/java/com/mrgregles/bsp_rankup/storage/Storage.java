@@ -17,8 +17,10 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,11 +34,14 @@ import java.util.function.Consumer;
 
 /**
  * The shared storage (owner decisions D8, D19, D21): every change to a player's counts, bonus, rank and waiting
- * rewards is written through to the database as it happens (counts and bonus as additive deltas, so two servers'
- * playtime adds up); a player's row is read on login and replaces the local copy; the settings are one shared
- * document, written on every edit and re-read on a notice. Notices between servers (a settings change, a rank-up
+ * rewards is kept in memory, merged per player (counts and bonus as additive deltas, so two servers' playtime adds
+ * up; rank, waiting rewards, season and rewarded rungs as the latest value), and written every few seconds as one
+ * batch. A batch that fails stays for the next try, with a growing wait, so an outage loses nothing while this
+ * server runs. A player's row is read on login and replaces the local copy, with the changes not yet written added
+ * on top. The settings are one shared document, written on every edit and re-read on a notice. Notices between servers (a settings change, a rank-up
  * to announce network-wide, a player's progress changed elsewhere) go through Redis when it is configured and are
  * always written to the notice table too, which every server reads on a timer; a notice acts once by its id.
+ * Notices older than a day are deleted now and then.
  *
  * <p>Database work runs on one worker thread; results come back on the server thread. Without shared storage
  * (the default) nothing here runs and the local ledgers are the truth.
@@ -45,6 +50,9 @@ public final class Storage {
     public static final String KIND_SETTINGS = "settings", KIND_RANKUP = "rankup", KIND_PROGRESS = "progress";
     private static final int NOTICE_BATCH = 100, SEEN_LIMIT = 20_000;
     private static final long FLUSH_MS = 5000;
+    /** Unsent changes are written this often; after a failure the wait doubles up to {@link #BACKOFF_MAX_MS}. */
+    private static final long WRITE_EVERY_MS = 5000, BACKOFF_MAX_MS = 60_000;
+    private static final long PRUNE_EVERY_MS = 3_600_000, NOTICE_KEEP_MS = 86_400_000;
     private static final Runnable STOP = () -> {
     };
 
@@ -85,6 +93,14 @@ public final class Storage {
     private final Consumer<Settings> settingsListener = this::onSettingsChanged;
     private final Consumer<RankEngine.RankUp> rankUpListener = this::onRankUp;
     private volatile int delivered;
+    /** Each player's changes not yet written, merged; guarded by itself, as is {@link #reading}. */
+    private final Map<UUID, Unsent> unsent = new HashMap<>();
+    /** Changes made while a player's row is being read, one collector per read in flight. */
+    private final Map<UUID, List<Unsent>> reading = new HashMap<>();
+    /** A reset waits to be written (its notice goes out after the delete). */
+    private volatile boolean writeSoon;
+    /** The worker's write and prune timers (worker thread, or a test's drain). */
+    private long nextWriteMs, backoffMs, lastPruneMs;
 
     private Storage(MinecraftServer server, StorageBackend backend, String serverId, int pollSeconds, boolean threaded) {
         this.server = server;
@@ -219,7 +235,9 @@ public final class Storage {
 
     public String status() {
         RedisLink r = redis;
+        int waiting = unsentPlayers();
         return backend.describe() + ", this server '" + serverId + "', " + (lastError.isEmpty() ? "no errors" : errors + " errors, last: " + lastError)
+                + (waiting == 0 ? "" : ", " + waiting + " players' changes waiting to be written")
                 + ", " + delivered + " notices handled" + (r == null ? ", no Redis" : "; " + r.status());
     }
 
@@ -230,24 +248,34 @@ public final class Storage {
             try {
                 task.run();
             } catch (Exception e) {
-                errors++;
-                String message = e.toString();
-                if (!message.equals(lastError)) {
-                    BSPRankUp.LOGGER.warn("RankUp storage: {}", message);
-                }
-                lastError = message;
+                failed(e);
             }
         });
     }
 
-    /** Runs every queued task on the calling thread (tests, and the last flush of an unthreaded storage). */
-    public void drain() {
-        Runnable r;
-        while ((r = work.poll()) != null) {
-            if (r != STOP) {
-                r.run();
-            }
+    private void failed(Exception e) {
+        errors++;
+        String message = e.toString();
+        if (!message.equals(lastError)) {
+            BSPRankUp.LOGGER.warn("RankUp storage: {}", message);
         }
+        lastError = message;
+    }
+
+    /**
+     * Runs every queued task and writes the unsent changes at once, whatever the wait, on the calling thread (tests,
+     * and the last flush of an unthreaded storage).
+     */
+    public void drain() {
+        do {
+            Runnable r;
+            while ((r = work.poll()) != null) {
+                if (r != STOP) {
+                    r.run();
+                }
+            }
+            writeUnsent();
+        } while (!work.isEmpty()); // a reset's notice, queued after its delete was written
     }
 
     private void loop() {
@@ -255,10 +283,23 @@ public final class Storage {
             try {
                 Runnable r = work.poll(1, TimeUnit.SECONDS);
                 if (r == STOP) {
+                    writeUnsent();
+                    int left = unsentPlayers();
+                    if (left > 0) {
+                        BSPRankUp.LOGGER.warn("RankUp storage closed with {} players' changes unwritten (the database is unreachable); this server's own copy keeps them until those players' next login", left);
+                    }
                     return;
                 }
                 if (r != null) {
                     r.run();
+                }
+                long now = System.currentTimeMillis();
+                if (now >= nextWriteMs || (writeSoon && backoffMs == 0)) {
+                    writeUnsent();
+                }
+                if (now - lastPruneMs >= PRUNE_EVERY_MS) {
+                    lastPruneMs = now;
+                    pruneNotices();
                 }
                 long every = (redis != null && redis.subscribed() ? safetyPollSeconds : pollSeconds) * 1000L;
                 if (System.currentTimeMillis() - lastPollMs >= every) {
@@ -273,50 +314,168 @@ public final class Storage {
         }
     }
 
-    // ------------------------------------------------------------------ write-through
+    // ------------------------------------------------------------------ unsent changes
 
     private void onChange(ProgressLedger.Change c) {
         if (applying || c.server() != server) {
             return;
         }
         UUID player = c.player();
+        long amount = c.amount();
         switch (c.kind()) {
             case COUNT -> {
                 Signal signal = c.signal();
-                if (signal != null && c.amount() != 0) {
-                    submit(() -> backend.addCount(player, signal.key(), c.amount()));
+                if (signal != null && amount != 0) {
+                    record(player, u -> u.counts.merge(signal.key(), amount, Long::sum));
                 }
             }
             case BONUS -> {
-                if (c.amount() != 0) {
-                    submit(() -> backend.addBonus(player, c.amount()));
+                if (amount != 0) {
+                    record(player, u -> u.bonus += amount);
                 }
             }
             case RANK -> {
-                String rank = c.progress().rank();
-                long at = c.progress().rankedAtMs();
-                submit(() -> backend.setRank(player, rank, at));
+                StorageBackend.RankValue rank = new StorageBackend.RankValue(c.progress().rank(), c.progress().rankedAtMs());
+                record(player, u -> u.rank = rank);
             }
             case PENDING -> {
-                String json = PendingJson.toJson(c.progress().pending());
-                submit(() -> backend.setPending(player, json));
+                StorageBackend.Text pending = new StorageBackend.Text(PendingJson.toJson(c.progress().pending()));
+                record(player, u -> u.pending = pending);
             }
             case SEASON -> {
-                int season = c.progress().season();
-                long base = c.progress().seasonBase();
-                submit(() -> backend.setSeason(player, season, base));
+                StorageBackend.SeasonValue season = new StorageBackend.SeasonValue(c.progress().season(), c.progress().seasonBase(), c.progress().scorePeak());
+                record(player, u -> u.season = season);
             }
             case REWARDED -> {
-                String csv = c.progress().rewarded().isEmpty() ? null : String.join(",", c.progress().rewarded());
-                submit(() -> backend.setRewarded(player, csv));
+                StorageBackend.Text rewarded = new StorageBackend.Text(c.progress().rewarded().isEmpty() ? null : String.join(",", c.progress().rewarded()));
+                record(player, u -> u.rewarded = rewarded);
             }
             case RESET -> {
-                submit(() -> backend.deletePlayer(player));
-                publish(KIND_PROGRESS, player.toString());
+                record(player, Unsent::reset); // what came before is wiped; the notice goes out once the delete is written
+                writeSoon = true;
             }
             case LOAD -> {
                 // came from here
             }
+        }
+    }
+
+    /** Applies a change to the player's unsent changes, and to every read of their row in flight. */
+    private void record(UUID player, Consumer<Unsent> change) {
+        synchronized (unsent) {
+            change.accept(unsent.computeIfAbsent(player, k -> new Unsent()));
+            List<Unsent> reads = reading.get(player);
+            if (reads != null) {
+                reads.forEach(change);
+            }
+        }
+    }
+
+    /**
+     * Writes every player's unsent changes as one batch (worker thread, or a test's drain). On a failure they go back,
+     * under any made since, and the next try waits twice as long as the last, up to a minute.
+     */
+    private void writeUnsent() {
+        Map<UUID, Unsent> batch;
+        synchronized (unsent) {
+            if (unsent.isEmpty()) {
+                return;
+            }
+            batch = new HashMap<>(unsent);
+            unsent.clear();
+        }
+        writeSoon = false;
+        List<StorageBackend.PlayerWrite> writes = new ArrayList<>(batch.size());
+        batch.forEach((player, u) -> writes.add(u.toWrite(player)));
+        try {
+            backend.write(writes);
+            backoffMs = 0;
+            nextWriteMs = System.currentTimeMillis() + WRITE_EVERY_MS;
+            List<UUID> reset = writes.stream().filter(StorageBackend.PlayerWrite::delete).map(StorageBackend.PlayerWrite::player).toList();
+            if (!reset.isEmpty()) {
+                server.execute(() -> reset.forEach(player -> publish(KIND_PROGRESS, player.toString())));
+            }
+        } catch (Exception e) {
+            synchronized (unsent) {
+                batch.forEach((player, older) -> {
+                    Unsent newer = unsent.get(player);
+                    if (newer != null) {
+                        older.then(newer);
+                    }
+                    unsent.put(player, older);
+                });
+            }
+            backoffMs = Math.min(BACKOFF_MAX_MS, backoffMs == 0 ? WRITE_EVERY_MS * 2 : backoffMs * 2);
+            nextWriteMs = System.currentTimeMillis() + backoffMs;
+            failed(e);
+        }
+    }
+
+    /** How many players have changes not yet written. */
+    public int unsentPlayers() {
+        synchronized (unsent) {
+            return unsent.size();
+        }
+    }
+
+    /** One player's changes not yet written: count and bonus deltas merged, the latest of each set value (null: unchanged). */
+    private static final class Unsent {
+        boolean delete;
+        final Map<String, Long> counts = new HashMap<>();
+        long bonus;
+        @Nullable
+        StorageBackend.RankValue rank;
+        @Nullable
+        StorageBackend.Text pending, rewarded;
+        @Nullable
+        StorageBackend.SeasonValue season;
+
+        /** The player was reset: everything before is dropped and the row is deleted first. */
+        void reset() {
+            delete = true;
+            counts.clear();
+            bonus = 0;
+            rank = null;
+            pending = null;
+            rewarded = null;
+            season = null;
+        }
+
+        /** Puts newer changes on top of these. */
+        void then(Unsent newer) {
+            if (newer.delete) {
+                reset();
+            }
+            newer.counts.forEach((key, n) -> counts.merge(key, n, Long::sum));
+            bonus += newer.bonus;
+            if (newer.rank != null) {
+                rank = newer.rank;
+            }
+            if (newer.pending != null) {
+                pending = newer.pending;
+            }
+            if (newer.season != null) {
+                season = newer.season;
+            }
+            if (newer.rewarded != null) {
+                rewarded = newer.rewarded;
+            }
+        }
+
+        Unsent copy() {
+            Unsent u = new Unsent();
+            u.then(this);
+            return u;
+        }
+
+        StorageBackend.PlayerWrite toWrite(UUID player) {
+            Map<String, Long> deltas = new HashMap<>();
+            counts.forEach((key, n) -> {
+                if (n != 0) {
+                    deltas.put(key, n);
+                }
+            });
+            return new StorageBackend.PlayerWrite(player, delete, deltas, bonus, rank, pending, season, rewarded);
         }
     }
 
@@ -351,31 +510,65 @@ public final class Storage {
         }
     }
 
-    /** Reads the player's row and replaces the local copy with it (nothing changes when the row is missing). */
+    /**
+     * Reads the player's row and replaces the local copy with it, the changes not yet written added on top (nothing
+     * changes when the row is missing). The read and the batch writes share the worker, so the changes unsent at the
+     * read are exactly those the row lacks; the ones made while the row travels to the server thread are collected
+     * on the way.
+     */
     public void loadPlayer(UUID player) {
         submit(() -> {
             StorageBackend.PlayerRow row = backend.loadPlayer(player);
-            if (row != null) {
-                server.execute(() -> apply(row));
+            if (row == null) {
+                return;
             }
+            Unsent before, since = new Unsent();
+            synchronized (unsent) {
+                Unsent u = unsent.get(player);
+                before = u == null ? new Unsent() : u.copy();
+                reading.computeIfAbsent(player, k -> new ArrayList<>()).add(since);
+            }
+            server.execute(() -> apply(row, before, since));
         });
     }
 
-    private void apply(StorageBackend.PlayerRow row) {
+    private void apply(StorageBackend.PlayerRow row, Unsent before, Unsent since) {
+        synchronized (unsent) {
+            List<Unsent> reads = reading.get(row.player());
+            if (reads != null) {
+                reads.remove(since);
+                if (reads.isEmpty()) {
+                    reading.remove(row.player());
+                }
+            }
+        }
+        Unsent extra = before;
+        extra.then(since);
+        // a reset not yet written: the row read is the old one
+        Map<String, Long> rowCounts = new HashMap<>(extra.delete ? Map.of() : row.counts());
+        extra.counts.forEach((key, n) -> rowCounts.merge(key, n, Long::sum));
         Map<Signal, Long> counts = new EnumMap<>(Signal.class);
-        row.counts().forEach((key, n) -> {
+        rowCounts.forEach((key, n) -> {
             Signal s = Signal.byKey(key);
             if (s != null) {
-                counts.put(s, n);
+                counts.put(s, Math.max(0, n));
             }
         });
+        long bonus = (extra.delete ? 0 : row.bonus()) + extra.bonus;
+        String rank = extra.rank != null ? extra.rank.rank() : extra.delete ? null : row.rank();
+        long rankedAt = extra.rank != null ? extra.rank.rankedAt() : extra.delete ? 0 : row.rankedAt();
+        String pending = extra.pending != null ? extra.pending.text() : extra.delete ? null : row.pendingJson();
+        int season = extra.season != null ? extra.season.season() : extra.delete ? 0 : row.season();
+        long seasonBase = extra.season != null ? extra.season.seasonBase() : extra.delete ? 0 : row.seasonBase();
+        long scorePeak = extra.season != null ? extra.season.scorePeak() : extra.delete ? 0 : row.scorePeak();
+        String rewardedCsv = extra.rewarded != null ? extra.rewarded.text() : extra.delete ? null : row.rewarded();
         applying = true;
         try {
             Set<String> rewarded = new java.util.LinkedHashSet<>();
-            if (row.rewarded() != null && !row.rewarded().isBlank()) {
-                rewarded.addAll(List.of(row.rewarded().split(",")));
+            if (rewardedCsv != null && !rewardedCsv.isBlank()) {
+                rewarded.addAll(List.of(rewardedCsv.split(",")));
             }
-            ProgressLedger.get(server).load(row.player(), counts, row.bonus(), row.rank(), row.rankedAt(), PendingJson.fromJson(row.pendingJson()), row.season(), row.seasonBase(), rewarded);
+            ProgressLedger.get(server).load(row.player(), counts, bonus, rank, rankedAt, PendingJson.fromJson(pending), season, seasonBase, scorePeak, rewarded);
         } finally {
             applying = false;
         }
@@ -430,6 +623,16 @@ public final class Storage {
             r.publish(encode(n));
         }
         submit(() -> backend.publish(n));
+    }
+
+    /** Deletes the notices older than a day from the table; every hour on the worker. */
+    public void pruneNotices() {
+        submit(() -> {
+            int gone = backend.deleteNoticesBefore(System.currentTimeMillis() - NOTICE_KEEP_MS);
+            if (gone > 0) {
+                BSPRankUp.LOGGER.debug("RankUp storage: {} old notices deleted", gone);
+            }
+        });
     }
 
     /** Listeners for tests and the api: every notice from another server, after it acted. */

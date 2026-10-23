@@ -257,7 +257,8 @@ public final class RankEngine {
         if (current < 0 || !LuckPermsBridge.isPresent() || !Players.isOnline(server, player) || IN_FLIGHT.contains(player)) {
             return;
         }
-        if (LuckPermsBridge.groupsOf(player).isEmpty() || LuckPermsBridge.rankOn(player, settings.track()).isPresent()) {
+        Set<String> groups = LuckPermsBridge.groupsOf(player); // asked once: rankOn would ask again
+        if (groups.isEmpty() || LuckPermsBridge.rankOn(groups, settings.track()).isPresent()) {
             return;
         }
         Rank rank = settings.ranks().get(current);

@@ -11,11 +11,13 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -150,6 +152,7 @@ public final class LuckPermsBridge {
         route = null;
         api = null;
         loader = null;
+        METHODS.clear();
     }
 
     // ------------------------------------------------------------------ reads
@@ -237,8 +240,12 @@ public final class LuckPermsBridge {
      * inherit each other still answers the top one). Empty when the player is on none of the track's groups.
      */
     public static Optional<String> rankOn(UUID player, String track) {
+        return rankOn(groupsOf(player), track);
+    }
+
+    /** As {@link #rankOn(UUID, String)} for groups already looked up with {@link #groupsOf}. */
+    public static Optional<String> rankOn(Set<String> mine, String track) {
         List<String> order = trackGroups(track);
-        Set<String> mine = groupsOf(player);
         String best = null;
         for (String g : order) {
             if (mine.contains(g.toLowerCase(Locale.ROOT))) {
@@ -561,7 +568,29 @@ public final class LuckPermsBridge {
         return m.invoke(null, args);
     }
 
+    /** A method found for a class, a name and the argument classes (null for a null argument). */
+    private record MethodKey(Class<?> type, String name, List<Class<?>> args) {
+    }
+
+    /** Methods already found: {@code getMethods()} copies the whole method table on every call. */
+    private static final Map<MethodKey, Method> METHODS = new ConcurrentHashMap<>();
+
     private static Method find(Class<?> type, String name, Object[] args) throws NoSuchMethodException {
+        List<Class<?>> argTypes = new ArrayList<>(args.length);
+        for (Object a : args) {
+            argTypes.add(a == null ? null : a.getClass());
+        }
+        MethodKey key = new MethodKey(type, name, argTypes);
+        Method known = METHODS.get(key);
+        if (known != null) {
+            return known;
+        }
+        Method m = lookUp(type, name, args);
+        METHODS.put(key, m);
+        return m;
+    }
+
+    private static Method lookUp(Class<?> type, String name, Object[] args) throws NoSuchMethodException {
         for (Method m : type.getMethods()) {
             if (m.getName().equals(name) && m.getParameterCount() == args.length && accepts(m.getParameterTypes(), args)) {
                 try {

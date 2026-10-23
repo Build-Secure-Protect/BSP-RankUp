@@ -6,11 +6,13 @@ import com.mrgregles.bsp_rankup.command.RankCommand;
 import com.mrgregles.bsp_rankup.compat.BspCore;
 import com.mrgregles.bsp_rankup.compat.RegionGuard;
 import com.mrgregles.bsp_rankup.network.AdminSync;
+import com.mrgregles.bsp_rankup.network.RankSync;
 import com.mrgregles.bsp_rankup.network.RankUpNetwork;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
 import com.mrgregles.bsp_rankup.signal.KillCooldowns;
 import com.mrgregles.bsp_rankup.signal.KillSignals;
 import com.mrgregles.bsp_rankup.signal.Playtime;
+import com.mrgregles.bsp_rankup.signal.ScoreSignal;
 import com.mrgregles.bsp_rankup.storage.Storage;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.fml.config.ModConfig;
@@ -39,6 +41,8 @@ public class BSPRankUp {
         // Signals: what players do, counted into the progress ledger.
         MinecraftForge.EVENT_BUS.addListener(Playtime::onServerTick);
         MinecraftForge.EVENT_BUS.addListener(KillSignals::onDeath);
+        ScoreSignal.init(); // BSP-Core's score, each season's peak (D48)
+        MinecraftForge.EVENT_BUS.addListener(ScoreSignal::onLoggedIn);
         MinecraftForge.EVENT_BUS.addListener(BSPRankUp::onLoggedOut);
         // The ladder: points, ranks, rewards, announcements.
         RankEngine.init();
@@ -64,5 +68,6 @@ public class BSPRankUp {
         Playtime.forget(event.getEntity().getUUID());
         KillCooldowns.forget(event.getEntity().getUUID());
         AdminSync.forget(event.getEntity().getUUID());
+        RankSync.forget(event.getEntity().getUUID());
     }
 }

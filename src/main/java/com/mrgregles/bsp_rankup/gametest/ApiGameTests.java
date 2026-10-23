@@ -89,14 +89,14 @@ public class ApiGameTests {
     @GameTest(template = EMPTY, batch = "api-teams")
     public void a_team_provider_registered_through_the_api_answers_the_kill_rule(GameTestHelper h) {
         UUID a = UUID.randomUUID(), b = UUID.randomUUID(), c = UUID.randomUUID();
+        var registered = Teams.provider(); // BSP-Core's own, registered at server start: put back afterwards
         try {
-            h.assertFalse(RankUpApi.hasTeamProvider(), "none registered at first");
             RankUpApi.setTeamProvider((x, y) -> (x.equals(a) && y.equals(b)) || (x.equals(b) && y.equals(a)));
             h.assertTrue(RankUpApi.hasTeamProvider() && Teams.sameTeam(a, b) && Teams.sameTeam(b, a) && !Teams.sameTeam(a, c), "the kill rule asks the provider");
             RankUpApi.setTeamProvider(null);
             h.assertFalse(RankUpApi.hasTeamProvider() || Teams.sameTeam(a, b), "removed again");
         } finally {
-            RankUpApi.setTeamProvider(null);
+            Teams.setProvider(registered);
         }
         h.succeed();
     }

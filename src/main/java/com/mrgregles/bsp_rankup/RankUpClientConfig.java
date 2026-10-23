@@ -27,10 +27,14 @@ public final class RankUpClientConfig {
     /**
      * The scale a screen of {@code baseW} by {@code baseH} units is drawn at in a window of {@code w} by {@code h} GUI
      * units: as large as fits with {@code margin} to spare when {@code want} is 0, else {@code want} capped to what
-     * fits; never below 1.
+     * fits; never below 1, unless the window is too small for the original size (1920 x 1080 at GUI scale 4 is 480 x
+     * 270 units): then exactly as small as fits, so no edge is cut off.
      */
     public static float screenScale(double want, int w, int h, int baseW, int baseH, float margin) {
-        float fit = Math.min((w - margin) / baseW, (h - margin) / baseH);
-        return Math.max(1, want <= 0 ? fit : Math.min((float) want, fit));
+        float fit = Math.max(MIN_SCALE, Math.min((w - margin) / baseW, (h - margin) / baseH));
+        return Math.max(Math.min(1, fit), want <= 0 ? fit : Math.min((float) want, fit));
     }
+
+    /** The smallest a screen is ever drawn (Minecraft's smallest window, 320 x 240 units, needs about 0.6). */
+    private static final float MIN_SCALE = 0.25f;
 }

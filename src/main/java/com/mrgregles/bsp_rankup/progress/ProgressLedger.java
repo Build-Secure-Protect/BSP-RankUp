@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -88,6 +89,16 @@ public final class ProgressLedger extends SavedData {
         return Map.copyOf(players);
     }
 
+    /** Visits every player with progress without copying the map (views built every second use this); no changes from the visitor. */
+    public void forEach(BiConsumer<UUID, Progress> visitor) {
+        players.forEach(visitor);
+    }
+
+    /** How many players have progress. */
+    public int size() {
+        return players.size();
+    }
+
     /** Adds to a count (a negative amount takes away, never below zero). */
     public void add(UUID player, Signal signal, long amount) {
         if (amount == 0) {
@@ -126,13 +137,14 @@ public final class ProgressLedger extends SavedData {
      * Replaces everything known about a player with what the shared storage holds (read on login). One LOAD change
      * tells the listeners; the storage itself ignores it.
      */
-    public void load(UUID player, Map<Signal, Long> counts, long bonus, @Nullable String rank, long rankedAtMs, List<Reward> pending, int season, long seasonBase, java.util.Set<String> rewarded) {
+    public void load(UUID player, Map<Signal, Long> counts, long bonus, @Nullable String rank, long rankedAtMs, List<Reward> pending, int season, long seasonBase, long scorePeak, java.util.Set<String> rewarded) {
         Progress p = new Progress();
         counts.forEach(p::set);
         p.setBonus(bonus);
         p.setRank(rank, rankedAtMs);
         p.addPending(pending);
         p.setSeason(season, seasonBase);
+        p.setScorePeak(scorePeak);
         p.setRewarded(rewarded);
         if (p.isEmpty()) {
             players.remove(player);
@@ -143,10 +155,22 @@ public final class ProgressLedger extends SavedData {
         notify(new Change(server, player, Kind.LOAD, null, 0, p));
     }
 
-    /** Records that a season's end was applied to the player, with their points at that moment. */
+    /**
+     * Records that a season's end was applied to the player, with their points at that moment; the score peak starts
+     * again (D48).
+     */
     public void setSeason(UUID player, int season, long base) {
         Progress p = progress(player);
         p.setSeason(season, base);
+        p.setScorePeak(0);
+        setDirty();
+        notify(new Change(server, player, Kind.SEASON, null, 0, p));
+    }
+
+    /** Records the player's highest BSP-Core points this season (D48); shared with the season values. */
+    public void setScorePeak(UUID player, long peak) {
+        Progress p = progress(player);
+        p.setScorePeak(peak);
         setDirty();
         notify(new Change(server, player, Kind.SEASON, null, 0, p));
     }

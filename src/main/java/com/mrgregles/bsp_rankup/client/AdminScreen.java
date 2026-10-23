@@ -39,14 +39,27 @@ public class AdminScreen extends HoloScreen {
             BAD = 0xFFFF6B5C, TEXT = 0xFFE6EAF2, MUTED = 0xFF9AA3B5;
     private static final String[] TABS = {"LADDER", "SIGNALS", "PLAYERS", "OPTIONS"};
     private static final int LIST_X = 8, LIST_Y = 40, LIST_W = 164, LIST_H = 214, ROW = 14;
+    /** On PLAYERS the search box sits at the top of the list column, below the tabs, and the list starts under it. */
+    private static final int SEARCH_H = 14, PLAYERS_Y = LIST_Y + SEARCH_H + 2, PLAYERS_H = LIST_H - SEARCH_H - 2;
     private static final int PANE_X = 180, PANE_W = 332, PANE_Y = 40, PANE_H = 240;
     private static final long ARM_MS = 5000;
     private static final int REFRESH_TICKS = 40;
+    /** Rows of rung chips under SET RANK (room down to the input line). */
+    private static final int SET_RANK_ROWS = 3;
+    /** Rows of kit chips in the kit picker (room down to the input line). */
+    private static final int KIT_ROWS = 3;
 
-    /** A clickable rectangle registered while drawing and consumed by the next click. */
+    /**
+     * A clickable rectangle registered while drawing and consumed by the next click. The last one registered is on
+     * top, so clicks are tried newest first.
+     */
     private record Hit(int x, int y, int w, int h, Runnable action) {
         boolean contains(double mx, double my) {
             return mx >= x && mx < x + w && my >= y && my < y + h;
+        }
+
+        boolean overlaps(int ox, int oy, int ow, int oh) {
+            return x < ox + ow && ox < x + w && y < oy + oh && oy < y + h;
         }
     }
 
@@ -73,6 +86,14 @@ public class AdminScreen extends HoloScreen {
     @Nullable
     private String browseItem;
     private List<Item> browseItems = List.of();
+    /** One stack per browse result, made with the results rather than every frame. */
+    private List<ItemStack> browseStacks = List.of();
+    /** Every item with its stack and the text a search is matched against, made once when the browser first opens. */
+    private record Browsable(Item item, ItemStack stack, String text) {
+    }
+
+    @Nullable
+    private List<Browsable> browseIndex;
     private String browseQuery = "\u0000";
     private boolean settingRank;
     /** The kit picker (K-1) open under the reward kinds. */
@@ -93,8 +114,7 @@ public class AdminScreen extends HoloScreen {
 
     @Nullable
     private Settings settings() {
-        AdminViewPacket v = view();
-        return v == null ? null : Settings.load(v.settings());
+        return RankUpClient.adminSettings();
     }
 
     @Nullable
@@ -104,7 +124,10 @@ public class AdminScreen extends HoloScreen {
     }
 
     void onView(AdminViewPacket msg) {
-        Settings s = Settings.load(msg.settings());
+        Settings s = settings();
+        if (s == null) {
+            return;
+        }
         if (selectedGroup == null || s.indexOf(selectedGroup) < 0) {
             selectedGroup = s.ranks().isEmpty() ? null : s.ranks().get(0).group();
         }
@@ -138,7 +161,7 @@ public class AdminScreen extends HoloScreen {
             }
         });
         addRenderableWidget(input);
-        search = new EditBox(font, x + LIST_X + 4, y + 27, LIST_W - 8, 10, Component.literal(Tr.t("find_player")));
+        search = new EditBox(font, x + LIST_X + 4, y + LIST_Y + 3, LIST_W - 8, 10, Component.literal(Tr.t("find_player")));
         search.setBordered(false);
         search.setMaxLength(48);
         search.setVisible(tab == 2);
@@ -356,6 +379,14 @@ public class AdminScreen extends HoloScreen {
             text(g, Tr.t("changes_save_at_once"), x + 10, y + H - 12, MUTED, 0.6f);
         }
         super.draw(g, mouseX, mouseY, partial);
+    }
+
+    /** Every two seconds (game ticks, not frames): the player search when it changed, else a fresh view on PLAYERS and OPTIONS. */
+    @Override
+    public void tick() {
+        super.tick();
+        input.tick();
+        search.tick();
         if (++ticks % REFRESH_TICKS == 0) {
             if (tab == 2 && !search.getValue().equals(lastSearch)) {
                 lastSearch = search.getValue();
@@ -424,9 +455,9 @@ public class AdminScreen extends HoloScreen {
         });
         Rank sel = selected();
         int idx = sel == null ? -1 : s.indexOf(sel.group());
-        button(g, x + LIST_X + 76, by, 26, 13, Tr.t("up"), idx > 0 ? TEXT : LINE, idx > 0 ? () -> send(AdminActionPacket.of(AdminActionPacket.LADDER_MOVE, sel.group(), String.valueOf(idx))) : null);
-        button(g, x + LIST_X + 106, by, 26, 13, Tr.t("down"), idx >= 0 && idx < ranks.size() - 1 ? TEXT : LINE, idx >= 0 && idx < ranks.size() - 1 ? () -> send(AdminActionPacket.of(AdminActionPacket.LADDER_MOVE, sel.group(), String.valueOf(idx + 2))) : null);
-        button(g, x + LIST_X + 136, by, 28, 13, Tr.t("import"), MUTED, () -> act(AdminActionPacket.LADDER_IMPORT, ""));
+        button(g, x + LIST_X + 75, by, 24, 13, Tr.t("up"), idx > 0 ? TEXT : LINE, idx > 0 ? () -> send(AdminActionPacket.of(AdminActionPacket.LADDER_MOVE, sel.group(), String.valueOf(idx))) : null);
+        button(g, x + LIST_X + 102, by, 24, 13, Tr.t("down"), idx >= 0 && idx < ranks.size() - 1 ? TEXT : LINE, idx >= 0 && idx < ranks.size() - 1 ? () -> send(AdminActionPacket.of(AdminActionPacket.LADDER_MOVE, sel.group(), String.valueOf(idx + 2))) : null);
+        button(g, x + LIST_X + 129, by, 35, 13, Tr.t("import"), MUTED, () -> act(AdminActionPacket.LADDER_IMPORT, ""));
 
         if (sel == null) {
             text(g, Tr.t("pick_a_rung_or_add_one"), x + PANE_X + 4, y + PANE_Y + 8, MUTED, 0.75f);
@@ -454,7 +485,7 @@ public class AdminScreen extends HoloScreen {
             int n = i + rewardScroll + 1;
             int ry = ly + 1 + i * 12;
             text(g, Tr.t("kind." + r.kind().name().toLowerCase(Locale.ROOT)), lx + 4, ry + 3, VIO, 0.6f);
-            text(g, clip(describe(r), lw - 80, 0.75f), lx + 50, ry + 2, TEXT, 0.75f);
+            text(g, clip(describe(r), lw - 88, 0.75f), lx + 50, ry + 2, TEXT, 0.75f); // ends before the item icon at lw - 32
             if (r.kind() == Reward.Kind.ITEM) {
                 Item item = ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(r.value()));
                 if (item != null && item != Items.AIR) {
@@ -510,18 +541,27 @@ public class AdminScreen extends HoloScreen {
         } else {
             text(g, Tr.t("pick_a_kit"), px, y + 3, MUTED, 0.6f);
         }
-        int bx = px + 50;
+        // the kits flow over up to KIT_ROWS rows, left of CANCEL on the first; the rest are named by count
+        int bx = px + 50, row = 0, shown = 0;
         for (Map.Entry<String, String> kit : v.kits().entrySet()) {
             String label = clip(kit.getValue(), 70, 0.6f);
             int w = (int) (font.width(label) * 0.6f) + 10;
-            if (bx + w > px + PANE_W - 44) {
-                break;
+            int rowEnd = row == 0 ? px + PANE_W - 44 : px + PANE_W;
+            if (bx + w > rowEnd) {
+                if (++row >= KIT_ROWS) {
+                    break;
+                }
+                bx = px + 50;
             }
-            chip(g, bx, y, w, 13, label, false, VIO, 0.6f, () -> {
+            chip(g, bx, y + row * 15, w, 13, label, false, VIO, 0.6f, () -> {
                 pickingKit = false;
                 send(new AdminActionPacket(AdminActionPacket.REWARD_ADD, sel.group(), "kit", kit.getKey()));
             });
             bx += w + 3;
+            shown++;
+        }
+        if (shown < v.kits().size()) {
+            text(g, clip(Tr.t("more_kits_by_command", v.kits().size() - shown), PANE_W - 50, 0.6f), px + 50, y + KIT_ROWS * 15 + 2, MUTED, 0.6f);
         }
         button(g, px + PANE_W - 40, y, 40, 13, Tr.t("cancel"), MUTED, () -> pickingKit = false);
     }
@@ -561,25 +601,38 @@ public class AdminScreen extends HoloScreen {
         }
         browseQuery = query;
         String q = query.toLowerCase(Locale.ROOT).trim();
-        List<Item> out = new ArrayList<>();
-        for (Item item : ForgeRegistries.ITEMS.getValues()) {
-            if (item == Items.AIR) {
-                continue;
+        if (browseIndex == null) {
+            List<Browsable> index = new ArrayList<>();
+            for (Item item : ForgeRegistries.ITEMS.getValues()) {
+                if (item != Items.AIR) {
+                    ItemStack stack = new ItemStack(item);
+                    index.add(new Browsable(item, stack, (ForgeRegistries.ITEMS.getKey(item) + " " + stack.getHoverName().getString()).toLowerCase(Locale.ROOT)));
+                }
             }
-            ResourceLocation id = ForgeRegistries.ITEMS.getKey(item);
-            if (q.isEmpty() || (id != null && id.toString().contains(q)) || new ItemStack(item).getHoverName().getString().toLowerCase(Locale.ROOT).contains(q)) {
-                out.add(item);
+            browseIndex = index;
+        }
+        List<Item> out = new ArrayList<>();
+        List<ItemStack> stacks = new ArrayList<>();
+        for (Browsable b : browseIndex) {
+            if (q.isEmpty() || b.text().contains(q)) {
+                out.add(b.item());
+                stacks.add(b.stack());
                 if (out.size() >= 2000) {
                     break;
                 }
             }
         }
         browseItems = out;
+        browseStacks = stacks;
         return out;
     }
 
     private void drawBrowser(GuiGraphics g, int x, int y, int mouseX, int mouseY) {
         int bx = x + PANE_X, by = y + PANE_Y, bw = PANE_W, bh = PANE_H - 36;
+        // the browser covers the rung's fields, reward chips and REMOVE RANK: nothing under it takes a click
+        hits.removeIf(h -> h.overlaps(bx, by, bw, bh));
+        hits.add(new Hit(bx, by, bw, bh, () -> {
+        }));
         g.fill(bx, by, bx + bw, by + bh, BG);
         frame(g, bx, by, bw, bh, GOLD);
         text(g, Tr.t("pick_an_item"), bx + 6, by + 5, GOLD, 0.75f);
@@ -593,6 +646,7 @@ public class AdminScreen extends HoloScreen {
             return;
         }
         List<Item> items = inputMode == Input.NONE ? browseResults(input.getValue()) : browseItems;
+        List<ItemStack> stacks = browseStacks;
         int cols = (bw - 12) / 18, gy = by + 18, rows = (bh - 22) / 18;
         int total = (items.size() + cols - 1) / cols;
         browseScroll = Mth.clamp(browseScroll, 0, Math.max(0, total - rows));
@@ -607,14 +661,14 @@ public class AdminScreen extends HoloScreen {
             if (hover) {
                 g.fill(ix, iy, ix + 18, iy + 18, 0x3319D3B0);
             }
-            g.renderItem(new ItemStack(item), ix + 1, iy + 1);
+            g.renderItem(stacks.get(index), ix + 1, iy + 1);
             ResourceLocation id = ForgeRegistries.ITEMS.getKey(item);
             hits.add(new Hit(ix, iy, 18, 18, () -> {
                 browseItem = String.valueOf(id);
                 openInput(Input.ITEM_COUNT, "1", Tr.t("count_enter_adds_it"));
             }));
             if (hover) {
-                textRight(g, clip(new ItemStack(item).getHoverName().getString() + "  " + id, 200, 0.6f), bx + bw - 54, by + 6, MUTED, 0.6f);
+                textRight(g, clip(stacks.get(index).getHoverName().getString() + "  " + id, 200, 0.6f), bx + bw - 54, by + 6, MUTED, 0.6f);
             }
         }
         scrollbar(g, bx + bw, gy, bh - 22, total, rows, browseScroll);
@@ -660,15 +714,15 @@ public class AdminScreen extends HoloScreen {
     // ------------------------------------------------------------------ PLAYERS
 
     private void drawPlayers(GuiGraphics g, int x, int y, int mouseX, int mouseY, Settings s, AdminViewPacket v) {
-        inset(g, x + LIST_X, y + 24, LIST_W, 14);
-        inset(g, x + LIST_X, y + LIST_Y, LIST_W, LIST_H);
+        inset(g, x + LIST_X, y + LIST_Y, LIST_W, SEARCH_H);
+        inset(g, x + LIST_X, y + PLAYERS_Y, LIST_W, PLAYERS_H);
         List<AdminViewPacket.PlayerRow> rows = v.players();
-        int visible = LIST_H / ROW;
+        int visible = PLAYERS_H / ROW;
         playerScroll = Mth.clamp(playerScroll, 0, Math.max(0, rows.size() - visible));
         AdminViewPacket.PlayerDetail d = v.selected();
         for (int i = 0; i < visible && i + playerScroll < rows.size(); i++) {
             AdminViewPacket.PlayerRow r = rows.get(i + playerScroll);
-            int ry = y + LIST_Y + 1 + i * ROW;
+            int ry = y + PLAYERS_Y + 1 + i * ROW;
             boolean sel = !d.isEmpty() && d.uuid().equals(r.uuid());
             boolean hover = mouseX >= x + LIST_X && mouseX < x + LIST_X + LIST_W && mouseY >= ry && mouseY < ry + ROW;
             if (sel) {
@@ -680,8 +734,10 @@ public class AdminScreen extends HoloScreen {
             g.fill(x + LIST_X + 6, ry + 5, x + LIST_X + 9, ry + 8, r.online() ? TQ : LINE);
             text(g, clip(r.name(), 78, 0.85f), x + LIST_X + 13, ry + 3, sel ? TEXT : MUTED, 0.85f);
             Rank rank = r.rank().isEmpty() ? null : s.rank(r.rank());
-            text(g, clip(rank == null ? "-" : rank.displayName(), 44, 0.6f), x + LIST_X + 94, ry + 4, MUTED, 0.6f);
-            textRight(g, String.valueOf(r.points()), x + LIST_X + LIST_W - 6, ry + 4, GOLD, 0.6f);
+            String rowPoints = String.valueOf(r.points());
+            int pointsLeft = x + LIST_X + LIST_W - 6 - (int) (font.width(rowPoints) * 0.6f);
+            text(g, clip(rank == null ? "-" : rank.displayName(), Math.min(44, pointsLeft - 4 - (x + LIST_X + 94)), 0.6f), x + LIST_X + 94, ry + 4, MUTED, 0.6f);
+            textRight(g, rowPoints, x + LIST_X + LIST_W - 6, ry + 4, GOLD, 0.6f);
             hits.add(new Hit(x + LIST_X, ry, LIST_W, ROW, () -> {
                 settingRank = false;
                 armed = null;
@@ -689,9 +745,9 @@ public class AdminScreen extends HoloScreen {
             }));
         }
         if (rows.isEmpty()) {
-            text(g, Tr.t("no_player_matches"), x + LIST_X + 6, y + LIST_Y + 8, MUTED, 0.75f);
+            text(g, Tr.t("no_player_matches"), x + LIST_X + 6, y + PLAYERS_Y + 8, MUTED, 0.75f);
         }
-        scrollbar(g, x + LIST_X + LIST_W, y + LIST_Y, LIST_H, rows.size(), visible, playerScroll);
+        scrollbar(g, x + LIST_X + LIST_W, y + PLAYERS_Y, PLAYERS_H, rows.size(), visible, playerScroll);
         text(g, Tr.n("players_shown", rows.size()), x + LIST_X, y + LIST_Y + LIST_H + 8, MUTED, 0.6f);
 
         int px = x + PANE_X, py = y + PANE_Y;
@@ -700,8 +756,11 @@ public class AdminScreen extends HoloScreen {
             return;
         }
         Rank rank = d.rank().isEmpty() ? null : s.rank(d.rank());
-        text(g, clip(d.name(), 160, 1f), px, py, TEXT, 1f);
-        text(g, rank == null ? Tr.t("no_rank_yet") : Tr.t("rank_i_of_n_name", s.indexOf(rank.group()) + 1, s.ranks().size(), rank.displayName()), px + 4 + (int) font.width(clip(d.name(), 160, 1f)), py + 2, MUTED, 0.6f);
+        String shownName = clip(d.name(), 160, 1f);
+        text(g, shownName, px, py, TEXT, 1f);
+        int afterName = 4 + font.width(shownName);
+        String rankLine = rank == null ? Tr.t("no_rank_yet") : Tr.t("rank_i_of_n_name", s.indexOf(rank.group()) + 1, s.ranks().size(), rank.displayName());
+        text(g, clip(rankLine, PANE_W - afterName, 0.6f), px + afterName, py + 2, MUTED, 0.6f);
         text(g, Tr.t("points_lifetime_season", d.points(), d.seasonPoints()), px, py + 14, GOLD, 0.75f);
         int cy = py + 28;
         inset(g, px, cy, PANE_W, 120);
@@ -713,28 +772,39 @@ public class AdminScreen extends HoloScreen {
                 continue;
             }
             int cx = px + 6 + col * 164, ry = cy + 4 + row * 11;
-            text(g, clip(I18n.get("signal.bsp_rankup." + sig.key()), 90, 0.6f), cx, ry, ss.on() ? TEXT : MUTED, 0.6f);
-            textRight(g, (n == null ? 0 : n) + "  (" + ss.pointsFor(n == null ? 0 : n) + ")", cx + 156, ry, ss.on() ? GOLD : MUTED, 0.6f);
+            String value = (n == null ? 0 : n) + "  (" + ss.pointsFor(n == null ? 0 : n) + ")";
+            int valueW = (int) (font.width(value) * 0.6f);
+            text(g, clip(I18n.get("signal.bsp_rankup." + sig.key()), Math.min(90, 156 - valueW - 4), 0.6f), cx, ry, ss.on() ? TEXT : MUTED, 0.6f);
+            textRight(g, value, cx + 156, ry, ss.on() ? GOLD : MUTED, 0.6f);
             if (++row >= 10) {
                 row = 0;
                 col++;
             }
         }
-        text(g, Tr.t("bonus_points", d.bonus()) + (d.pending() > 0 ? "  " + Tr.n("rewards_waiting", d.pending()) : ""), px, cy + 124, MUTED, 0.6f);
+        text(g, clip(Tr.t("bonus_points", d.bonus()) + (d.pending() > 0 ? "  " + Tr.n("rewards_waiting", d.pending()) : ""), PANE_W, 0.6f), px, cy + 124, MUTED, 0.6f);
         int by = cy + 136;
         if (settingRank) {
+            // the rungs flow over up to SET_RANK_ROWS rows, left of CANCEL on the first; the rest are named by count
             text(g, Tr.t("set_rank_to"), px, by + 3, MUTED, 0.6f);
-            int bx = px + 50;
+            int bx = px + 50, row2 = 0, shown = 0;
             for (Rank r : s.ranks()) {
                 int w = Math.min(70, (int) (font.width(r.displayName()) * 0.6f) + 10);
-                chip(g, bx, by, w, 13, clip(r.displayName(), w - 6, 0.6f), r.group().equals(d.rank()), TQ, 0.6f, () -> {
+                int rowEnd = row2 == 0 ? px + PANE_W - 44 : px + PANE_W;
+                if (bx + w > rowEnd) {
+                    if (++row2 >= SET_RANK_ROWS) {
+                        break;
+                    }
+                    bx = px + 50;
+                }
+                chip(g, bx, by + row2 * 15, w, 13, clip(r.displayName(), w - 6, 0.6f), r.group().equals(d.rank()), TQ, 0.6f, () -> {
                     settingRank = false;
                     send(AdminActionPacket.of(AdminActionPacket.PLAYER_SET, d.uuid().toString(), r.group()));
                 });
                 bx += w + 3;
-                if (bx > px + PANE_W - 40) {
-                    break;
-                }
+                shown++;
+            }
+            if (shown < s.ranks().size()) {
+                text(g, clip(Tr.t("more_ranks_by_command", s.ranks().size() - shown), PANE_W - 50, 0.6f), px + 50, by + SET_RANK_ROWS * 15 + 2, MUTED, 0.6f);
             }
             button(g, px + PANE_W - 40, by, 40, 13, Tr.t("cancel"), MUTED, () -> settingRank = false);
         } else {
@@ -835,7 +905,8 @@ public class AdminScreen extends HoloScreen {
         if (super.onClick(mx, my, button)) {
             return true;
         }
-        for (Hit h : hits) {
+        for (int i = hits.size() - 1; i >= 0; i--) { // newest first: what was drawn last is on top
+            Hit h = hits.get(i);
             if (h.contains(mx, my)) {
                 h.action().run();
                 return true;
@@ -855,7 +926,7 @@ public class AdminScreen extends HoloScreen {
         if (mx >= x + LIST_X && mx < x + LIST_X + LIST_W && my >= y + LIST_Y && my < y + LIST_Y + LIST_H) {
             if (tab == 0) {
                 listScroll -= step;
-            } else if (tab == 2) {
+            } else if (tab == 2 && my >= y + PLAYERS_Y) {
                 playerScroll -= step;
             }
             return true;

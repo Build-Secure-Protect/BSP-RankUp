@@ -38,6 +38,23 @@ public final class Players {
      * else a uuid written out. Empty when nothing matches.
      */
     public static Optional<UUID> find(MinecraftServer server, String nameOrUuid) {
+        Optional<UUID> here = findHere(server, nameOrUuid);
+        if (here.isPresent()) {
+            return here;
+        }
+        if (server.getProfileCache() != null) {
+            var cached = server.getProfileCache().get(nameOrUuid);
+            if (cached.isPresent()) {
+                return Optional.of(cached.get().getId());
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * As {@link #find} without the profile cache, which may ask Mojang and wait: online here, or a uuid written out.
+     */
+    public static Optional<UUID> findHere(MinecraftServer server, String nameOrUuid) {
         for (ServerLevel level : server.getAllLevels()) {
             for (ServerPlayer p : level.players()) {
                 if (p.getGameProfile().getName().equalsIgnoreCase(nameOrUuid)) {
@@ -48,12 +65,6 @@ public final class Players {
         ServerPlayer listed = server.getPlayerList().getPlayerByName(nameOrUuid);
         if (listed != null) {
             return Optional.of(listed.getUUID());
-        }
-        if (server.getProfileCache() != null) {
-            var cached = server.getProfileCache().get(nameOrUuid);
-            if (cached.isPresent()) {
-                return Optional.of(cached.get().getId());
-            }
         }
         try {
             return Optional.of(UUID.fromString(nameOrUuid));

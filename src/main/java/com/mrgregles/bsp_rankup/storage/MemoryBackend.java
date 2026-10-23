@@ -19,7 +19,10 @@ public final class MemoryBackend implements StorageBackend {
     @Nullable
     private SettingsRow settings;
     private final List<Notice> notices = new ArrayList<>();
+    private long lastNoticeId;
     private boolean failing;
+    private int writes;
+    private List<PlayerWrite> lastWrite = List.of();
 
     /** When true every call throws, playing a database outage. */
     public synchronized void setFailing(boolean failing) {
@@ -35,6 +38,25 @@ public final class MemoryBackend implements StorageBackend {
     @Override
     public synchronized void init() throws Exception {
         check();
+    }
+
+    /** All or none, as one transaction: the outage check comes before anything is written. */
+    @Override
+    public synchronized void write(List<PlayerWrite> batch) throws Exception {
+        check();
+        StorageBackend.super.write(batch);
+        writes++;
+        lastWrite = List.copyOf(batch);
+    }
+
+    /** How many batch writes arrived (tests). */
+    public synchronized int writes() {
+        return writes;
+    }
+
+    /** The last batch written (tests). */
+    public synchronized List<PlayerWrite> lastWrite() {
+        return lastWrite;
     }
 
     @Override
@@ -71,9 +93,9 @@ public final class MemoryBackend implements StorageBackend {
     }
 
     @Override
-    public synchronized void setSeason(UUID player, int season, long seasonBase) throws Exception {
+    public synchronized void setSeason(UUID player, int season, long seasonBase, long scorePeak) throws Exception {
         check();
-        seasons.put(player, new long[]{season, seasonBase});
+        seasons.put(player, new long[]{season, seasonBase, scorePeak});
     }
 
     @Override
@@ -105,8 +127,8 @@ public final class MemoryBackend implements StorageBackend {
             return null;
         }
         long[] br = bonusAndRankedAt.getOrDefault(player, new long[2]);
-        long[] se = seasons.getOrDefault(player, new long[2]);
-        return new PlayerRow(player, Map.copyOf(counts.getOrDefault(player, Map.of())), br[0], ranks.get(player), br[1], pending.get(player), (int) se[0], se[1], rewarded.get(player));
+        long[] se = seasons.getOrDefault(player, new long[3]);
+        return new PlayerRow(player, Map.copyOf(counts.getOrDefault(player, Map.of())), br[0], ranks.get(player), br[1], pending.get(player), (int) se[0], se[1], se[2], rewarded.get(player));
     }
 
     /** A count as stored, for tests. */
@@ -130,7 +152,7 @@ public final class MemoryBackend implements StorageBackend {
     @Override
     public synchronized long publish(Notice n) throws Exception {
         check();
-        long id = notices.size() + 1;
+        long id = ++lastNoticeId;
         notices.add(new Notice(id, n.uid(), n.createdAt(), n.source(), n.kind(), n.payload()));
         return id;
     }
@@ -150,7 +172,15 @@ public final class MemoryBackend implements StorageBackend {
     @Override
     public synchronized long latestNoticeId() throws Exception {
         check();
-        return notices.size();
+        return lastNoticeId;
+    }
+
+    @Override
+    public synchronized int deleteNoticesBefore(long createdAtMs) throws Exception {
+        check();
+        int before = notices.size();
+        notices.removeIf(n -> n.createdAt() < createdAtMs);
+        return before - notices.size();
     }
 
     @Override

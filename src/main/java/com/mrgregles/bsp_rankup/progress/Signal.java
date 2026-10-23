@@ -25,7 +25,7 @@ public enum Signal {
     TOTEMS_PLACED("totems_placed", "totem", false, 0, 1, Source.BSP_CORE),
     /** Seasons that ended while the player held progress. Counted from RU-8 on. */
     SEASONS_SURVIVED("seasons_survived", "season", false, 0, 1, Source.BSP_CORE),
-    /** BSP-Core's season score points (D27; needs request RU-R1). */
+    /** BSP-Core's points (D27, D48; BSP-Core 1.4.5's {@code BspScores}): each season's peak, added up. See {@code signal/ScoreSignal}. */
     SCORE("score", "point", false, 1, 100, Source.BSP_CORE),
     /** Shatter Pieces earned (needs a bank event from BSP-Core). */
     COINS_EARNED("coins_earned", "piece", false, 1, 1000, Source.BSP_CORE),
