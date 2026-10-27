@@ -55,14 +55,49 @@ def screen_frame(title, status, tab=None):
     s += t("t1 tq", 10, 8, title) + t("t6 hint", W - 10, 10, status, "transform:translateX(-100%)")
     if tab is not None:
         x = 8
-        for i, name in enumerate(["LADDER", "SIGNALS", "PLAYERS", "OPTIONS"]):
+        for i, name in enumerate(TABS):
             s += chip(x, 22, 54, 12, name, "big on" if i == tab else "big")
             x += 57
     return s
 
 
-def rung_list(selected):
-    s = inset(8, 40, 164, 214)
+TABS = ["LADDER", "GROUPS", "SIGNALS", "PLAYERS", "PREFIXES", "OPTIONS"]
+T_LADDER, T_GROUPS, T_SIGNALS, T_PLAYERS, T_PREFIXES, T_OPTIONS = range(6)
+
+
+def badge(label, w, bg, edge, scale=1):
+    """A prefix image as the PNG would look: one text line (9 units) high, w wide."""
+    return (f'<span style="display:inline-flex;align-items:center;justify-content:center;width:{w * scale}px;height:{9 * scale}px;'
+            f'background:{bg};box-shadow:inset 0 0 0 {0.6 * scale}px {edge};color:#fff;font-size:{5.2 * scale}px;letter-spacing:0.3px;'
+            f'text-shadow:{0.6 * scale}px {0.6 * scale}px 0 rgba(0,0,0,0.55);vertical-align:middle">{label}</span>')
+
+
+IMAGES = {
+    "warden": ("WARDEN", 40, "linear-gradient(#2fd3e6,#127a8f)", "#bff6ff"),
+    "legend": ("LEGEND", 44, "linear-gradient(#ffd75a,#b9741a)", "#fff1b8"),
+    "reaver": ("REAVER", 40, "linear-gradient(#ff6a5a,#8f1d1d)", "#ffc2b8"),
+    "admin": ("ADMIN", 36, "linear-gradient(#ff4d6d,#7a1030)", "#ffd0d9"),
+    "mod": ("MOD", 28, "linear-gradient(#6d8bff,#22308f)", "#d0d9ff"),
+}
+
+
+def img(key, scale=1):
+    label, w, bg, edge = IMAGES[key]
+    return badge(label, w, bg, edge, scale)
+
+
+def ladder_strip(chosen="PLAYTIME"):
+    """LADDER's ladder chips and the chosen ladder's strip (D51)."""
+    s = chip(8, 40, 64, 12, "PLAYTIME", "big on" if chosen == "PLAYTIME" else "big") + chip(75, 40, 56, 12, "RAIDER", "big") + chip(134, 40, 60, 12, "+ LADDER", "big")
+    s += inset(8, 56, 504, 14) + "</div>"
+    s += t("t5 hint", 13, 60, "TRACK") + chip(34, 57, 60, 12, "rankup", "big")
+    s += t("t5 hint", 100, 60, "COUNTS") + chip(124, 57, 62, 12, "every signal", "on") + chip(189, 57, 46, 12, "+ signal")
+    s += chip(380, 57, 72, 12, "titles at 1000") + chip(458, 57, 52, 12, "RENAME")
+    return s
+
+
+def rung_list(selected, y=74, h=182):
+    s = inset(8, y, 164, h)
     for i, (g, name, pts, seasonal, holders) in enumerate(LADDER):
         ry = 1 + i * 14
         sel = g == selected
@@ -72,28 +107,33 @@ def rung_list(selected):
             s += '<span class="t6 vio" style="width:12px">S</span>'
         s += f'<span class="t75 gold" style="width:34px;text-align:right">{pts:,}</span></div>'.replace(",", " ")
     s += "</div>"
-    s += btn(8, 260, 72, 13, "+ ADD RANK") + btn(84, 260, 26, 13, "UP", "") + btn(114, 260, 26, 13, "DOWN", "") + btn(144, 260, 28, 13, "IMPORT", "")
+    by = y + h + 6
+    s += btn(8, by, 72, 13, "+ ADD RANK") + btn(84, by, 26, 13, "UP", "") + btn(114, by, 26, 13, "DOWN", "") + btn(144, by, 28, 13, "IMPORT", "")
     return s
 
 
-STATUS = "track rankup - 5 rungs - LuckPerms: Bukkit plugin"
+STATUS = "track rankup - 5 rungs - LuckPerms: Forge edition"
 
 
 def admin_ladder(picking=False):
-    s = screen_frame("RANKUP ADMIN", STATUS, 0) + rung_list("warden")
-    px, py = 180, 40
+    s = screen_frame("RANKUP ADMIN", STATUS, T_LADDER) + ladder_strip() + rung_list("warden")
+    px, py = 180, 76
     s += t("t1 text", px, py, "WARDEN") + t("t6 hint", W - 10, py + 2, "rung 3 of 5 - 12 players hold it", "transform:translateX(-100%)")
     s += field(px, py + 14, 100, "GROUP", "warden", True) + field(px + 106, py + 14, 110, "DISPLAY NAME", "Warden") + field(px + 222, py + 14, 50, "POINTS", "1500")
     s += t("t5 hint", px + 278, py + 14, "SEASON") + chip(px + 278, py + 21, 26, 13, "keep", "on") + chip(px + 305, py + 21, 27, 13, "reset")
-    s += t("t5 tq", px, py + 42, "REWARDS WHEN REACHED") + inset(px, py + 50, 332, 108)
+    s += t("t5 tq", px, py + 42, "REWARDS WHEN REACHED") + inset(px, py + 50, 332, 76)
     rows = [("COINS", "coins worth 64 Copper"), ("PIECES", "250 pieces into the bank"), ("ITEM", "2 x Netherite Ingot"), ("TITLE", "&amp;b[Warden]"), ("COMMAND", "/give %player% minecraft:totem_of_undying")]
     if picking:
         rows.append(("KIT", "the kit Warden's Armour"))
     for i, (k, v) in enumerate(rows):
         ry = 1 + i * 12
+        if k == "TITLE":
+            v = '<span style="color:#55ffff">[Warden]</span> <span class="hint">&amp;b[Warden]</span>'
+            # the read-only image slot beside a title (D65): a click opens PREFIXES on it
+            s += f'<div class="abs" style="left:{332 - 64}px;top:{ry + 1}px;width:48px;height:10px;border:1px solid var(--vio);overflow:hidden;display:flex;align-items:center;justify-content:center;line-height:0">{img("warden")}</div>'
         s += t("t5 vio", 4, ry + 3, k) + t("t6 text", 50, ry + 2, v) + chip(332 - 14, ry + 1, 11, 10, "x", "bad")
     s += "</div>"
-    ay = py + 50 + 108 + 5
+    ay = py + 50 + 76 + 5
     s += kind_chips(px, ay, picking)
     if picking:
         s += t("t5 hint", px, ay + 20, "pick a kit:")
@@ -118,13 +158,13 @@ def kind_chips(px, ay, picking):
 
 
 def item_browser():
-    s = screen_frame("RANKUP ADMIN", STATUS, 0) + rung_list("warden")
-    px, py = 180, 40
-    s += f'<div class="screen gold" style="left:{px}px;top:{py}px;width:332px;height:{240 - 36}px">'
+    s = screen_frame("RANKUP ADMIN", STATUS, T_LADDER) + ladder_strip() + rung_list("warden")
+    px, py = 180, 76
+    s += f'<div class="screen gold" style="left:{px}px;top:{py}px;width:332px;height:{244 - 76}px">'
     s += t("t75 gold", 6, 5, "PICK AN ITEM") + btn(332 - 50, 3, 46, 11, "CLOSE", "")
     items = ["#c9a44c", "#b0b0b0", "#5fb4e0", "#2f2f2f", "#8b5a2b", "#e0d05f", "#4caf50", "#d9d9d9", "#7a4a2a", "#bfe0ff", "#a0522d", "#777", "#b8860b", "#9acd32", "#f5f5dc", "#4682b4", "#3a3a3a", "#cd853f"]
     cols = (332 - 12) // 18
-    for i in range(cols * 8):
+    for i in range(cols * 8):  # eight rows fill the browser's 168 units
         c = items[i % len(items)]
         ix, iy = 6 + (i % cols) * 18, 18 + (i // cols) * 18
         hover = i == 21
@@ -137,7 +177,7 @@ def item_browser():
 
 
 def admin_signals():
-    s = screen_frame("RANKUP ADMIN", STATUS, 1)
+    s = screen_frame("RANKUP ADMIN", STATUS, T_SIGNALS)
     lx, ly = 8, 40
     s += inset(lx, ly, 504, 230)
     s += t("t5 hint", 6, 4, "SIGNAL") + t("t5 hint", 150, 4, "ON") + t("t5 hint", 200, 4, "WORTH") + t("t5 hint", 380, 4, "FROM")
@@ -153,9 +193,9 @@ def admin_signals():
 
 
 def admin_players():
-    s = screen_frame("RANKUP ADMIN", STATUS, 2)
-    s += inset(8, 24, 164, 14) + "</div>" + t("t75 hint", 12, 27, "find player")
-    s += inset(8, 40, 164, 214)
+    s = screen_frame("RANKUP ADMIN", STATUS, T_PLAYERS)
+    s += inset(8, 40, 164, 14) + "</div>" + t("t75 hint", 12, 43, "find player")
+    s += inset(8, 56, 164, 198)
     players = [("Mrgregles", "Warden", 2140, True, True), ("Tyler_S", "Raider", 640, True, False), ("Kestrel", "Vanguard", 4210, True, False), ("Bramble", "Settler", 95, False, False), ("Alex_Builds", "Raider", 712, False, False), ("Sam_W", "Settler", 230, False, False)]
     for i, (name, rank, pts, online, sel) in enumerate(players):
         ry = 1 + i * 14
@@ -183,18 +223,19 @@ def admin_players():
 
 
 def admin_options():
-    s = screen_frame("RANKUP ADMIN", STATUS, 3)
+    s = screen_frame("RANKUP ADMIN", STATUS, T_OPTIONS)
     px, py = 8, 40
     s += field(px, py, 150, "LUCKPERMS TRACK", "rankup")
     s += t("t5 hint", px + 160, py, "ANNOUNCE RANK-UPS") + chip(px + 160, py + 7, 50, 13, "off") + chip(px + 213, py + 7, 50, 13, "server") + chip(px + 266, py + 7, 50, 13, "network", "vio")
     s += field(px, py + 28, 150, "KILL COOLDOWN (MIN)", "10") + field(px + 160, py + 28, 100, "TITLE PRIORITY", "1000")
     s += t("t5 hint", px + 270, py + 28, "SEASONAL REWARDS") + chip(px + 270, py + 35, 60, 13, "each season", "on") + chip(px + 333, py + 35, 40, 13, "once")
+    s += t("t5 hint", px + 384, py + 28, "PREFIXES IN CHAT") + chip(px + 384, py + 35, 30, 13, "on", "on") + chip(px + 417, py + 35, 30, 13, "off")
     by = py + 60
     s += btn(px, by, 150, 13, "MAKE TRACK IN LUCKPERMS", "bad") + t("t5 hint", px + 156, by + 3, "makes the track and any missing groups from this ladder")
     s += btn(px, by + 18, 72, 13, "EXPORT") + btn(px + 76, by + 18, 72, 13, "IMPORT") + t("t5 hint", px + 156, by + 21, "files live in config/bsp_rankup/")
     iy = by + 42
     s += inset(px, iy, 504, 60)
-    lines = ["LuckPerms: Bukkit plugin", "Track rankup: settler > raider > warden > vanguard > legend",
+    lines = ["LuckPerms: Forge edition", "Track rankup: settler > raider > warden > vanguard > legend",
              "Storage: mysql localhost:3306/bsp as bsp, prefix bsp_ru_, this server 'survival-2', no errors, 14 notices handled; redis 10.0.0.5:6379, channel bsp_ru:messages: connected; sent 9, received 14",
              "Players with progress here: 106"]
     for i, line in enumerate(lines):
@@ -208,7 +249,8 @@ def admin_options():
 
 def player_screen():
     s = screen_frame("YOUR RANK", "Mrgregles - survival-2 - season 4")
-    lx, ly, lw, lh = 8, 24, 172, 268
+    s += chip(8, 22, 64, 11, "PLAYTIME", "big on") + chip(75, 22, 50, 11, "RAIDER", "big") + chip(128, 22, 50, 11, "AWARDS", "big")
+    lx, ly, lw, lh = 8, 36, 172, 248
     s += inset(lx, ly, lw, lh)
     n = len(LADDER)
     step = max(30, min(44, (lh - 12) // n))
@@ -235,9 +277,9 @@ def player_screen():
         line = "you, since 11 days" if mine else "next: 3360 points to go" if i == current + 1 else f"{holders} player{'s' if holders != 1 else ''} hold{'s' if holders == 1 else ''} it"
         s += t("t5 " + ("gold" if mine else "hint"), cx + 4, cy + 14, line)
     s += "</div>"
-    px, py = 190, 24
+    px, py = 190, 38
     s += f'<div class="abs" style="left:{px}px;top:{py}px;font-size:15.75px;line-height:1;color:var(--text)">WARDEN</div>'
-    s += t("t5 hint", px + 70, py + 6, "rank 3 of 5") + chip(px + 112, py + 3, 36, 11, "[Warden]", "vio")
+    s += t("t5 hint", px + 70, py + 6, "rank 3 of 5") + f'<div class="abs" style="left:{px + 112}px;top:{py + 3}px">{img("warden")}</div>'
     s += t("t6 gold", px, py + 18, "2140 points - 640 this season")
     ny = py + 34
     s += t("t5 tq", px, ny, "NEXT: VANGUARD AT 4000 POINTS  (this season's points count)")
@@ -312,9 +354,9 @@ def flow():
     s += '<div class="arrow" style="left:146px;top:52px">&#8594;</div>'
     s += card(162, 18, 120, 96, "POINTS", "Each signal's count times its worth, plus any bonus an admin gave. Lifetime points for permanent rungs; points since the last season end for seasonal ones.", "gold")
     s += '<div class="arrow" style="left:286px;top:52px">&#8594;</div>'
-    s += card(302, 18, 130, 96, "THE LADDER", "A LuckPerms track: each rung a group, a display name, the points it needs, a seasonal flag and what it gives. Pass a rung's points and you are moved onto its group.", "vio")
+    s += card(302, 18, 130, 96, "THE LADDERS", "Each a LuckPerms track counting its own signals: each rung a group, the points it needs, a seasonal flag and what it gives. Awards are single groups given at their points.", "vio")
     s += '<div class="arrow" style="left:436px;top:52px">&#8594;</div>'
-    s += card(452, 18, 130, 96, "RANK UP", "LuckPerms gets the group; you get the rewards (coins, pieces, items, a title, commands), a message, and the server hears it. Never downward by points alone.", "tq")
+    s += card(452, 18, 130, 96, "RANK UP", "LuckPerms gets the group; you get the rewards (coins, pieces, items, a title, commands, kits), a message, and the server hears it. Your title shows before your name, as an image if the rank has one.", "tq")
     s += '<div class="abs cap" style="left:12px;top:124px;font-size:7px;color:var(--muted)">All of it set in game by an admin; the server config holds only the database connection for a network.</div>'
     return s
 
@@ -322,28 +364,28 @@ def flow():
 def network():
     s = '<div class="world"></div>'
     for i, (name, x) in enumerate([("survival-1", 20), ("survival-2", 190), ("creative", 360)]):
-        s += card(x, 18, 150, 70, name.upper(), "Mohist 1.20.1 with BSP Core, RankUp and the LuckPerms plugin. Counts are written through as they happen; a player's row is read when they log in here.")
+        s += card(x, 18, 150, 70, name.upper(), "Forge 1.20.1 with BSP Core, RankUp and LuckPerms. Counts are written through as they happen; a player's row is read when they log in here, before anything is decided for them.")
     s += '<div class="abs" style="left:95px;top:88px;width:2px;height:30px;background:var(--line)"></div><div class="abs" style="left:265px;top:88px;width:2px;height:30px;background:var(--line)"></div><div class="abs" style="left:435px;top:88px;width:2px;height:30px;background:var(--line)"></div>'
     s += '<div class="abs" style="left:95px;top:118px;width:342px;height:2px;background:var(--line)"></div>'
-    s += card(60, 128, 160, 58, "MYSQL", "bsp_ru_counts, bsp_ru_players, bsp_ru_settings, bsp_ru_notices: one set of tables for the whole network, so playtime on every server adds up and the ladder is the same everywhere.", "gold")
-    s += card(240, 128, 130, 58, "REDIS", "Settings changes and rank-up announcements reach every server at once; the notice table carries them when Redis is down.", "bad")
+    s += card(60, 128, 160, 58, "MYSQL", "bsp_ru_counts, bsp_ru_players, bsp_ru_settings, bsp_ru_images, bsp_ru_notices: one set of tables for the whole network, so playtime on every server adds up, the ladders are the same everywhere, and a prefix image picked on one server shows on all.", "gold")
+    s += card(240, 128, 130, 58, "REDIS", "Settings changes, prefix images and announcements reach every server at once; the notice table carries them when Redis is down.", "bad")
     s += card(390, 128, 180, 58, "LUCKPERMS", "Its own shared database: a group given on one server holds on all of them, and Region Guard's rank-gated regions see it too.", "vio")
     return s
 
 
 def companions():
     s = '<div class="world"></div>'
-    s += card(12, 16, 180, 150, "BSP CORE (required)", "Totem events: steals that succeed count as stolen for the thief and lost for the owner, steals that fail while you are online as protected, totems placed. The bank, the coins and (1.3.0) the kits for rewards. The same admin list as every BSP mod. Season ends drive the seasonal rungs.")
-    s += card(206, 16, 180, 150, "BSP REGION GUARD (optional)", "Buying a plot at the Land Office counts a claim bought. Region Guard's regions and mines are gated by LuckPerms groups: the ranks RankUp hands out open them. The server id is shared.", "vio")
-    s += card(400, 16, 180, 150, "LUCKPERMS and BSP TELEPORT", "LuckPerms holds the ranks (Bukkit plugin on Mohist or the Forge mod): RankUp promotes along a track and sets prefix titles, and can create the track from its ladder. BSP Teleport needs no link; a teams mod can register the team hook so kills between teammates count for nothing.", "gold")
+    s += card(12, 16, 180, 150, "BSP CORE (required)", "Totem events: steals that succeed count as stolen for the thief and lost for the owner, steals that fail while you are online as protected, totems placed. The bank, the coins and the kits for rewards, the season score as a signal, the teams. The same admin list as every BSP mod. Season ends drive the seasonal rungs. Needs 1.4.5 or newer.")
+    s += card(206, 16, 180, 150, "BSP REGION GUARD (optional)", "Buying a plot at the Land Office counts a claim bought. Region Guard's regions and mines are gated by LuckPerms groups: the ranks and awards RankUp hands out open them (list every rung from the lowest that should get in). The server id is shared.", "vio")
+    s += card(400, 16, 180, 150, "LUCKPERMS and BSP TELEPORT", "LuckPerms holds the ranks (the Forge mod, or the Bukkit plugin on Mohist): RankUp moves players along each ladder's track, adds award groups, sets titles, and shows every player's prefix before their name, as an image when the rank has one. BSP Teleport needs no link.", "gold")
     return s
 
 
 def chat():
     s = '<div class="world"></div>'
     s += '<div class="abs" style="left:12px;top:12px;width:376px;height:96px;background:rgba(0,0,0,0.5)"></div>'
-    lines = [("#ffffff", "&lt;Tyler_S&gt; who is at the arena"), ("#ffff55", "Mrgregles reached the rank Warden!"), ("#55ffff", "You are now Warden!"),
-             ("#ffffff", "+ Shatter Coins worth 64 Copper"), ("#ffffff", "+ 250 pieces into your bank"), ("#ffffff", "+ 2 x Netherite Ingot"), ("#ffffff", "Your title is now [Warden]"),
+    lines = [("#ffffff", "&lt;" + img("mod") + " Tyler_S&gt; who is at the arena"), ("#ffff55", "Mrgregles reached the rank Warden!"), ("#55ffff", "You are now Warden!"),
+             ("#ffffff", "+ Shatter Coins worth 64 Copper"), ("#ffffff", "+ 250 pieces into your bank"), ("#ffffff", "+ 2 x Netherite Ingot"), ("#ffffff", 'Your title is now <span style="color:#55ffff">[Warden]</span>'),
              ("#aaaaaa", "[Season 4 is over: you are Warden again. Seasonal ranks start afresh.]")]
     for i, (c, line) in enumerate(lines):
         s += f'<div class="abs" style="left:16px;top:{16 + i * 11}px;font-size:9px;color:{c};text-shadow:1px 1px #000">{line}</div>'
@@ -374,6 +416,106 @@ def banner():
     return s
 
 
+def admin_prefixes():
+    """PREFIXES (D65): every prefix by where it comes from, the chosen one's image and the folder's files."""
+    s = screen_frame("RANKUP ADMIN", "7 prefixes - 5 with an image - 6 files", T_PREFIXES)
+    s += inset(8, 40, 200, 216)
+    rows = [("LADDER PLAYTIME", None, None), ("Warden", "warden", True), ("Legend", "legend", False), ("LADDER RAIDER", None, None), ("Reaver", "reaver", False),
+            ("AWARDS", None, None), ("apple_picker", '<span style="color:#55ff55">[Apple Picker]</span>', False),
+            ("LUCKPERMS GROUPS", None, None), ("admin", "admin", False), ("moderator", "mod", False), ("founder", '<span style="color:#ffaa00">[Founder]</span>', False)]
+    for i, (name, shown, sel) in enumerate(rows):
+        ry = 1 + i * 14
+        if shown is None:
+            s += t("t5 tq", 6, ry + 5, name)
+            continue
+        text_prefix = shown.startswith("<span")
+        s += f'<div class="row{" sel" if sel else ""}" style="top:{ry}px;height:14px">'
+        s += f'<span class="t75 {"text" if sel else "muted"}" style="flex:1">{name}</span>'
+        s += f'<span class="t6" style="margin-right:3px">{shown}</span>' if text_prefix else f'<span style="margin-right:2px">{img(shown)}</span>'
+        if text_prefix:
+            s += '<span class="t5 muted">text</span>'
+        s += "</div>"
+    s += "</div>" + btn(8, 262, 60, 13, "REFRESH", "") + chip(71, 262, 92, 13, "only without image")
+    px, py = 216, 40
+    s += t("t1 text", px, py, "WARDEN") + t("t6 hint", W - 8, py + 2, "title of rung 3 on Playtime", "transform:translateX(-100%)")
+    s += t("t5 hint", px, py + 14, "PREFIX TEXT") + inset(px, py + 21, 150, 13) + "</div>" + t("t75", px + 4, py + 24, '<span style="color:#55ffff">[Warden]</span>')
+    s += btn(px + 156, py + 21, 74, 13, "EDIT ON LADDER", "")
+    s += t("t5 hint", px, py + 42, "IMAGE") + inset(px, py + 49, 296, 34) + "</div>"
+    s += f'<div class="abs" style="left:{px + 6}px;top:{py + 61}px">{img("warden")}</div>' + t("t5 hint", px + 50, py + 63, "line size")
+    s += f'<div class="abs" style="left:{px + 78}px;top:{py + 57}px">{img("warden", 2)}</div>' + t("t5 hint", px + 162, py + 63, "x2")
+    s += t("t6 hint", px + 290, py + 56, "warden.png - 40 x 9", "transform:translateX(-100%)")
+    s += t("t5 hint", px, py + 90, "IN CHAT")
+    s += f'<div class="abs" style="left:{px}px;top:{py + 97}px;width:296px;height:13px;background:rgba(0,0,0,0.5)"></div>'
+    s += f'<div class="abs" style="left:{px + 4}px;top:{py + 99}px;font-size:8px;color:#fff;text-shadow:1px 1px #000">&lt;{img("warden")} Mrgregles&gt; hello</div>'
+    s += t("t5 tq", px, py + 118, "FILES IN prefix_images/") + inset(px, py + 126, 296, 74)
+    files = [("warden", "warden.png", "40 x 9", "in use here", "tq"), ("legend", "legend.png", "44 x 9", "on legend", "muted"), ("reaver", "reaver.png", "40 x 9", "on reaver", "muted"),
+             ("admin", "admin.png", "36 x 9", "on admin", "muted"), ("mod", "mod_badge.png", "28 x 9", "on moderator", "muted"), (None, "founder_banner.png", "", "300 x 80: over 256 x 64", "bad")]
+    for i, (key, name, size, tag, cls) in enumerate(files):
+        ry = 1 + i * 12
+        s += f'<div class="row{" sel" if i == 0 else ""}" style="top:{ry}px;height:12px">'
+        s += f'<span style="width:70px">{img(key) if key else ""}</span><span class="t6 {"bad" if key is None else "text" if i == 0 else "muted"}" style="width:76px">{name}</span>'
+        s += f'<span class="t5 hint" style="flex:1">{size}</span><span class="t5 {cls}">{tag}</span></div>'
+    s += "</div>"
+    s += btn(px, py + 205, 70, 13, "USE IMAGE", "") + btn(px + 73, py + 205, 84, 13, "SHOW TEXT AGAIN", "bad") + t("t5 hint", px + 164, py + 208, "saved for every server")
+    s += t("t6 tq", 10, H - 12, "warden's title now shows warden.png in chat and the tab list")
+    return s + "</div>"
+
+
+def admin_groups():
+    """GROUPS (D50, D51): LuckPerms' groups, an award chosen."""
+    s = screen_frame("RANKUP ADMIN", "27 LuckPerms groups - 10 on ladders - 2 awards", T_GROUPS)
+    s += inset(8, 40, 164, 14) + "</div>" + t("t75 hint", 13, 43, "find group")
+    s += inset(8, 56, 164, 198)
+    rows = [("ON A LADDER", None, ""), ("settler", "Playtime 1", "tq"), ("warden", "Playtime 3", "tq"), ("cutpurse", "Raider 1", "tq"), ("reaver", "Raider 3", "tq"),
+            ("AWARDS", None, ""), ("apple_picker", "pieces_earned", "gold"), ("bulwark", "totems_protected", "gold"),
+            ("NOT RANKUP'S", None, ""), ("admin", "not used", "muted"), ("builder", "not used", "muted"), ("moderator", "not used", "muted")]
+    for i, (name, tag, cls) in enumerate(rows):
+        ry = 1 + i * 14
+        if tag is None:
+            s += t("t5 tq", 6, ry + 5, name)
+            continue
+        sel = name == "apple_picker"
+        s += f'<div class="row{" sel" if sel else ""}" style="top:{ry}px;height:14px"><span class="t75 {"text" if sel else "muted"}" style="flex:1">{name}</span><span class="t5 {cls}">{tag}</span></div>'
+    s += "</div>" + t("t5 hint", 8, 262, "27 groups") + btn(122, 259, 50, 13, "REFRESH", "")
+    px, py = 180, 40
+    s += t("t1 text", px, py, "APPLE_PICKER") + chip(px + 78, py - 1, 40, 11, "AWARD", "gold") + t("t5 hint", W - 8, py + 2, "14 players hold it", "transform:translateX(-100%)")
+    s += t("t5 hint", px, py + 12, "Given once a player reaches it, and kept. Not on any ladder.")
+    s += field(px, py + 22, 120, "DISPLAY NAME", "Apple Picker") + field(px + 126, py + 22, 70, "NEEDS (POINTS)", "5000")
+    s += t("t5 hint", px + 278, py + 22, "SEASON") + chip(px + 278, py + 29, 26, 13, "keep", "on") + chip(px + 305, py + 29, 27, 13, "reset")
+    s += t("t5 hint", px, py + 47, "COUNTS") + chip(px + 24, py + 44, 66, 12, "pieces earned", "on") + chip(px + 93, py + 44, 46, 12, "+ signal")
+    s += t("t5 tq", px, py + 62, "REWARDS WHEN REACHED") + inset(px, py + 70, 332, 76)
+    rewards = [("ITEM", "16 x Golden Apple"), ("TITLE", '<span style="color:#55ff55">[Apple Picker]</span> <span class="hint">&amp;a[Apple Picker]</span>')]
+    for i, (k, v) in enumerate(rewards):
+        ry = 1 + i * 12
+        if k == "TITLE":
+            s += f'<div class="abs" style="left:{332 - 64}px;top:{ry + 1}px;width:48px;height:10px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center"><span class="t5 muted">image</span></div>'
+        s += t("t5 vio", 4, ry + 3, k) + t("t6 text", 50, ry + 2, v) + chip(332 - 14, ry + 1, 11, 10, "x", "bad")
+    s += "</div>"
+    ay = py + 70 + 76 + 5
+    s += kind_chips(px, ay, False)
+    s += t("t5 hint", px, ay + 21, "Stopping keeps the group on players who have it.") + btn(W - 8 - 80, ay + 18, 80, 13, "STOP AWARDING", "bad")
+    s += t("t6 hint", 10, H - 12, "Changes save at once and reach every server. Esc closes.")
+    return s + "</div>"
+
+
+def prefix_chat():
+    """Prefixes before names in chat and the tab list: images where the rank has one, coloured text where not."""
+    s = '<div class="world"></div>'
+    s += '<div class="abs" style="left:110px;top:8px;width:180px;height:44px;background:rgba(0,0,0,0.5)"></div>'
+    s += '<div class="abs" style="left:110px;top:10px;width:180px;text-align:center;font-size:7px;color:#aaa">BSP Spawn - 23 online</div>'
+    tab = [(img("admin"), "Steve_Admin"), (img("warden"), "Mrgregles"), ('<span style="color:#55ff55">[Apple Picker]</span>', "PieFarmer"), (img("mod"), "Kestrel")]
+    for i, (p, n) in enumerate(tab):
+        x, y = 112 + (i % 2) * 89, 20 + (i // 2) * 12
+        s += f'<div class="abs" style="left:{x}px;top:{y}px;width:86px;height:10px;background:rgba(255,255,255,0.08);display:flex;align-items:center;gap:2px;font-size:7px;color:#fff;white-space:nowrap;overflow:hidden">{p}<span>{n}</span></div>'
+    s += '<div class="abs" style="left:12px;top:64px;width:376px;height:58px;background:rgba(0,0,0,0.5)"></div>'
+    lines = [(img("warden"), "Mrgregles", "anyone up for a raid at Stormfall?"), (img("admin"), "Steve_Admin", "restart in 5 minutes, find somewhere safe"),
+             ('<span style="color:#55ff55">[Apple Picker]</span> ', "PieFarmer", "5000 pieces of apple. never again"), (img("mod"), "Kestrel", "gg on the totem")]
+    for i, (p, n, m) in enumerate(lines):
+        s += f'<div class="abs" style="left:16px;top:{67 + i * 13}px;font-size:9px;color:#fff;text-shadow:1px 1px #000;white-space:nowrap">&lt;{p} {n}&gt; {m}</div>'
+    s += '<div class="abs" style="left:60px;top:52px;background:rgba(16,0,16,0.94);border:1px solid #5000ff;padding:1px 3px;font-size:7px;color:#fff;white-space:nowrap"><span style="color:#55ffff">[Warden]</span> <span style="color:#aaa">Playtime: Warden</span></div>'
+    return s
+
+
 def main():
     page("banner", (600, 150), banner(), "#0c1016")
     page("player_screen", PAGE, player_screen())
@@ -388,7 +530,10 @@ def main():
     page("network", (590, 196), network())
     page("companions", (592, 176), companions())
     page("chat", (400, 120), chat())
-    print("13 pages written to", HERE)
+    page("admin_prefixes", PAGE, admin_prefixes())
+    page("admin_groups", PAGE, admin_groups())
+    page("prefix_chat", (400, 130), prefix_chat())
+    print("16 pages written to", HERE)
 
 
 if __name__ == "__main__":
