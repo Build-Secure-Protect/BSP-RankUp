@@ -4,7 +4,9 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
-Version 0.5.0 (`mod_version`). Protocol 4 (D105): the server and the modpack update together.
+## [0.5.0] - 2026-10-27
+
+Protocol 4 (D105): the server and every player's modpack update together; 0.4.x clients cannot join. Requires BSP-Core 1.4.5 or newer. On a network, update every backend together: an older RankUp misreads the new awards and login lines in the shared rows, and editing settings on one drops suffix images and hover notes.
 
 ### Added (2026-10-27, awards by hand, ladder chips, the login line, D109 to D122)
 - **Give and take awards** on PLAYERS: a click on an award chip opens a line under the chips with GIVE IT or TAKE IT. GIVE adds the LuckPerms group with no rewards (then or later) and no announcement; TAKE removes it and marks it **taken**, so the rank check never gives it back, across seasons, until an admin gives it again. Rewards already given stay; a title the award gave gives way to the next award's kept. The player is told in chat either way. Commands: `/rankup award give|take <player> <award>`. The taken mark is kept in the player's shared row.

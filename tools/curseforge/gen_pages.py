@@ -86,6 +86,53 @@ def img(key, scale=1):
     return badge(label, w, bg, edge, scale)
 
 
+# ------------------------------------------------------------------ the BSP rank art (D87), for the 0.5.0 pictures
+
+_ART = None
+
+
+def bsp():
+    """The BSP rank art made by tools/prefix_art/gen_prefix_art.py (style BSP), and that module, loaded once."""
+    global _ART
+    if _ART is None:
+        import sys
+        sys.path.insert(0, str(HERE.parent / "prefix_art"))
+        import gen_prefix_art as gpa
+        _ART = (gpa.render("BSP"), gpa)
+    return _ART
+
+
+def art(group, k=1):
+    """A rank's image as players see it: the PNG at one text line high (k times larger)."""
+    images, gpa = bsp()
+    a = images[group]
+    return (f'<img src="{gpa.data_uri(a)}" alt="{group}" style="width:{a.w * k}px;height:{9 * k}px;image-rendering:pixelated;'
+            f'display:inline-block;vertical-align:middle">')
+
+
+def art_width(group):
+    return bsp()[0][group].w
+
+
+def at(x, y, html):
+    """Something placed at (x, y) whose top is its image's top (no line height under it)."""
+    return f'<div class="abs" style="left:{x}px;top:{y}px;line-height:0">{html}</div>'
+
+
+def tags(groups):
+    """Images side by side, one pixel apart (D96)."""
+    return '<span style="display:inline-flex;gap:1px;vertical-align:middle">' + "".join(art(g) for g in groups) + "</span>"
+
+
+def suffix_text(group):
+    """An achievement's suffix as LuckPerms holds it: its text and colour, and how it's earned (the hover note)."""
+    _, gpa = bsp()
+    for g, name, code, _, how in gpa.ACHIEVEMENTS:
+        if g == group:
+            return f"✦ {name}", "#%06x" % gpa.MC[code], how
+    raise KeyError(group)
+
+
 def ladder_strip(chosen="PLAYTIME"):
     """LADDER's ladder chips and the chosen ladder's strip (D51)."""
     s = chip(8, 40, 64, 12, "PLAYTIME", "big on" if chosen == "PLAYTIME" else "big") + chip(75, 40, 56, 12, "RAIDER", "big") + chip(134, 40, 60, 12, "+ LADDER", "big")
@@ -176,48 +223,101 @@ def item_browser():
     return s + "</div>"
 
 
+STATUS_05 = "2 ladders - 3 awards - LuckPerms: Forge edition"  # the 0.5.0 pictures: RANKUP's 12 rungs and an example PVP ladder
+
+
 def admin_signals():
-    s = screen_frame("RANKUP ADMIN", STATUS, T_SIGNALS)
-    lx, ly = 8, 40
-    s += inset(lx, ly, 504, 230)
-    s += t("t5 hint", 6, 4, "SIGNAL") + t("t5 hint", 150, 4, "ON") + t("t5 hint", 200, 4, "WORTH") + t("t5 hint", 380, 4, "FROM")
+    """SIGNALS (D81 to D84): each signal's switch and worth, then a column per ladder and award with a tick where it counts."""
+    s = screen_frame("RANKUP ADMIN", STATUS_05, T_SIGNALS)
+    lx, ly, lw, lh = 8, 40, 504, 230
+    s += inset(lx, ly, lw, lh)
+    s += t("t6 hint", 6, 4, "SIGNAL") + t("t6 hint", 126, 4, "ON") + t("t6 hint", 154, 4, "WORTH")
+    # RANKUP counts every signal (gold ticks); PVP and the Headhunter award count their own
+    columns = [("RANKUP", "tq", None), ("PVP", "tq", {"player kills", "totems stolen"}), ("HEADHUNTER", "gold", {"player kills"})]
+    for c, (label, cls, _) in enumerate(columns):
+        s += t(f"t5 {cls}", 318 + c * 60 + 30, 5, label, "transform:translateX(-50%)")
     for i, (name, on, pts, per, unit, src, _, _) in enumerate(SIGNALS):
         ry = 14 + i * 17
         if i % 2 == 0:
             s += f'<div class="abs" style="left:1px;top:{ry}px;width:502px;height:17px;background:rgba(255,255,255,0.04)"></div>'
-        s += t("t75 " + ("text" if on else "muted"), 6, ry + 5, name) + chip(148, ry + 2, 22, 12, "on" if on else "off", "on" if on else "")
-        s += inset(198, ry + 2, 176, 12) + "</div>" + t("t6 " + ("gold" if on else "muted"), 202, ry + 4, f"{pts} points per {per} {unit}{'' if per == 1 else 's'}")
-        s += t("t5 hint", 380, ry + 5, src)
-    s += "</div>" + t("t6 hint", 10, H - 12, "Changes save at once and reach every server. Esc closes.")
+        s += t("t85 " + ("text" if on else "muted"), 6, ry + 4, name) + chip(124, ry + 2, 22, 12, "on" if on else "off", "on" if on else "")
+        s += inset(152, ry + 2, 158, 12) + "</div>" + t("t75 " + ("gold" if on else "muted"), 156, ry + 4, f"{pts} points per {per} {unit if unit.endswith('s') or per == 1 else unit + 's'}")
+        for c, (label, cls, counts) in enumerate(columns):
+            every = counts is None
+            counted = every or name in counts
+            colour = "gold" if every or cls == "gold" else "tq" if on else "muted"
+            lit = counted and not every and on
+            tick = f'<span class="{colour}">✓</span>' if counted else ""
+            s += chip(318 + c * 60 + 20, ry + 2, 20, 12, tick, ("on gold" if colour == "gold" else "on") if lit else "")
+    s += "</div>" + t("t5 hint", lx, ly + lh + 4, "A tick: the signal counts there. Click to switch. Gold ticks: every signal counts.")
+    s += t("t6 hint", 10, H - 12, "Changes save at once and reach every server. Esc closes.")
     return s + "</div>"
 
 
 def admin_players():
-    s = screen_frame("RANKUP ADMIN", STATUS, T_PLAYERS)
+    """PLAYERS (D98 to D111): every ladder at once with SET, the awards (one picked, GIVE IT open), the counts tagged by ladder."""
+    s = screen_frame("RANKUP ADMIN", STATUS_05, T_PLAYERS)
     s += inset(8, 40, 164, 14) + "</div>" + t("t75 hint", 12, 43, "find player")
     s += inset(8, 56, 164, 198)
-    players = [("Mrgregles", "Warden", 2140, True, True), ("Tyler_S", "Raider", 640, True, False), ("Kestrel", "Vanguard", 4210, True, False), ("Bramble", "Settler", 95, False, False), ("Alex_Builds", "Raider", 712, False, False), ("Sam_W", "Settler", 230, False, False)]
+    players = [("Mrgregles", "Warden", 4210, True, True), ("Kestrel", "Vanguard", 6380, True, False), ("Tyler_S", "Recruit", 640, True, False),
+               ("Alex_Builds", "Scout", 1110, False, False), ("Bramble", "Settler", 95, False, False), ("Sam_W", "Wanderer", 30, False, False)]
     for i, (name, rank, pts, online, sel) in enumerate(players):
         ry = 1 + i * 14
         s += f'<div class="row{" sel" if sel else ""}" style="top:{ry}px;height:14px">'
         s += f'<span style="width:3px;height:3px;background:{"var(--tq)" if online else "var(--line)"};margin-right:4px"></span>'
-        s += f'<span class="t75 {"text" if sel else "muted"}" style="flex:1">{name}</span><span class="t6 muted" style="width:40px">{rank}</span><span class="t6 gold" style="width:30px;text-align:right">{pts}</span></div>'
+        s += f'<span class="t75 {"text" if sel else "muted"}" style="flex:1">{name}</span><span class="t6 muted" style="width:44px">{rank}</span><span class="t6 gold" style="width:26px;text-align:right">{pts}</span></div>'
     s += "</div>" + t("t6 hint", 8, 262, "6 players")
     px, py = 180, 40
-    s += t("t1 text", px, py, "Mrgregles") + t("t6 hint", px + 54, py + 2, "rank 3 of 5 - Warden") + t("t75 gold", px, py + 14, "2140 points - 640 this season")
-    s += inset(px, py + 28, 332, 120)
-    col, row = 0, 0
-    for name, on, pts, per, unit, src, count, got in SIGNALS:
-        if not on and count == 0:
-            continue
-        cx, ry = 6 + col * 164, 4 + row * 11
-        s += t("t6 " + ("text" if on else "muted"), cx, ry, name) + t("t6 " + ("gold" if on else "muted"), cx + 156, ry, f"{count}  ({got})", "transform:translateX(-100%)")
-        row += 1
-        if row >= 10:
-            row, col = 0, col + 1
-    s += "</div>" + t("t6 hint", px, py + 152, "bonus from admins: -105")
-    by = py + 164
-    s += btn(px, by, 70, 13, "SET RANK") + btn(px + 74, by, 76, 13, "ADD POINTS", "gold") + btn(px + 332 - 70, by, 70, 13, "RESET", "bad")
+    s += t("t1 text", px, py, "Mrgregles") + t("t6 tq", px + 56, py + 2, "online") + t("t6 hint", px + 332, py + 2, "bonus from admins: -105", "transform:translateX(-100%)")
+    # LADDERS: RANKUP (the BSP ladder) and an example PVP ladder
+    s += t("t5 tq", px, py + 14, "LADDERS") + inset(px, py + 21, 332, 43)
+    for x0, head in ((4, "LADDER"), (50, "RANK"), (124, "POINTS"), (164, "THIS SEASON"), (214, "TO THE NEXT RUNG")):
+        s += t("t5 hint", x0, 3, head)
+    ladders = [("RANKUP", "warden", "6/12", 4210, 640, "Vanguard at 6000", 4210 / 6000),
+               ("PVP", None, "2/4", 775, 775, "Gladiator at 1500", 775 / 1500)]
+    for i, (name, rank, rung, pts, season, nxt, frac) in enumerate(ladders):
+        ry = 12 + i * 15
+        s += t("t75 text", 4, ry + 3, name) + (at(50, ry + 2, art(rank)) if rank else t("t75 text", 50, ry + 3, "Duelist")) + t("t5 hint", 105, ry + 4, rung)
+        s += t("t6 gold", 124, ry + 4, str(pts)) + t("t6 muted", 164, ry + 4, str(season))
+        s += t("t5 hint", 214, ry + 1, nxt)
+        s += f'<div class="abs" style="left:214px;top:{ry + 8}px;width:72px;height:3px;background:var(--line)"></div>'
+        s += f'<div class="abs" style="left:214px;top:{ry + 8}px;width:{int(72 * frac)}px;height:3px;background:var(--tq)"></div>'
+        s += chip(294, ry, 32, 12, "SET", "")
+    s += "</div>"
+    # AWARDS: two reached, Headhunter picked with its GIVE IT line open
+    zy = py + 69
+    s += t("t5 vio", px, zy, "AWARDS  2 of 3") + t("t5 hint", px + 332, zy, "click one to give or take it", "transform:translateX(-100%)")
+    awards = [("Bulwark", True, None), ("Founder", True, None), ("Headhunter", False, (775, 1250))]
+    for i, (name, reached, have) in enumerate(awards):
+        ax, ay = px + i * 84, zy + 7
+        picked = name == "Headhunter"
+        edge = "var(--tq)" if picked else "var(--vio)" if reached else "var(--line)"
+        s += f'<div class="abs" style="left:{ax}px;top:{ay}px;width:80px;height:20px;border:1px solid {edge};background:{"rgba(181,140,255,.13)" if reached else "var(--inset)"}"></div>'
+        s += t("t6 text", ax + 3, ay + 3, name)
+        if reached:
+            s += t("t5 vio", ax + 3, ay + 12, "REACHED")
+        else:
+            label = f"{have[0]}/{have[1]}"
+            s += t("t5 gold", ax + 3, ay + 12, label)
+            s += f'<div class="abs" style="left:{ax + 30}px;top:{ay + 13}px;width:46px;height:2px;background:var(--line)"></div>'
+            s += f'<div class="abs" style="left:{ax + 30}px;top:{ay + 13}px;width:{int(46 * have[0] / have[1])}px;height:2px;background:var(--gold)"></div>'
+    ly = zy + 32
+    s += t("t6 text", px, ly + 3, "HEADHUNTER") + t("t5 hint", px, ly + 11, "775 of 1250 points")
+    s += btn(px + 70, ly, 60, 13, "GIVE IT", "vio") + t("t5 hint", px + 136, ly + 4, "no rewards, no announcement (as SET)") + btn(px + 292, ly, 40, 13, "CANCEL", "")
+    # COUNTS, tagged with the ladders that count them
+    cy = ly + 17
+    s += t("t5 tq", px, cy, "COUNTS") + t("t5 hint", px + 30, cy, "letters: the ladders that count it") + t("t5 tq", px + 150, cy, "R RANKUP") + t("t5 vio", px + 184, cy, "P PVP")
+    s += inset(px, cy + 7, 332, py + 222 - (cy + 7))
+    shown = [sig for sig in SIGNALS if sig[1] or sig[6]]
+    for i, (name, on, pts, per, unit, src, count, got) in enumerate(shown[:18]):
+        cx, ry = 6 + (i % 2) * 164, 3 + (i // 2) * 10
+        letters = '<span class="tq">R</span>' + ('<span class="vio">P</span>' if name in ("player kills", "totems stolen") else "")
+        s += t("t6 " + ("text" if on else "muted"), cx, ry, f'{name} <span class="t5">{letters}</span>')
+        s += t("t6 " + ("gold" if on else "muted"), cx + 156, ry, f"{count}  ({got})", "transform:translateX(-100%)")
+    s += "</div>"
+    by = py + 226
+    s += btn(px, by, 76, 13, "ADD POINTS", "gold") + t("t5 hint", px + 82, by + 4, "adds to every ladder and award")
+    s += t("t5 hint", px + 256, by + 4, "every ladder", "transform:translateX(-100%)") + btn(px + 262, by, 70, 13, "RESET", "bad")
     s += t("t6 hint", 10, H - 12, "Changes save at once and reach every server. Esc closes.")
     return s + "</div>"
 
@@ -417,47 +517,48 @@ def banner():
 
 
 def admin_prefixes():
-    """PREFIXES (D65): every prefix by where it comes from, the chosen one's image and the folder's files."""
-    s = screen_frame("RANKUP ADMIN", "7 prefixes - 5 with an image - 6 files", T_PREFIXES)
+    """PREFIXES (D65, D94 to D97): the groups' prefixes, then the suffixes after the name; Totem Reaver chosen, with its hover note."""
+    s = screen_frame("RANKUP ADMIN", "15 prefixes - 7 suffixes - 22 with an image - 23 files", T_PREFIXES)
     s += inset(8, 40, 200, 216)
-    rows = [("LADDER PLAYTIME", None, None), ("Warden", "warden", True), ("Legend", "legend", False), ("LADDER RAIDER", None, None), ("Reaver", "reaver", False),
-            ("AWARDS", None, None), ("apple_picker", '<span style="color:#55ff55">[Apple Picker]</span>', False),
-            ("LUCKPERMS GROUPS", None, None), ("admin", "admin", False), ("moderator", "mod", False), ("founder", '<span style="color:#ffaa00">[Founder]</span>', False)]
-    for i, (name, shown, sel) in enumerate(rows):
+    rows = [("commander", False), ("marshal", False), ("warlord", False), ("legend", False), (None, "AFTER THE NAME - SUFFIXES"),
+            ("season_champion", False), ("totem_reaver", True), ("titan_slayer", False), ("headhunter", False), ("bulwark", False),
+            ("founder", False), ("sanctuary", False)]
+    for i, (group, sel) in enumerate(rows):
         ry = 1 + i * 14
-        if shown is None:
-            s += t("t5 tq", 6, ry + 5, name)
+        if group is None:
+            s += t("t6 vio", 6, ry + 5, sel)
             continue
-        text_prefix = shown.startswith("<span")
         s += f'<div class="row{" sel" if sel else ""}" style="top:{ry}px;height:14px">'
-        s += f'<span class="t75 {"text" if sel else "muted"}" style="flex:1">{name}</span>'
-        s += f'<span class="t6" style="margin-right:3px">{shown}</span>' if text_prefix else f'<span style="margin-right:2px">{img(shown)}</span>'
-        if text_prefix:
-            s += '<span class="t5 muted">text</span>'
-        s += "</div>"
+        s += f'<span class="t85 {"text" if sel else "muted"}" style="flex:1">{group}</span><span style="margin-right:2px;display:flex">{art(group)}</span></div>'
+    s += '<div class="abs" style="left:196px;top:1px;width:2px;height:212px;background:#1b2028"></div><div class="abs" style="left:196px;top:108px;width:2px;height:104px;background:#4a5060"></div>'
     s += "</div>" + btn(8, 262, 60, 13, "REFRESH", "") + chip(71, 262, 92, 13, "only without image")
-    px, py = 216, 40
-    s += t("t1 text", px, py, "WARDEN") + t("t6 hint", W - 8, py + 2, "title of rung 3 on Playtime", "transform:translateX(-100%)")
-    s += t("t5 hint", px, py + 14, "PREFIX TEXT") + inset(px, py + 21, 150, 13) + "</div>" + t("t75", px + 4, py + 24, '<span style="color:#55ffff">[Warden]</span>')
-    s += btn(px + 156, py + 21, 74, 13, "EDIT ON LADDER", "")
-    s += t("t5 hint", px, py + 42, "IMAGE") + inset(px, py + 49, 296, 34) + "</div>"
-    s += f'<div class="abs" style="left:{px + 6}px;top:{py + 61}px">{img("warden")}</div>' + t("t5 hint", px + 50, py + 63, "line size")
-    s += f'<div class="abs" style="left:{px + 78}px;top:{py + 57}px">{img("warden", 2)}</div>' + t("t5 hint", px + 162, py + 63, "x2")
-    s += t("t6 hint", px + 290, py + 56, "warden.png - 40 x 9", "transform:translateX(-100%)")
-    s += t("t5 hint", px, py + 90, "IN CHAT")
-    s += f'<div class="abs" style="left:{px}px;top:{py + 97}px;width:296px;height:13px;background:rgba(0,0,0,0.5)"></div>'
-    s += f'<div class="abs" style="left:{px + 4}px;top:{py + 99}px;font-size:8px;color:#fff;text-shadow:1px 1px #000">&lt;{img("warden")} Mrgregles&gt; hello</div>'
-    s += t("t5 tq", px, py + 118, "FILES IN prefix_images/") + inset(px, py + 126, 296, 74)
-    files = [("warden", "warden.png", "40 x 9", "in use here", "tq"), ("legend", "legend.png", "44 x 9", "on legend", "muted"), ("reaver", "reaver.png", "40 x 9", "on reaver", "muted"),
-             ("admin", "admin.png", "36 x 9", "on admin", "muted"), ("mod", "mod_badge.png", "28 x 9", "on moderator", "muted"), (None, "founder_banner.png", "", "300 x 80: over 256 x 64", "bad")]
-    for i, (key, name, size, tag, cls) in enumerate(files):
-        ry = 1 + i * 12
-        s += f'<div class="row{" sel" if i == 0 else ""}" style="top:{ry}px;height:12px">'
-        s += f'<span style="width:70px">{img(key) if key else ""}</span><span class="t6 {"bad" if key is None else "text" if i == 0 else "muted"}" style="width:76px">{name}</span>'
-        s += f'<span class="t5 hint" style="flex:1">{size}</span><span class="t5 {cls}">{tag}</span></div>'
+    px, py, pw = 216, 40, 296
+    text, colour, how = suffix_text("totem_reaver")
+    s += t("t1 text", px, py, "TOTEM_REAVER") + t("t6 vio", px + pw, py + 2, "the group's own suffix, after the name", "transform:translateX(-100%)")
+    s += t("t6 hint", px, py + 14, "SUFFIX TEXT") + inset(px, py + 21, 150, 13) + "</div>" + t("t85", px + 4, py + 24, f'<span style="color:{colour}">{text}</span>')
+    s += t("t6 hint", px + 156, py + 25, "Change this text in LuckPerms.")
+    s += t("t6 hint", px, py + 40, "IMAGE") + inset(px, py + 47, pw, 26) + "</div>"
+    w = art_width("totem_reaver")
+    s += at(px + 6, py + 56, art("totem_reaver")) + t("t5 hint", px + 6 + w + 4, py + 58, "line size")
+    x2 = px + 6 + w + 8 + 22
+    s += at(x2, py + 51, art("totem_reaver", 2)) + t("t5 hint", x2 + 2 * w + 4, py + 58, "x2")
+    s += t("t6 hint", px + pw - 6, py + 51, f"totem_reaver.png - {w} x 9", "transform:translateX(-100%)")
+    s += field(px, py + 78, 196, "HOVER NOTE", how) + t("t5 hint", px + 202, py + 89, "shown on hover in chat")
+    s += t("t6 hint", px, py + 103, "IN CHAT")
+    s += f'<div class="abs" style="left:{px}px;top:{py + 110}px;width:{pw}px;height:13px;background:rgba(0,0,0,0.5)"></div>'
+    s += f'<div class="abs" style="left:{px + 4}px;top:{py + 112}px;font-size:8px;line-height:9px;color:#fff;text-shadow:1px 1px #000;white-space:nowrap">&lt;Mrgregles {art("totem_reaver")}&gt; hello</div>'
+    s += t("t6 tq", px, py + 130, "FILES IN prefix_images/") + inset(px, py + 138, pw, 62)
+    files = [("totem_reaver", "in use here", "tq"), ("season_champion", "on season_champion", "muted"), ("titan_slayer", "on titan_slayer", "muted"),
+             ("headhunter", "on headhunter", "muted"), ("bulwark", "on bulwark", "muted")]
+    for i, (group, tag, cls) in enumerate(files):
+        ry, sel = 1 + i * 12, i == 0
+        s += f'<div class="row{" sel" if sel else ""}" style="top:{ry}px;height:12px"></div>'
+        s += at(6, ry + 1.5, art(group))
+        s += t("t75 " + ("text" if sel else "muted"), 74, ry + 3, f"{group}.png") + t("t5 hint", 188, ry + 4, f"{art_width(group)} x 9")
+        s += t(f"t5 {cls}", pw - 6, ry + 4, tag, "transform:translateX(-100%)")
     s += "</div>"
-    s += btn(px, py + 205, 70, 13, "USE IMAGE", "") + btn(px + 73, py + 205, 84, 13, "SHOW TEXT AGAIN", "bad") + t("t5 hint", px + 164, py + 208, "saved for every server")
-    s += t("t6 tq", 10, H - 12, "warden's title now shows warden.png in chat and the tab list")
+    s += btn(px, py + 205, 70, 13, "USE IMAGE", "") + btn(px + 73, py + 205, 84, 13, "SHOW TEXT AGAIN", "bad") + t("t6 hint", px + 164, py + 208, "saved for every server")
+    s += t("t6 tq", 10, H - 12, "Hovering the icon in chat shows its text and this note.")
     return s + "</div>"
 
 
@@ -499,20 +600,25 @@ def admin_groups():
 
 
 def prefix_chat():
-    """Prefixes before names in chat and the tab list: images where the rank has one, coloured text where not."""
+    """The name line in chat and the tab list (D88 to D97): staff tag, ladder rank, the name, every achievement; one icon hovered."""
     s = '<div class="world"></div>'
-    s += '<div class="abs" style="left:110px;top:8px;width:180px;height:44px;background:rgba(0,0,0,0.5)"></div>'
-    s += '<div class="abs" style="left:110px;top:10px;width:180px;text-align:center;font-size:7px;color:#aaa">BSP Spawn - 23 online</div>'
-    tab = [(img("admin"), "Steve_Admin"), (img("warden"), "Mrgregles"), ('<span style="color:#55ff55">[Apple Picker]</span>', "PieFarmer"), (img("mod"), "Kestrel")]
-    for i, (p, n) in enumerate(tab):
-        x, y = 112 + (i % 2) * 89, 20 + (i // 2) * 12
-        s += f'<div class="abs" style="left:{x}px;top:{y}px;width:86px;height:10px;background:rgba(255,255,255,0.08);display:flex;align-items:center;gap:2px;font-size:7px;color:#fff;white-space:nowrap;overflow:hidden">{p}<span>{n}</span></div>'
-    s += '<div class="abs" style="left:12px;top:64px;width:376px;height:58px;background:rgba(0,0,0,0.5)"></div>'
-    lines = [(img("warden"), "Mrgregles", "anyone up for a raid at Stormfall?"), (img("admin"), "Steve_Admin", "restart in 5 minutes, find somewhere safe"),
-             ('<span style="color:#55ff55">[Apple Picker]</span> ', "PieFarmer", "5000 pieces of apple. never again"), (img("mod"), "Kestrel", "gg on the totem")]
-    for i, (p, n, m) in enumerate(lines):
-        s += f'<div class="abs" style="left:16px;top:{67 + i * 13}px;font-size:9px;color:#fff;text-shadow:1px 1px #000;white-space:nowrap">&lt;{p} {n}&gt; {m}</div>'
-    s += '<div class="abs" style="left:60px;top:52px;background:rgba(16,0,16,0.94);border:1px solid #5000ff;padding:1px 3px;font-size:7px;color:#fff;white-space:nowrap"><span style="color:#55ffff">[Warden]</span> <span style="color:#aaa">Playtime: Warden</span></div>'
+    people = [("Mrgregles", ["admin", "warden"], ["season_champion", "founder"], "anyone up for a raid at Stormfall?"),
+              ("PieFarmer", ["captain"], ["totem_reaver", "headhunter"], "5000 pieces of apple. never again"),
+              ("Kestrel", ["moderator", "vanguard"], ["bulwark"], "gg on the totem"),
+              ("Tyler_S", ["recruit"], [], "where's the shop?")]
+    s += '<div class="abs" style="left:92px;top:4px;width:216px;height:54px;background:rgba(0,0,0,0.5)"></div>'
+    s += '<div class="abs" style="left:92px;top:6px;width:216px;text-align:center;font-size:7px;color:#aaa">BSP Spawn - 23 online</div>'
+    for i, (name, before, after, _) in enumerate(people):
+        y = 15 + i * 10.5
+        s += (f'<div class="abs" style="left:94px;top:{y}px;width:212px;height:9.5px;background:rgba(255,255,255,0.08);display:flex;align-items:center;'
+              f'gap:3px;font-size:7px;color:#fff;white-space:nowrap;overflow:hidden">{tags(before)}<span>{name}</span>{tags(after) if after else ""}</div>')
+    s += '<div class="abs" style="left:8px;top:64px;width:384px;height:58px;background:rgba(0,0,0,0.5)"></div>'
+    for i, (name, before, after, msg) in enumerate(people):
+        line = f"&lt;{tags(before)} {name}" + (f" {tags(after)}" if after else "") + f"&gt; {msg}"
+        s += f'<div class="abs" style="left:12px;top:{67 + i * 13}px;font-size:8px;line-height:9px;color:#fff;text-shadow:1px 1px #000;white-space:nowrap">{line}</div>'
+    text, colour, how = suffix_text("totem_reaver")
+    s += (f'<div class="abs" style="left:212px;top:92px;background:rgba(16,0,16,0.94);border:1px solid #5000ff;padding:2px 3px;font-size:7px;line-height:8px;'
+          f'color:#fff;white-space:nowrap"><span style="color:{colour}">{text}</span> <span style="color:#aaa">totem_reaver</span><br><span style="color:#aaa">{how}</span></div>')
     return s
 
 
