@@ -214,6 +214,9 @@ public final class AdminSync {
                 case AdminActionPacket.PREFIX_CLEAR -> {
                     return AdminEdits.prefixClear(server, a);
                 }
+                case AdminActionPacket.PREFIX_NOTE -> {
+                    return AdminEdits.prefixNote(server, a, b);
+                }
                 case AdminActionPacket.PREFIX_SCAN -> {
                     // REFRESH on PREFIXES (D59): the folder and LuckPerms' group prefixes read again, previews sent
                     PrefixImages.scan();
@@ -302,9 +305,9 @@ public final class AdminSync {
                 groups.add(RankSync.cut(g, 64));
             }
         }
-        // the PREFIXES tab (D65): every prefix RankUp lists, and the images folder as last read
+        // the PREFIXES tab (D65, D94): every prefix and suffix RankUp lists, and the images folder as last read
         List<AdminViewPacket.PrefixRow> prefixes = new ArrayList<>();
-        for (PrefixDisplay.Source src : PrefixDisplay.sources(settings, PrefixDisplay.groupPrefixes())) {
+        for (PrefixDisplay.Source src : PrefixDisplay.sources(settings, PrefixDisplay.groupPrefixes(), PrefixDisplay.groupSuffixes())) {
             if (prefixes.size() < AdminViewPacket.MAX_PREFIXES) {
                 prefixes.add(new AdminViewPacket.PrefixRow(RankSync.cut(src.key(), 72), RankSync.cut(src.text(), 128), RankSync.cut(src.rankName(), 128)));
             }

@@ -39,6 +39,8 @@ public final class Settings {
     private final boolean rewardsAgainEachSeason;
     /** Images drawn in place of prefixes, by rank key (D57); see {@link PrefixImage}. */
     private final Map<String, PrefixImage> prefixImages;
+    /** Hover notes by the same keys (D94): how a rank is earned, shown when its prefix or suffix is hovered in chat. */
+    private final Map<String, String> prefixNotes;
     private final boolean showPrefixes;
 
     private Settings(Builder b) {
@@ -49,6 +51,7 @@ public final class Settings {
         this.announce = b.announce;
         this.rewardsAgainEachSeason = b.rewardsAgainEachSeason;
         this.prefixImages = java.util.Collections.unmodifiableMap(new java.util.TreeMap<>(b.prefixImages));
+        this.prefixNotes = java.util.Collections.unmodifiableMap(new java.util.TreeMap<>(b.prefixNotes));
         this.showPrefixes = b.showPrefixes;
     }
 
@@ -168,7 +171,17 @@ public final class Settings {
         return prefixImages.get(key);
     }
 
-    /** Whether RankUp puts the player's LuckPerms prefix before their name in chat and the tab list (D55). */
+    /** Every hover note by rank key, keys in order. */
+    public Map<String, String> prefixNotes() {
+        return prefixNotes;
+    }
+
+    /** The hover note for a rank key, or empty. */
+    public String prefixNote(String key) {
+        return prefixNotes.getOrDefault(key, "");
+    }
+
+    /** Whether RankUp draws the player's LuckPerms prefix before their name and suffix after it in chat and the tab list (D55, D89). */
     public boolean showPrefixes() {
         return showPrefixes;
     }
@@ -182,6 +195,7 @@ public final class Settings {
         b.announce = announce;
         b.rewardsAgainEachSeason = rewardsAgainEachSeason;
         b.prefixImages = new java.util.TreeMap<>(prefixImages);
+        b.prefixNotes = new java.util.TreeMap<>(prefixNotes);
         b.showPrefixes = showPrefixes;
         return b;
     }
@@ -215,6 +229,14 @@ public final class Settings {
         ListTag images = new ListTag();
         prefixImages.forEach((key, image) -> images.add(image.save(key)));
         tag.put("PrefixImages", images);
+        ListTag notes = new ListTag();
+        prefixNotes.forEach((key, note) -> {
+            CompoundTag n = new CompoundTag();
+            n.putString("Key", key);
+            n.putString("Note", note);
+            notes.add(n);
+        });
+        tag.put("PrefixNotes", notes);
         tag.putBoolean("ShowPrefixes", showPrefixes);
         return tag;
     }
@@ -261,6 +283,13 @@ public final class Settings {
                 b.prefixImages.put(key, PrefixImage.load(image));
             }
         }
+        ListTag notes = tag.getList("PrefixNotes", Tag.TAG_COMPOUND);
+        for (int i = 0; i < notes.size(); i++) {
+            CompoundTag n = notes.getCompound(i);
+            if (PrefixImage.isKey(n.getString("Key")) && !n.getString("Note").isBlank()) {
+                b.prefixNotes.put(n.getString("Key"), n.getString("Note"));
+            }
+        }
         if (tag.contains("ShowPrefixes")) {
             b.showPrefixes = tag.getBoolean("ShowPrefixes");
         }
@@ -275,6 +304,7 @@ public final class Settings {
         private Announce announce = Announce.SERVER;
         private boolean rewardsAgainEachSeason = true;
         private Map<String, PrefixImage> prefixImages = new java.util.TreeMap<>();
+        private Map<String, String> prefixNotes = new java.util.TreeMap<>();
         private boolean showPrefixes = true;
 
         public Builder() {
@@ -416,6 +446,16 @@ public final class Settings {
                 prefixImages.remove(key);
             } else {
                 prefixImages.put(key, image);
+            }
+            return this;
+        }
+
+        /** Sets the hover note for a rank key; blank takes it away. */
+        public Builder prefixNote(String key, String note) {
+            if (note.isBlank()) {
+                prefixNotes.remove(key);
+            } else {
+                prefixNotes.put(key, note.strip());
             }
             return this;
         }

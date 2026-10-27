@@ -235,21 +235,28 @@ public final class AdminCommands {
                 .executes(ctx -> reply(ctx, AdminEdits.optionShowPrefixes(server(ctx), BoolArgumentType.getBool(ctx, "show"))))));
         root.then(option);
 
-        // prefix images (D55 to D74): "title <group>" (a rung's or an award's title) or "group <group>" (a LuckPerms
-        // group's own prefix), and a file name in config/bsp_rankup/prefix_images/
+        // prefix images (D55 to D74): "title <group>" (a rung's or an award's title), "group <group>" (a LuckPerms
+        // group's own prefix) or "suffix <group>" (its own suffix, D89), and a file name in config/bsp_rankup/prefix_images/;
+        // "note" sets what hovering it shows (D94), and without a text takes the note away
         LiteralArgumentBuilder<CommandSourceStack> prefix = Commands.literal("prefix");
         prefix.then(Commands.literal("list").executes(ctx -> prefixList(ctx.getSource())));
         prefix.then(Commands.literal("files").executes(ctx -> prefixFiles(ctx.getSource())));
         LiteralArgumentBuilder<CommandSourceStack> image = Commands.literal("image");
         LiteralArgumentBuilder<CommandSourceStack> clear = Commands.literal("clear");
-        for (String kind : new String[]{"title", "group"}) {
+        LiteralArgumentBuilder<CommandSourceStack> note = Commands.literal("note");
+        for (String kind : new String[]{"title", "group", "suffix"}) {
             image.then(Commands.literal(kind).then(Commands.argument("group", StringArgumentType.word()).then(Commands.argument("file", StringArgumentType.greedyString())
                     .executes(ctx -> reply(ctx, AdminEdits.prefixImage(server(ctx), kind + ":" + StringArgumentType.getString(ctx, "group"), StringArgumentType.getString(ctx, "file")))))));
             clear.then(Commands.literal(kind).then(Commands.argument("group", StringArgumentType.word())
                     .executes(ctx -> reply(ctx, AdminEdits.prefixClear(server(ctx), kind + ":" + StringArgumentType.getString(ctx, "group"))))));
+            note.then(Commands.literal(kind).then(Commands.argument("group", StringArgumentType.word())
+                    .executes(ctx -> reply(ctx, AdminEdits.prefixNote(server(ctx), kind + ":" + StringArgumentType.getString(ctx, "group"), "")))
+                    .then(Commands.argument("text", StringArgumentType.greedyString())
+                            .executes(ctx -> reply(ctx, AdminEdits.prefixNote(server(ctx), kind + ":" + StringArgumentType.getString(ctx, "group"), StringArgumentType.getString(ctx, "text")))))));
         }
         prefix.then(image);
         prefix.then(clear);
+        prefix.then(note);
         root.then(prefix);
 
         // files
@@ -263,19 +270,20 @@ public final class AdminCommands {
 
     // ------------------------------------------------------------------ prefix images
 
-    /** Every prefix RankUp lists, with its key and its image or "text". */
+    /** Every prefix and suffix RankUp lists, with its key, its image or "text", and its hover note. */
     private static int prefixList(CommandSourceStack source) {
         MinecraftServer server = source.getServer();
         Settings settings = SettingsLedger.settings(server);
-        List<PrefixDisplay.Source> sources = PrefixDisplay.sources(settings, PrefixDisplay.groupPrefixes());
+        List<PrefixDisplay.Source> sources = PrefixDisplay.sources(settings, PrefixDisplay.groupPrefixes(), PrefixDisplay.groupSuffixes());
         if (sources.isEmpty()) {
-            source.sendSuccess(() -> Component.literal("No prefixes: give a rung or an award a TITLE reward, or a LuckPerms group a prefix"), false);
+            source.sendSuccess(() -> Component.literal("No prefixes: give a rung or an award a TITLE reward, or a LuckPerms group a prefix or suffix"), false);
             return 0;
         }
         for (PrefixDisplay.Source s : sources) {
             String shown = s.image() == null ? "text" : s.image().file() + (PrefixImages.inFolder(s.image().id()) ? "" : " (not in folder)");
-            String key = s.key().replace(':', ' '); // as the image and clear commands take it
-            source.sendSuccess(() -> Component.literal(key + "  ").append(Legacy.parse(s.text())).append(Component.literal("  " + s.rankName() + ": " + shown)), false);
+            String key = s.key().replace(':', ' '); // as the image, clear and note commands take it
+            String note = s.note().isEmpty() ? "" : "  \"" + s.note() + "\"";
+            source.sendSuccess(() -> Component.literal(key + "  ").append(Legacy.parse(s.text())).append(Component.literal("  " + s.rankName() + ": " + shown + note)), false);
         }
         return sources.size();
     }

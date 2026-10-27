@@ -295,3 +295,19 @@ Headless: 69 GameTests, new `a_player_who_is_away_ranks_up_without_an_announceme
 - [ ] Restart a server with a player offline who is owed a rung: the log at start has no "reached the rank" line.
 - [ ] `/rankup add <offline player> <points>` past a rung: no announcement in chat; the player logs in and gets the waiting rewards.
 - [ ] The same for an online player: announced as before (and on the other servers with announce network).
+
+## Suffixes and the stacked name line (2026-10-27, D87 to D97)
+
+Headless: 73 GameTests on two runs against LuckPerms Forge 5.5.88-bsp.2; new `SuffixGameTests` (4): the split into known pieces (the longest wins, titles before groups, unknown text stays), spacing (images one pixel apart, real spaces around the name, the console reads every piece), hover notes (kept, shared, limits, the screen's action), a group's own suffix read and drawn after a player's name, the switch covering suffixes. Not seen in a client.
+
+Set up first: copy `docs/prefix_images/*.png` into `config/bsp_rankup/prefix_images/` on one server, then paste `docs/prefix_images/commands.txt` into its console. For every achievement to show, the LuckPerms suffix format lists `highest_from_group_<group>` per achievement (request RU-R5).
+
+- [ ] Chat as an admin on a rung: `<[Admin][Warden] Mrgregles> hi` with the two banners one pixel apart and a normal space before the name.
+- [ ] A player holding two achievements: both icons after the name, one pixel apart; hovering one shows "✦ Totem Reaver totem_reaver" and its note.
+- [ ] The tab list shows the same line.
+- [ ] PREFIXES: the list ends with "AFTER THE NAME - SUFFIXES" (violet heading) and the seven achievements; picking one shows SUFFIX TEXT, its image, HOVER NOTE, and IN CHAT with the icon after the name.
+- [ ] Click HOVER NOTE, type a note, Enter: the field shows it and hovering in chat shows it (within 5 seconds). Empty and Enter takes it away.
+- [ ] OPTIONS: "PREFIXES AND SUFFIXES" off leaves names alone, both sides.
+- [ ] The server console's chat lines read `[Admin] [Warden] Mrgregles ✦ Totem Reaver ✦ Founder`, no stand-in characters.
+- [ ] A player on RankUp 0.4.x joins a 0.5.0 server: they connect and see the icons in chat.
+

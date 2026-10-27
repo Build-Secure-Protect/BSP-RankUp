@@ -548,9 +548,10 @@ public final class AdminEdits {
     // ------------------------------------------------------------------ prefix images (D55 to D74)
 
     /**
-     * Draws a file of the images folder in place of a rank's prefix: {@code key} is {@code title:<group>} for a rung's
-     * or an award's title, {@code group:<group>} for a LuckPerms group's own prefix (D57). The image is kept here and in
-     * the shared storage, so the file may go afterwards (D71); one image may serve several ranks (D70).
+     * Draws a file of the images folder in place of a rank's prefix or suffix: {@code key} is {@code title:<group>} for
+     * a rung's or an award's title, {@code group:<group>} for a LuckPerms group's own prefix (D57), {@code
+     * suffix:<group>} for its own suffix (D89). The image is kept here and in the shared storage, so the file may go
+     * afterwards (D71); one image may serve several ranks (D70).
      */
     public static Reply prefixImage(MinecraftServer server, String key, String fileName) {
         String k = key.trim().toLowerCase(Locale.ROOT);
@@ -593,11 +594,35 @@ public final class AdminEdits {
         return Reply.ok(describeKey(k) + " shows its text again");
     }
 
+    /** The longest hover note, in characters. */
+    public static final int NOTE_MAX = 120;
+
+    /**
+     * Sets the note shown when a rank's prefix or suffix is hovered in chat (D94), such as how an achievement is
+     * earned; an empty note takes it away. Shared with every server like the rest of the settings.
+     */
+    public static Reply prefixNote(MinecraftServer server, String key, String note) {
+        String k = key.trim().toLowerCase(Locale.ROOT);
+        Reply bad = checkPrefixKey(server, k);
+        if (bad != null) {
+            return bad;
+        }
+        String n = note.strip().replace('\n', ' ').replace('\r', ' ');
+        if (n.length() > NOTE_MAX) {
+            return Reply.no("A note is at most " + NOTE_MAX + " characters (that one is " + n.length() + ")");
+        }
+        if (n.isEmpty() && SettingsLedger.settings(server).prefixNote(k).isEmpty()) {
+            return Reply.no(describeKey(k) + " has no note");
+        }
+        SettingsLedger.get(server).update(b -> b.prefixNote(k, n));
+        return Reply.ok(n.isEmpty() ? describeKey(k) + " has no note now" : "Hovering " + describeKey(k) + " shows: " + n);
+    }
+
     /** Null when the key names a rank RankUp can draw an image for, else why not. */
     @Nullable
     private static Reply checkPrefixKey(MinecraftServer server, String key) {
         if (!PrefixImage.isKey(key)) {
-            return Reply.no("A prefix is title:<group> (a rung's or an award's title) or group:<group> (a LuckPerms group's own prefix)");
+            return Reply.no("A prefix is title:<group> (a rung's or an award's title), group:<group> (a LuckPerms group's own prefix) or suffix:<group> (its own suffix)");
         }
         String group = PrefixImage.groupOf(key);
         Settings settings = SettingsLedger.settings(server);
@@ -616,13 +641,13 @@ public final class AdminEdits {
     /** A rank key in words: "Warden's title", "group admin's prefix". */
     public static String describeKey(String key) {
         String group = PrefixImage.isKey(key) ? PrefixImage.groupOf(key) : key;
-        return key.startsWith(PrefixImage.GROUP) ? "Group " + group + "'s prefix" : group + "'s title";
+        return key.startsWith(PrefixImage.GROUP) ? "Group " + group + "'s prefix" : key.startsWith(PrefixImage.SUFFIX) ? "Group " + group + "'s suffix" : group + "'s title";
     }
 
-    /** The D55 switch: RankUp puts prefixes before names, or leaves names alone (a chat mod does it). */
+    /** The D55 switch: RankUp puts prefixes before names and suffixes after them, or leaves names alone (a chat mod does it). */
     public static Reply optionShowPrefixes(MinecraftServer server, boolean show) {
         SettingsLedger.get(server).update(b -> b.showPrefixes(show));
-        return Reply.ok(show ? "Prefixes show before names in chat and the tab list" : "RankUp leaves names alone; prefixes are not shown by RankUp");
+        return Reply.ok(show ? "Prefixes and suffixes show around names in chat and the tab list" : "RankUp leaves names alone; prefixes and suffixes are not shown by RankUp");
     }
 
     // ------------------------------------------------------------------ LuckPerms, files

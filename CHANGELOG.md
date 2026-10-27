@@ -4,6 +4,19 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+Version 0.5.0 (`mod_version`). Still protocol 3: servers and players on 0.4.x connect to it; admins need 0.5.0 for the PREFIXES changes.
+
+### Added (2026-10-27, suffixes and the stacked name line, D87 to D97)
+- **Suffixes after the name.** RankUp draws each player's LuckPerms suffix after their name in chat and the tab list, as an image when one is set (the BSP achievement ranks: Champion, Totem Reaver and the rest).
+- **The whole name line LuckPerms formats.** RankUp splits the formatted prefix and suffix (LuckPerms' meta-formatting: the staff tag then the ladder tag, every achievement) into the titles and group prefixes and suffixes it knows, and draws each known piece as its image. Text it doesn't know stays text. Two images side by side sit one pixel apart; the name has a normal space on each side.
+- **Hover notes.** Each prefix and suffix can have a note (up to 120 characters), shown when it's hovered in chat, such as how an achievement is earned. Kept in the settings and shared with every server.
+- PREFIXES: an "AFTER THE NAME - SUFFIXES" section at the end of the list, SUFFIX TEXT, a HOVER NOTE field, and IN CHAT shows the suffix after the name. The image box is shorter and the files list shows 5 rows (was 6) to make room.
+- Commands: `prefix image|clear suffix <group> <file>`, `prefix note title|group|suffix <group> [text]` (no text takes the note away); `prefix list` shows suffixes and notes. OPTIONS' switch is now "PREFIXES AND SUFFIXES".
+- `docs/prefix_images/`: art for every BSP rank (banners for the ladder and staff, icons on grey discs for the achievements) with `commands.txt` to assign them and their notes, made by `tools/prefix_art/gen_prefix_art.py`.
+
+### Changed (2026-10-27, D96)
+- A prefix image is followed by a normal space before the name (was one pixel, D68).
+
 ### Added (2026-10-27, seeing which signals count, D81 to D85)
 - LADDER: the ladder's strip has a second line, **PROGRESS FROM**, with a chip per counted signal and what it is worth there ("minutes played 1 pt / minute"), an x to take it off and + signal to add; "every signal" in gold when the ladder counts all of them. A signal switched off shows "off". Hovering a signal shows its command key ("playtime") and where it comes from. The rung list shows 12 rows (was 13) and the rewards list 5 (was 6) to make room.
 - Under a rung's POINTS (and an award's NEEDS on GROUPS), what the points mean when one signal is counted: "= 120 minutes".

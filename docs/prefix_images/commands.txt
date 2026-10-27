@@ -1,0 +1,37 @@
+# Copy the PNGs into config/bsp_rankup/prefix_images/ on one server, run /rankup prefix files to check
+# them, then paste these lines into that server's console (or pick each image on the PREFIXES tab).
+# Made by tools/prefix_art/gen_prefix_art.py; run it again after changing the art.
+
+rankup prefix image group wanderer wanderer.png
+rankup prefix image group settler settler.png
+rankup prefix image group recruit recruit.png
+rankup prefix image group scout scout.png
+rankup prefix image group sentinel sentinel.png
+rankup prefix image group warden warden.png
+rankup prefix image group vanguard vanguard.png
+rankup prefix image group captain captain.png
+rankup prefix image group commander commander.png
+rankup prefix image group marshal marshal.png
+rankup prefix image group warlord warlord.png
+rankup prefix image group legend legend.png
+rankup prefix image group moderator moderator.png
+rankup prefix image group staff staff.png
+rankup prefix image group admin admin.png
+
+# The achievement icons are LuckPerms suffixes, drawn after the name (RankUp 0.5.0 or newer).
+rankup prefix image suffix season_champion season_champion.png
+rankup prefix image suffix totem_reaver totem_reaver.png
+rankup prefix image suffix titan_slayer titan_slayer.png
+rankup prefix image suffix headhunter headhunter.png
+rankup prefix image suffix bulwark bulwark.png
+rankup prefix image suffix founder founder.png
+rankup prefix image suffix sanctuary sanctuary.png
+
+# What hovering each icon in chat shows.
+rankup prefix note suffix season_champion Winning a BSP season
+rankup prefix note suffix totem_reaver Most totems stolen in a season
+rankup prefix note suffix titan_slayer Most boss kills in a season
+rankup prefix note suffix headhunter Most player kills in a season
+rankup prefix note suffix bulwark Your totem survives 25 steal attempts
+rankup prefix note suffix founder Playing in the first season
+rankup prefix note suffix sanctuary Earning a plot on the Sanctuary server

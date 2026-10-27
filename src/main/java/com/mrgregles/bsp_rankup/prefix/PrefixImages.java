@@ -280,10 +280,10 @@ public final class PrefixImages {
         return out;
     }
 
-    /** What the names drawn depend on: the switch, the images and every title's text. */
+    /** What the names drawn depend on: the switch, the images, the hover notes and every title's text. */
     private static String drawnSignature(Settings settings) {
-        StringBuilder sb = new StringBuilder().append(settings.showPrefixes()).append('|').append(settings.prefixImages());
-        for (PrefixDisplay.Source s : PrefixDisplay.sources(settings, Map.of())) {
+        StringBuilder sb = new StringBuilder().append(settings.showPrefixes()).append('|').append(settings.prefixImages()).append('|').append(settings.prefixNotes());
+        for (PrefixDisplay.Source s : PrefixDisplay.sources(settings, Map.of(), Map.of())) {
             sb.append('|').append(s.key()).append('=').append(s.text());
         }
         return sb.toString();

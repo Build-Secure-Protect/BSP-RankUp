@@ -301,7 +301,28 @@ public final class LuckPermsBridge {
         }
     }
 
-    /** A prefix node's priority and text. */
+    /**
+     * The suffix LuckPerms shows for the player (D89): its cached meta's suffix, built by LuckPerms' meta-formatting
+     * (which can list every achievement, D90). Empty without LuckPerms, a loaded user or a suffix.
+     */
+    public static Optional<String> shownSuffix(UUID player) {
+        if (!isPresent()) {
+            return Optional.empty();
+        }
+        try {
+            Object user = loadedUser(player);
+            if (user == null) {
+                return Optional.empty();
+            }
+            Object suffix = call(call(call(user, "getCachedData"), "getMetaData"), "getSuffix");
+            return suffix instanceof String s && !s.isEmpty() ? Optional.of(s) : Optional.empty();
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            warn("shown suffix lookup", e);
+            return Optional.empty();
+        }
+    }
+
+    /** A prefix (or suffix) node's priority and text. */
     public record Prefix(int priority, String text) {
     }
 
@@ -310,6 +331,15 @@ public final class LuckPermsBridge {
      * name lower-cased. Groups without one are left out. Empty when LuckPerms is absent.
      */
     public static Map<String, Prefix> groupPrefixes() {
+        return groupMeta("prefix.");
+    }
+
+    /** Each loaded group's own suffix, as {@link #groupPrefixes} does for prefixes (D89). */
+    public static Map<String, Prefix> groupSuffixes() {
+        return groupMeta("suffix.");
+    }
+
+    private static Map<String, Prefix> groupMeta(String head) {
         if (!isPresent()) {
             return Collections.emptyMap();
         }
@@ -319,7 +349,7 @@ public final class LuckPermsBridge {
             for (Object g : groups) {
                 Prefix best = null;
                 for (Object n : (Collection<?>) call(call(g, "data"), "toCollection")) {
-                    Prefix p = parsePrefix((String) call(n, "getKey"));
+                    Prefix p = parseMeta(head, (String) call(n, "getKey"));
                     if (p != null && (best == null || p.priority() > best.priority())) {
                         best = p;
                     }
@@ -330,7 +360,7 @@ public final class LuckPermsBridge {
             }
             return out;
         } catch (ReflectiveOperationException | RuntimeException e) {
-            warn("group prefix lookup", e);
+            warn("group " + head.substring(0, head.length() - 1) + " lookup", e);
             return Collections.emptyMap();
         }
     }
@@ -338,15 +368,21 @@ public final class LuckPermsBridge {
     /** A {@code prefix.<priority>.<text>} node key read, or null for any other key. */
     @Nullable
     static Prefix parsePrefix(String key) {
-        if (!key.startsWith("prefix.")) {
+        return parseMeta("prefix.", key);
+    }
+
+    /** A {@code <head><priority>.<text>} node key read ({@code prefix.} or {@code suffix.}), or null for any other key. */
+    @Nullable
+    static Prefix parseMeta(String head, String key) {
+        if (!key.startsWith(head)) {
             return null;
         }
-        int dot = key.indexOf('.', "prefix.".length());
+        int dot = key.indexOf('.', head.length());
         if (dot < 0) {
             return null;
         }
         try {
-            return new Prefix(Integer.parseInt(key.substring("prefix.".length(), dot)), unescape(key.substring(dot + 1)));
+            return new Prefix(Integer.parseInt(key.substring(head.length(), dot)), unescape(key.substring(dot + 1)));
         } catch (NumberFormatException e) {
             return null;
         }
