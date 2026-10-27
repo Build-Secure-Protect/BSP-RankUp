@@ -241,3 +241,37 @@ Headless: one GameTest (`RankViewLaddersGameTests`: a standing per ladder with i
 - [ ] The title chip shows the title LuckPerms shows in chat (a ladder's title over an award's).
 - [ ] With one ladder and no awards: one chip and the screen as before.
 
+## Prefix images (2026-10-27, D55 to D74)
+
+Headless: six GameTests (`PrefixImageGameTests`: the settings keep images and the switch; the folder's files checked (too big, too wide, animated, broken, not a PNG); picking an image keeps it here and in the shared table, a server without it fetches it, a player is sent it once; the admin view lists prefixes and files and the actions apply; colour codes; and against the real LuckPerms, the chat and tab list name carrying the title as text, then as its image key with the text for the console, the hover, a group prefix above the title winning, the switch off), 62 in all, three runs. **Nothing of the drawing has been seen in a client**: the images in chat and the tab list, the font reload, the PREFIXES tab, the image slot and the title chip. Server and client both this build (protocol 3).
+
+Setup: put two or three PNGs in the server's `config/bsp_rankup/prefix_images/`, for example a 40 x 9 badge and a 24 x 9 one; give a rung a TITLE reward (`&b[Warden] `) and reach it; give a LuckPerms group a prefix (`/lp group admin meta setprefix 2000 "&c[Admin] "`).
+
+- [ ] Chat: your message shows `<[Warden] Name> hello`, with [Warden] in aqua. The console shows the same text.
+- [ ] Tab list: the prefix before your name.
+- [ ] `/rankup admin`, PREFIXES: the rung's title under LADDER <name>, the group's prefix under LUCKPERMS GROUPS, each with "text"; the folder's files with their previews (a moment after the tab opens), bad files in red with the reason.
+- [ ] Pick the title, pick a file, USE IMAGE: within a second or two the list, the IMAGE box (line size and x2) and IN CHAT show the image. Chat shows the image in place of [Warden], one pixel before the name; hovering it shows "[Warden] Warden". The console still shows `[Warden]`.
+- [ ] Another player (or a second client) sees the image in your chat line and the tab list.
+- [ ] The admin group: give it an image; a player in that group shows the group's image (its prefix is above the title).
+- [ ] SHOW TEXT AGAIN: the text comes back in chat.
+- [ ] LADDER: the rung's TITLE reward row has a small slot with the image; clicking it opens PREFIXES on that title.
+- [ ] `/rank`: the title chip shows the image.
+- [ ] Delete the PNG, REFRESH: the image still shows; the IMAGE box says "not in folder".
+- [ ] Two servers on the shared MySQL: pick an image on one; on the other (without the file) players see it.
+- [ ] OPTIONS, PREFIXES IN CHAT off: names in chat and the tab list without prefixes; on again: back.
+- [ ] Log out and in: the images show again after a moment (they are sent at login); F3+T keeps them.
+- [ ] The name above players' heads has no prefix.
+- [ ] Watch for: a short hitch when images arrive (only the fonts reload), any mod that changes chat or fonts drawing the prefix wrongly.
+
+## The full audit (2026-10-27, AU-1)
+
+Headless: 68 GameTests on three runs against LuckPerms Forge 5.5.88-bsp.2 (the servers' build; also 62/62 earlier against bsp.4), new: `AuditGameTests` (5), the holder cache, dotted prefixes, the title after a season's fall. Not run against a real MySQL or Redis, nor on two backends.
+
+- [ ] Two backends on the shared MySQL: on A, `/rankup add <player> <points>` while the player is offline and enough for a rung with an item reward; the player logs into B (gets the item), then into A: no second item.
+- [ ] Two backends with Redis: pick a prefix image on A; on B a player's chat shows it within seconds, without another edit.
+- [ ] A rung with a title, marked RESET (seasonal): reach it, end the season (BSP-Core's season end): the title in chat goes back to the rung below's title (or none). A seasonal award with a title: the same.
+- [ ] A LuckPerms group with a dotted prefix (`/lp group x meta setprefix 2000 "&e[Lv.5] "`): PREFIXES shows it without a backslash; give it an image: chat shows the image.
+- [ ] `/rankup prefix list`, then `/rankup prefix image title <group> <file>` and `/rankup prefix clear title <group>` as it prints them.
+- [ ] Velocity Additions' tab list (live config: on, every 3 s) replaces RankUp's tab names with its own text prefix; until request RU-R3 is done, images show in chat but not in the tab list. Check what the tab list shows.
+- [ ] The log at start: "MySQL driver: ... (from BSP-Core)" with BSP-Core 1.4.5 or newer.
+

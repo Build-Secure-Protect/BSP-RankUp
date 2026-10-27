@@ -1,6 +1,8 @@
 package com.mrgregles.bsp_rankup.admin;
 
 import com.mrgregles.bsp_rankup.compat.LuckPermsBridge;
+import com.mrgregles.bsp_rankup.prefix.PrefixImages;
+import com.mrgregles.bsp_rankup.settings.PrefixImage;
 import com.mrgregles.bsp_rankup.progress.Progress;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
@@ -541,6 +543,86 @@ public final class AdminEdits {
     public static Reply playerReset(MinecraftServer server, UUID player) {
         ProgressLedger.get(server).reset(player);
         return Reply.ok(Players.name(server, player) + " starts over: every count, bonus and rank forgotten" + (SettingsLedger.settings(server).ranks().isEmpty() ? "" : "; they land on the first rung"));
+    }
+
+    // ------------------------------------------------------------------ prefix images (D55 to D74)
+
+    /**
+     * Draws a file of the images folder in place of a rank's prefix: {@code key} is {@code title:<group>} for a rung's
+     * or an award's title, {@code group:<group>} for a LuckPerms group's own prefix (D57). The image is kept here and in
+     * the shared storage, so the file may go afterwards (D71); one image may serve several ranks (D70).
+     */
+    public static Reply prefixImage(MinecraftServer server, String key, String fileName) {
+        String k = key.trim().toLowerCase(Locale.ROOT);
+        Reply bad = checkPrefixKey(server, k);
+        if (bad != null) {
+            return bad;
+        }
+        String name = fileName.trim();
+        if (!name.matches("[^/\\\\]{1,128}") || name.startsWith(".")) {
+            return Reply.no("A file name only, from " + PrefixImages.folder().getFileName() + "/");
+        }
+        PrefixImages.FileInfo file = PrefixImages.file(name);
+        if (file == null) {
+            PrefixImages.scan();
+            file = PrefixImages.file(name);
+        }
+        if (file == null) {
+            return Reply.no("No file " + name + " in config/bsp_rankup/prefix_images/");
+        }
+        if (!file.usable()) {
+            return Reply.no(file.name() + " can't be used: " + file.problem());
+        }
+        byte[] png = PrefixImages.folderBytes(file.id());
+        if (png == null) {
+            return Reply.no(file.name() + " could not be read; press REFRESH");
+        }
+        PrefixImages.keep(server, file.id(), png);
+        PrefixImage image = new PrefixImage(file.id(), file.name(), file.width(), file.height());
+        SettingsLedger.get(server).update(b -> b.prefixImage(k, image));
+        return Reply.ok(describeKey(k) + " now shows " + file.name() + " in chat and the tab list");
+    }
+
+    /** Takes a rank's image away: its text prefix shows again. */
+    public static Reply prefixClear(MinecraftServer server, String key) {
+        String k = key.trim().toLowerCase(Locale.ROOT);
+        if (SettingsLedger.settings(server).prefixImage(k) == null) {
+            return Reply.no(describeKey(k) + " has no image");
+        }
+        SettingsLedger.get(server).update(b -> b.prefixImage(k, null));
+        return Reply.ok(describeKey(k) + " shows its text again");
+    }
+
+    /** Null when the key names a rank RankUp can draw an image for, else why not. */
+    @Nullable
+    private static Reply checkPrefixKey(MinecraftServer server, String key) {
+        if (!PrefixImage.isKey(key)) {
+            return Reply.no("A prefix is title:<group> (a rung's or an award's title) or group:<group> (a LuckPerms group's own prefix)");
+        }
+        String group = PrefixImage.groupOf(key);
+        Settings settings = SettingsLedger.settings(server);
+        if (key.startsWith(PrefixImage.TITLE)) {
+            if (settings.ladderOf(group) == null && settings.award(group) == null) {
+                return noRung(group);
+            }
+            return null;
+        }
+        if (LuckPermsBridge.isPresent() && LuckPermsBridge.groupNames().stream().noneMatch(g -> g.equalsIgnoreCase(group))) {
+            return Reply.no("LuckPerms has no group " + group);
+        }
+        return null;
+    }
+
+    /** A rank key in words: "Warden's title", "group admin's prefix". */
+    public static String describeKey(String key) {
+        String group = PrefixImage.isKey(key) ? PrefixImage.groupOf(key) : key;
+        return key.startsWith(PrefixImage.GROUP) ? "Group " + group + "'s prefix" : group + "'s title";
+    }
+
+    /** The D55 switch: RankUp puts prefixes before names, or leaves names alone (a chat mod does it). */
+    public static Reply optionShowPrefixes(MinecraftServer server, boolean show) {
+        SettingsLedger.get(server).update(b -> b.showPrefixes(show));
+        return Reply.ok(show ? "Prefixes show before names in chat and the tab list" : "RankUp leaves names alone; prefixes are not shown by RankUp");
     }
 
     // ------------------------------------------------------------------ LuckPerms, files

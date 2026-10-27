@@ -269,7 +269,7 @@ public final class LuckPermsBridge {
             for (Object n : nodesOf(user)) {
                 String key = (String) call(n, "getKey");
                 if (key.startsWith(head)) {
-                    return Optional.of(key.substring(head.length()));
+                    return Optional.of(unescape(key.substring(head.length())));
                 }
             }
             return Optional.empty();
@@ -277,6 +277,95 @@ public final class LuckPermsBridge {
             warn("prefix lookup", e);
             return Optional.empty();
         }
+    }
+
+    /**
+     * The prefix LuckPerms shows for the player (D66): its cached meta's prefix, chosen by LuckPerms from every
+     * prefix the player has and inherits by its own rules (the highest priority, by default). Empty without LuckPerms,
+     * a loaded user or a prefix.
+     */
+    public static Optional<String> shownPrefix(UUID player) {
+        if (!isPresent()) {
+            return Optional.empty();
+        }
+        try {
+            Object user = loadedUser(player);
+            if (user == null) {
+                return Optional.empty();
+            }
+            Object prefix = call(call(call(user, "getCachedData"), "getMetaData"), "getPrefix");
+            return prefix instanceof String s && !s.isEmpty() ? Optional.of(s) : Optional.empty();
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            warn("shown prefix lookup", e);
+            return Optional.empty();
+        }
+    }
+
+    /** A prefix node's priority and text. */
+    public record Prefix(int priority, String text) {
+    }
+
+    /**
+     * Each loaded group's own prefix (its highest-priority prefix node; inherited ones are not counted), by group
+     * name lower-cased. Groups without one are left out. Empty when LuckPerms is absent.
+     */
+    public static Map<String, Prefix> groupPrefixes() {
+        if (!isPresent()) {
+            return Collections.emptyMap();
+        }
+        try {
+            Map<String, Prefix> out = new java.util.TreeMap<>();
+            Collection<?> groups = (Collection<?>) call(call(api, "getGroupManager"), "getLoadedGroups");
+            for (Object g : groups) {
+                Prefix best = null;
+                for (Object n : (Collection<?>) call(call(g, "data"), "toCollection")) {
+                    Prefix p = parsePrefix((String) call(n, "getKey"));
+                    if (p != null && (best == null || p.priority() > best.priority())) {
+                        best = p;
+                    }
+                }
+                if (best != null) {
+                    out.put(((String) call(g, "getName")).toLowerCase(Locale.ROOT), best);
+                }
+            }
+            return out;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            warn("group prefix lookup", e);
+            return Collections.emptyMap();
+        }
+    }
+
+    /** A {@code prefix.<priority>.<text>} node key read, or null for any other key. */
+    @Nullable
+    static Prefix parsePrefix(String key) {
+        if (!key.startsWith("prefix.")) {
+            return null;
+        }
+        int dot = key.indexOf('.', "prefix.".length());
+        if (dot < 0) {
+            return null;
+        }
+        try {
+            return new Prefix(Integer.parseInt(key.substring("prefix.".length(), dot)), unescape(key.substring(dot + 1)));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * A prefix's text as it was set: LuckPerms writes each {@code .} in a node key as {@code \.} (older versions also
+     * {@code /}, {@code -} and {@code $}), so "[Lv.5]" is read back without the backslash.
+     */
+    static String unescape(String keyText) {
+        StringBuilder out = new StringBuilder(keyText.length());
+        for (int i = 0; i < keyText.length(); i++) {
+            char c = keyText.charAt(i);
+            if (c == '\\' && i + 1 < keyText.length() && ".-/$".indexOf(keyText.charAt(i + 1)) >= 0) {
+                c = keyText.charAt(++i);
+            }
+            out.append(c);
+        }
+        return out.toString();
     }
 
     // ------------------------------------------------------------------ writes

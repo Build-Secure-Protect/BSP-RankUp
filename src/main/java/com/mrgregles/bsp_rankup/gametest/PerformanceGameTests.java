@@ -115,6 +115,30 @@ public class PerformanceGameTests {
         h.succeed();
     }
 
+    @GameTest(template = EMPTY, batch = "perf-holders")
+    public void holder_counts_are_kept_until_a_rank_changes(GameTestHelper h) {
+        net.minecraft.server.MinecraftServer server = h.getLevel().getServer();
+        ProgressLedger ledger = ProgressLedger.get(server);
+        UUID a = UUID.randomUUID(), b = UUID.randomUUID();
+        try {
+            ledger.setRank(a, "ru_h_x", 1L);
+            Map<String, Integer> first = com.mrgregles.bsp_rankup.rank.Holders.of(server);
+            h.assertTrue(first.get("ru_h_x") == 1, "one holder: " + first.get("ru_h_x"));
+            h.assertTrue(com.mrgregles.bsp_rankup.rank.Holders.of(server) == first, "asked again, the count is not walked again");
+            ledger.add(a, Signal.MOB_KILLS, 1);
+            h.assertTrue(com.mrgregles.bsp_rankup.rank.Holders.of(server) == first, "a count changes nobody's rung: kept");
+            ledger.setRank(b, "ru_h_x", 2L);
+            h.assertTrue(com.mrgregles.bsp_rankup.rank.Holders.of(server).get("ru_h_x") == 2, "a rank change counts again");
+            ledger.reset(a);
+            h.assertTrue(com.mrgregles.bsp_rankup.rank.Holders.of(server).get("ru_h_x") == 1, "a reset counts again");
+            h.assertTrue(RankSync.view(server, b, false).holders().get("ru_h_x") == 1, "the rank view uses it");
+        } finally {
+            ledger.reset(a);
+            ledger.reset(b);
+        }
+        h.succeed();
+    }
+
     @GameTest(template = EMPTY, batch = "perf-cooldown")
     public void the_kill_cooldown_forgets_victims_whose_cooldown_is_over(GameTestHelper h) {
         long before = KillCooldowns.cooldownMs();

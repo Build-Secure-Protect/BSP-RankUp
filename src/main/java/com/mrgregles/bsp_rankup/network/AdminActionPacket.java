@@ -25,7 +25,9 @@ public record AdminActionPacket(String action, String a, String b, String c) {
             LADDERS_ADD = "ladders-add", LADDERS_REMOVE = "ladders-remove", LADDERS_RENAME = "ladders-rename", LADDERS_TRACK = "ladders-track",
             LADDERS_COUNTS = "ladders-counts", LADDERS_PRIORITY = "ladders-priority", LADDERS_IMPORT = "ladders-import", RUNG_ADD = "rung-add",
             AWARD_ADD = "award-add", AWARD_REMOVE = "award-remove", AWARD_POINTS = "award-points", AWARD_NAME = "award-name",
-            AWARD_COUNTS = "award-counts", AWARD_SEASONAL = "award-seasonal";
+            AWARD_COUNTS = "award-counts", AWARD_SEASONAL = "award-seasonal",
+            // prefix images (D65): a = the rank key, b = the file name
+            PREFIX_SET = "prefix-set", PREFIX_CLEAR = "prefix-clear", PREFIX_SCAN = "prefix-scan";
 
     public static AdminActionPacket of(String action) {
         return new AdminActionPacket(action, "", "", "");

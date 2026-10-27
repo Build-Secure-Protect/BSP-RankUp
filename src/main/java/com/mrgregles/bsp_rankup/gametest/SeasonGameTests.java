@@ -9,6 +9,7 @@ import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
 import com.mrgregles.bsp_rankup.settings.Rank;
+import com.mrgregles.bsp_rankup.settings.Reward;
 import com.mrgregles.bsp_rankup.settings.Settings;
 import com.mrgregles.bsp_rankup.settings.SettingsLedger;
 import net.minecraft.gametest.framework.GameTest;
@@ -54,6 +55,9 @@ public class SeasonGameTests {
         };
         MinecraftForge.EVENT_BUS.addListener(EventPriority.NORMAL, false, RankChangedEvent.class, listener);
         LadderGameTests.install(server);
+        // the seasonal top gives a title too: falling off it gives back b's (D75)
+        SettingsLedger.get(server).update(b -> b.setRank(2, Rank.of("ru_l_c", "C", 100).withSeasonal(true)
+                .withRewards(List.of(Reward.item("minecraft:bread", 1), Reward.title("[C] ")))));
         level.addNewPlayer(player);
         ProgressLedger ledger = ProgressLedger.get(server);
         int base = ledger.lastEndedSeason(); // seasons ended by earlier tests persist in the test world
@@ -65,7 +69,12 @@ public class SeasonGameTests {
         ledger.setRank(away.getUUID(), "ru_l_c", 1L);
         ledger.addBonus(id, 150); // straight to c, the seasonal top
         h.startSequence()
-                .thenWaitUntil(() -> h.assertTrue("ru_l_c".equals(ledger.progress(id).rank()) && player.getInventory().countItem(Items.BREAD) == 1, "on the seasonal top with its bread: " + ledger.progress(id)))
+                .thenWaitUntil(() -> {
+                    h.assertTrue("ru_l_c".equals(ledger.progress(id).rank()) && player.getInventory().countItem(Items.BREAD) == 1, "on the seasonal top with its bread: " + ledger.progress(id));
+                    if (LuckPermsBridge.isPresent()) {
+                        h.assertTrue(LuckPermsBridge.prefixOf(id, Settings.DEFAULT_TITLE_PRIORITY).equals(Optional.of("[C] ")), "and its title: " + LuckPermsBridge.prefixOf(id, Settings.DEFAULT_TITLE_PRIORITY));
+                    }
+                })
                 .thenExecute(() -> MinecraftForge.EVENT_BUS.post(new SeasonEvent.Ended(server, base + 1, false, "test")))
                 .thenWaitUntil(() -> {
                     Progress p = ledger.progress(id);
@@ -75,6 +84,7 @@ public class SeasonGameTests {
                     h.assertTrue(events.size() == 1 && events.get(0).getFrom().index() == 2 && events.get(0).getTo().index() == 1 && !events.get(0).isPromotion(), "one SEASON event, c to b: " + events);
                     if (LuckPermsBridge.isPresent()) {
                         h.assertTrue(LuckPermsBridge.rankOn(id, "ru_ladder_track").equals(Optional.of("ru_l_b")), "LuckPerms agrees: " + LuckPermsBridge.rankOn(id, "ru_ladder_track"));
+                        h.assertTrue(LuckPermsBridge.prefixOf(id, Settings.DEFAULT_TITLE_PRIORITY).equals(Optional.of("[B] ")), "the title follows the rung back to b's (D75): " + LuckPermsBridge.prefixOf(id, Settings.DEFAULT_TITLE_PRIORITY));
                     }
                 })
                 .thenExecuteAfter(10, () -> {

@@ -7,6 +7,7 @@ import com.mrgregles.bsp_rankup.progress.Signal;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
 import com.mrgregles.bsp_rankup.settings.Award;
 import com.mrgregles.bsp_rankup.settings.Ladder;
+import com.mrgregles.bsp_rankup.settings.PrefixImage;
 import com.mrgregles.bsp_rankup.settings.Rank;
 import com.mrgregles.bsp_rankup.settings.Reward;
 import com.mrgregles.bsp_rankup.settings.Settings;
@@ -31,8 +32,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The admin screen (owner decisions D22 to D31): tabs LADDER, SIGNALS, PLAYERS and OPTIONS; on LADDER the rungs on
- * the left and the chosen rung's fields and rewards on the right. Drawn in BSP Core's Holo HUD style with fills, at
+ * The admin screen (owner decisions D22 to D31, D51, D65): tabs LADDER, GROUPS, SIGNALS, PLAYERS, PREFIXES and OPTIONS;
+ * on LADDER the rungs on the left and the chosen rung's fields and rewards on the right. Drawn in BSP Core's Holo HUD style with fills, at
  * the bigger size of D29. The server owns every value: each edit is sent as an {@link AdminActionPacket} and the
  * screen redraws from the view that comes back. Destructive buttons ask for a second click within five seconds;
  * RESET EVERYONE wants its code typed back (D25).
@@ -41,8 +42,10 @@ public class AdminScreen extends HoloScreen {
     static final int W = 520, H = 300;
     static final int BG = 0xF010151C, INSET = 0xFF0C0E12, LINE = 0xFF2A2F3A, TQ = 0xFF19D3B0, VIO = 0xFFB58CFF, GOLD = 0xFFFFD23A,
             BAD = 0xFFFF6B5C, TEXT = 0xFFE6EAF2, MUTED = 0xFF9AA3B5;
-    private static final String[] TABS = {"LADDER", "GROUPS", "SIGNALS", "PLAYERS", "OPTIONS"};
-    private static final int T_LADDER = 0, T_GROUPS = 1, T_SIGNALS = 2, T_PLAYERS = 3, T_OPTIONS = 4;
+    private static final String[] TABS = {"LADDER", "GROUPS", "SIGNALS", "PLAYERS", "PREFIXES", "OPTIONS"};
+    private static final int T_LADDER = 0, T_GROUPS = 1, T_SIGNALS = 2, T_PLAYERS = 3, T_PREFIXES = 4, T_OPTIONS = 5;
+    /** On PREFIXES (D65, mock-up A): the prefix list on the left, the chosen prefix and the folder's files on the right. */
+    private static final int PFX_LIST_W = 200, PFX_PANE_X = 216, PFX_PANE_W = 296, FILE_ROW = 12, FILE_ROWS = 6;
     /** On LADDER (D51, mock-up A): the ladder chips, the chosen ladder's strip, then its rungs and the rung editor. */
     private static final int CHIPS_Y = 40, STRIP_Y = 56, RUNGS_Y = 74, RUNGS_H = 182, EDIT_Y = 76, REWARD_ROWS_H = 76;
     /** The item browser opens over the editor, down to the input line. */
@@ -117,6 +120,13 @@ public class AdminScreen extends HoloScreen {
     private boolean pickingKit;
     private int ticks;
     private String lastSearch = "";
+    /** On PREFIXES: the chosen prefix (its rank key), the chosen file, the scrolls and the filter. */
+    @Nullable
+    private String prefixChoice;
+    @Nullable
+    private String fileChoice;
+    private int prefixScroll, fileScroll;
+    private boolean onlyWithoutImage;
 
     public AdminScreen() {
         super(Component.literal(Tr.t("rankup_admin")), W, H);
@@ -420,6 +430,7 @@ public class AdminScreen extends HoloScreen {
                 case T_GROUPS -> drawGroups(g, x, y, mouseX, mouseY, s, v);
                 case T_SIGNALS -> drawSignals(g, x, y, mouseX, mouseY, s);
                 case T_PLAYERS -> drawPlayers(g, x, y, mouseX, mouseY, s, v);
+                case T_PREFIXES -> drawPrefixes(g, x, y, mouseX, mouseY, s, v);
                 default -> drawOptions(g, x, y, s, v);
             }
         }
@@ -445,7 +456,7 @@ public class AdminScreen extends HoloScreen {
             if (tab == T_PLAYERS && !search.getValue().equals(lastSearch)) {
                 lastSearch = search.getValue();
                 act(AdminActionPacket.PLAYER_SEARCH, lastSearch);
-            } else if (tab == T_PLAYERS || tab == T_OPTIONS || tab == T_GROUPS) {
+            } else if (tab == T_PLAYERS || tab == T_OPTIONS || tab == T_GROUPS || tab == T_PREFIXES) {
                 act(AdminActionPacket.REFRESH, "");
             }
         }
@@ -460,6 +471,9 @@ public class AdminScreen extends HoloScreen {
         rewardScroll = 0;
         if (t == T_PLAYERS && view() != null && view().players().isEmpty()) {
             act(AdminActionPacket.PLAYER_SEARCH, search.getValue());
+        }
+        if (t == T_PREFIXES) {
+            act(AdminActionPacket.PREFIX_SCAN, ""); // the folder read again and its previews sent
         }
     }
 
@@ -665,7 +679,11 @@ public class AdminScreen extends HoloScreen {
             int n = i + rewardScroll + 1;
             int ry = ly + 1 + i * 12;
             text(g, Tr.t("kind." + r.kind().name().toLowerCase(Locale.ROOT)), lx + 4, ry + 3, VIO, 0.6f);
-            text(g, clip(describe(r), lw - 88, 0.75f), lx + 50, ry + 2, TEXT, 0.75f); // ends before the item icon at lw - 32
+            boolean title = r.kind() == Reward.Kind.TITLE;
+            text(g, clip(describe(r), lw - (title ? 118 : 88), 0.75f), lx + 50, ry + 2, TEXT, 0.75f); // ends before the item icon at lw - 32, or the image slot
+            if (title) {
+                drawImageSlot(g, lx + lw - 64, ry + 1, group);
+            }
             if (r.kind() == Reward.Kind.ITEM) {
                 Item item = ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(r.value()));
                 if (item != null && item != Items.AIR) {
@@ -683,6 +701,25 @@ public class AdminScreen extends HoloScreen {
         }
         scrollbar(g, lx + lw, ly, lh, rewards.size(), rv, rewardScroll);
         return ly + lh + 5;
+    }
+
+    /** A title's image, read-only (D65): the image or "image" in a frame; a click opens PREFIXES on it. */
+    private void drawImageSlot(GuiGraphics g, int sx, int sy, String group) {
+        Settings s = settings();
+        String key = PrefixImage.titleKey(group);
+        PrefixImage img = s == null ? null : s.prefixImage(key);
+        frame(g, sx, sy, 48, 10, img == null ? LINE : VIO);
+        if (img == null) {
+            text(g, Tr.t("image_slot"), sx + (48 - (int) (font.width(Tr.t("image_slot")) * 0.5f)) / 2, sy + 3, MUTED, 0.5f);
+        } else {
+            drawComponent(g, PrefixFont.component(img.id(), ""), sx + 2, sy + 1, 1f, 44);
+        }
+        hits.add(new Hit(sx, sy, 48, 10, () -> {
+            switchTab(T_PREFIXES);
+            if (s != null) {
+                choosePrefix(s, key);
+            }
+        }));
     }
 
     /** + COINS, + PIECES, + ITEM (the browser), + TITLE, + COMMAND, + KIT (the picker) and FROM HAND, for one group's rewards. */
@@ -1177,6 +1214,258 @@ public class AdminScreen extends HoloScreen {
         }
     }
 
+    // ------------------------------------------------------------------ PREFIXES (D65)
+
+    /** One line of the PREFIXES list: a heading (row null) or a prefix. */
+    private record PrefixLine(@Nullable String heading, @Nullable AdminViewPacket.PrefixRow row) {
+    }
+
+    /** The list, built when the view or the filter changes rather than every frame. */
+    private List<PrefixLine> prefixLines = List.of();
+    @Nullable
+    private AdminViewPacket prefixLinesFor;
+    private boolean prefixLinesFilter;
+
+    /** The prefixes under a heading each: each ladder's titles, the awards' titles, LuckPerms groups' own prefixes. */
+    private List<PrefixLine> prefixLines(Settings s, AdminViewPacket v) {
+        if (v == prefixLinesFor && onlyWithoutImage == prefixLinesFilter) {
+            return prefixLines;
+        }
+        prefixLinesFor = v;
+        prefixLinesFilter = onlyWithoutImage;
+        Map<String, List<PrefixLine>> sections = new java.util.LinkedHashMap<>();
+        for (AdminViewPacket.PrefixRow r : v.prefixes()) {
+            if (onlyWithoutImage && s.prefixImage(r.key()) != null) {
+                continue;
+            }
+            sections.computeIfAbsent(sectionOf(s, r.key()), k -> new ArrayList<>()).add(new PrefixLine(null, r));
+        }
+        List<PrefixLine> lines = new ArrayList<>();
+        sections.forEach((heading, rows) -> {
+            lines.add(new PrefixLine(heading, null));
+            lines.addAll(rows);
+        });
+        prefixLines = lines;
+        return lines;
+    }
+
+    private static String sectionOf(Settings s, String key) {
+        if (key.startsWith(PrefixImage.GROUP)) {
+            return Tr.t("prefixes.groups");
+        }
+        Ladder on = s.ladderOf(PrefixImage.groupOf(key));
+        return on == null ? Tr.t("prefixes.awards") : Tr.t("prefixes.ladder", RankEngine.label(on).toUpperCase(Locale.ROOT));
+    }
+
+    /**
+     * Draws a prefix as chat shows it (D61): the rank's image when it has one, else the coloured text; clipped to
+     * {@code maxW} screen units at the scale. Returns the width drawn.
+     */
+    private int drawPrefix(GuiGraphics g, Settings s, String key, String text, int x, int y, float scale, int maxW) {
+        PrefixImage img = key.isEmpty() ? null : s.prefixImage(key);
+        return drawComponent(g, PrefixFont.component(img == null ? "" : img.id(), text), x, y, scale, maxW);
+    }
+
+    private int drawComponent(GuiGraphics g, Component c, int x, int y, float scale, int maxW) {
+        return drawComponent(g, c, x, y, scale, maxW, false);
+    }
+
+    private int drawComponent(GuiGraphics g, Component c, int x, int y, float scale, int maxW, boolean shadow) {
+        net.minecraft.network.chat.FormattedText cut = font.substrByWidth(c, (int) (maxW / scale));
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        g.pose().scale(scale, scale, 1);
+        g.drawString(font, net.minecraft.locale.Language.getInstance().getVisualOrder(cut), 0, 0, TEXT, shadow);
+        g.pose().popPose();
+        return (int) (font.width(cut) * scale);
+    }
+
+    private void drawPrefixes(GuiGraphics g, int x, int y, int mouseX, int mouseY, Settings s, AdminViewPacket v) {
+        int lx = x + LIST_X, ly = y + LIST_Y, lh = 216;
+        inset(g, lx, ly, PFX_LIST_W, lh);
+        List<PrefixLine> lines = prefixLines(s, v);
+        int visible = (lh - 2) / ROW;
+        prefixScroll = Mth.clamp(prefixScroll, 0, Math.max(0, lines.size() - visible));
+        for (int i = 0; i < visible && i + prefixScroll < lines.size(); i++) {
+            PrefixLine line = lines.get(i + prefixScroll);
+            int ry = ly + 1 + i * ROW;
+            if (line.row() == null) {
+                text(g, clip(line.heading(), PFX_LIST_W - 12, 0.6f), lx + 6, ry + 5, TQ, 0.6f);
+                continue;
+            }
+            AdminViewPacket.PrefixRow r = line.row();
+            boolean sel = r.key().equals(prefixChoice);
+            boolean hover = mouseX >= lx && mouseX < lx + PFX_LIST_W && mouseY >= ry && mouseY < ry + ROW;
+            if (sel) {
+                g.fill(lx + 1, ry, lx + PFX_LIST_W - 1, ry + ROW, 0x2219D3B0);
+                g.fill(lx + 1, ry, lx + 3, ry + ROW, TQ);
+            } else if (hover) {
+                g.fill(lx + 1, ry, lx + PFX_LIST_W - 1, ry + ROW, 0x14FFFFFF);
+            }
+            boolean image = s.prefixImage(r.key()) != null;
+            int right = lx + PFX_LIST_W - 6;
+            if (!image) {
+                textRight(g, Tr.t("tag.text"), right, ry + 5, MUTED, 0.5f);
+                right -= (int) (font.width(Tr.t("tag.text")) * 0.5f) + 4;
+            }
+            float scale = image ? 1f : 0.75f;
+            int pw = Math.min(100, (int) (font.width(PrefixFont.component(image ? s.prefixImage(r.key()).id() : "", r.text())) * scale));
+            drawPrefix(g, s, r.key(), r.text(), right - pw, ry + (image ? 3 : 4), scale, 100);
+            String name = r.key().startsWith(PrefixImage.GROUP) ? PrefixImage.groupOf(r.key()) : r.rankName().substring(r.rankName().indexOf(": ") + 1).strip();
+            text(g, clip(name, right - pw - 6 - (lx + 8), 0.85f), lx + 8, ry + 3, sel ? TEXT : MUTED, 0.85f);
+            hits.add(new Hit(lx, ry, PFX_LIST_W, ROW, () -> choosePrefix(s, r.key())));
+        }
+        if (lines.isEmpty()) {
+            text(g, clip(Tr.t("no_prefixes"), PFX_LIST_W - 12, 0.6f), lx + 6, ly + 8, MUTED, 0.6f);
+        }
+        scrollbar(g, lx + PFX_LIST_W, ly, lh, lines.size(), visible, prefixScroll);
+        button(g, lx, ly + lh + 6, 60, 13, Tr.t("refresh"), MUTED, () -> act(AdminActionPacket.PREFIX_SCAN, ""));
+        chip(g, lx + 63, ly + lh + 6, 92, 13, Tr.t("only_without_image"), onlyWithoutImage, TQ, 0.6f, () -> onlyWithoutImage = !onlyWithoutImage);
+
+        int px = x + PFX_PANE_X, py = y + PANE_Y, pw = PFX_PANE_W;
+        AdminViewPacket.PrefixRow chosen = null;
+        for (AdminViewPacket.PrefixRow r : v.prefixes()) {
+            if (r.key().equals(prefixChoice)) {
+                chosen = r;
+            }
+        }
+        if (chosen == null) {
+            if (v.prefixes().isEmpty()) {
+                text(g, Tr.t("no_prefixes"), px + 4, py + 8, MUTED, 0.75f);
+                text(g, clip(Tr.t("no_prefixes_how"), pw - 4, 0.6f), px + 4, py + 20, MUTED, 0.6f);
+            } else {
+                text(g, clip(Tr.t("pick_a_prefix"), pw, 0.75f), px + 4, py + 8, MUTED, 0.75f);
+            }
+            return;
+        }
+        String key = chosen.key(), group = PrefixImage.groupOf(key);
+        PrefixImage img = s.prefixImage(key);
+        boolean isGroup = key.startsWith(PrefixImage.GROUP);
+        String title = isGroup ? group : chosen.rankName().substring(chosen.rankName().indexOf(": ") + 1).strip();
+        text(g, clip(title.toUpperCase(Locale.ROOT), 150, 1f), px, py, TEXT, 1f);
+        Ladder on = isGroup ? null : s.ladderOf(group);
+        String kind = isGroup ? Tr.t("prefix_kind.group") : on != null ? Tr.t("prefix_kind.rung", on.indexOf(group) + 1, RankEngine.label(on)) : Tr.t("prefix_kind.award");
+        textRight(g, clip(kind, pw - 156, 0.6f), px + pw, py + 2, MUTED, 0.6f);
+
+        text(g, Tr.t("prefix_text"), px, py + 14, MUTED, 0.6f);
+        inset(g, px, py + 21, 150, 13);
+        drawPrefix(g, s, "", chosen.text(), px + 4, py + 24, 0.85f, 142);
+        if (isGroup) {
+            text(g, clip(Tr.t("changed_in_luckperms"), pw - 156, 0.6f), px + 156, py + 25, MUTED, 0.6f);
+        } else {
+            button(g, px + 156, py + 21, 74, 13, on != null ? Tr.t("edit_on_ladder") : Tr.t("edit_on_groups"), MUTED, () -> {
+                if (on != null) {
+                    selectedLadder = on.name();
+                    selectedGroup = group;
+                    switchTab(T_LADDER);
+                } else {
+                    groupChoice = group;
+                    switchTab(T_GROUPS);
+                }
+            });
+        }
+
+        text(g, Tr.t("image"), px, py + 42, MUTED, 0.6f);
+        inset(g, px, py + 49, pw, 34);
+        if (img == null) {
+            text(g, Tr.t("no_image_text_shows"), px + 6, py + 62, MUTED, 0.75f);
+        } else {
+            int w1 = drawPrefix(g, s, key, chosen.text(), px + 6, py + 62, 1f, 64);
+            text(g, Tr.t("line_size"), px + 6 + w1 + 4, py + 63, MUTED, 0.5f);
+            int x2 = px + 6 + w1 + 8 + (int) (font.width(Tr.t("line_size")) * 0.5f);
+            int w2 = drawPrefix(g, s, key, chosen.text(), x2, py + 58, 2f, 128);
+            text(g, Tr.t("times_two"), x2 + w2 + 4, py + 63, MUTED, 0.5f);
+            // the file's name and size, right of the x2 image (a 64 px wide image leaves about 50 units)
+            int room = px + pw - 6 - (x2 + w2 + 4 + (int) (font.width(Tr.t("times_two")) * 0.5f) + 6);
+            if (room > 20) {
+                textRight(g, clip(Tr.t("image_file", img.file(), img.width(), img.height()), room, 0.6f), px + pw - 6, py + 56, MUTED, 0.6f);
+                if (v.files().stream().noneMatch(f -> f.id().equals(img.id()))) {
+                    textRight(g, clip(Tr.t("not_in_folder"), room, 0.6f), px + pw - 6, py + 67, BAD, 0.6f);
+                }
+            }
+        }
+
+        text(g, Tr.t("in_chat"), px, py + 90, MUTED, 0.6f);
+        g.fill(px, py + 97, px + pw, py + 110, 0x80000000);
+        String me = minecraft != null && minecraft.player != null ? minecraft.player.getGameProfile().getName() : "Steve";
+        String spaced = chosen.text().isEmpty() || Character.isWhitespace(chosen.text().charAt(chosen.text().length() - 1)) ? chosen.text() : chosen.text() + " ";
+        Component chat = Component.literal("<").append(img == null ? com.mrgregles.bsp_rankup.prefix.Legacy.parse(spaced) : PrefixFont.component(img.id(), chosen.text()))
+                .append(Component.literal(me + "> " + Tr.t("chat_hello")));
+        drawComponent(g, chat, px + 4, py + 100, 1f, pw - 8, true); // with chat's shadow
+
+        drawFiles(g, px, py + 118, pw, mouseX, mouseY, s, v, key, img);
+    }
+
+    private void choosePrefix(Settings s, String key) {
+        prefixChoice = key;
+        PrefixImage img = s.prefixImage(key);
+        fileChoice = img == null ? null : img.file();
+        armed = null;
+    }
+
+    /** The images folder's files with their previews; a usable one is chosen with a click, then USE IMAGE. */
+    private void drawFiles(GuiGraphics g, int px, int fy, int pw, int mouseX, int mouseY, Settings s, AdminViewPacket v, String key, @Nullable PrefixImage img) {
+        text(g, Tr.t("files_in_folder"), px, fy, TQ, 0.6f);
+        int ly = fy + 8, lh = 2 + FILE_ROWS * FILE_ROW;
+        inset(g, px, ly, pw, lh);
+        List<AdminViewPacket.FileRow> files = v.files();
+        fileScroll = Mth.clamp(fileScroll, 0, Math.max(0, files.size() - FILE_ROWS));
+        for (int i = 0; i < FILE_ROWS && i + fileScroll < files.size(); i++) {
+            AdminViewPacket.FileRow f = files.get(i + fileScroll);
+            int ry = ly + 1 + i * FILE_ROW;
+            boolean usable = f.problem().isEmpty();
+            boolean sel = usable && f.name().equals(fileChoice);
+            boolean hover = usable && mouseX >= px && mouseX < px + pw && mouseY >= ry && mouseY < ry + FILE_ROW;
+            if (sel) {
+                g.fill(px + 1, ry, px + pw - 1, ry + FILE_ROW, 0x2219D3B0);
+                g.fill(px + 1, ry, px + 3, ry + FILE_ROW, TQ);
+            } else if (hover) {
+                g.fill(px + 1, ry, px + pw - 1, ry + FILE_ROW, 0x14FFFFFF);
+            }
+            if (usable) {
+                drawComponent(g, PrefixFont.component(f.id(), ""), px + 6, ry + 2, 1f, 64);
+                text(g, clip(f.name(), 110, 0.75f), px + 74, ry + 3, sel ? TEXT : MUTED, 0.75f);
+                text(g, f.width() + " x " + f.height(), px + 74 + 114, ry + 3, MUTED, 0.5f);
+                String tag = "";
+                int colour = MUTED;
+                if (img != null && img.id().equals(f.id())) {
+                    tag = Tr.t("in_use_here");
+                    colour = TQ;
+                } else {
+                    for (Map.Entry<String, PrefixImage> e : s.prefixImages().entrySet()) {
+                        if (e.getValue().id().equals(f.id())) {
+                            tag = Tr.t("on_rank", PrefixImage.groupOf(e.getKey()));
+                            break;
+                        }
+                    }
+                }
+                textRight(g, clip(tag, pw - 230, 0.5f), px + pw - 6, ry + 4, colour, 0.5f);
+                hits.add(new Hit(px, ry, pw, FILE_ROW, () -> fileChoice = f.name()));
+            } else {
+                text(g, clip(f.name(), 110, 0.75f), px + 74, ry + 3, BAD, 0.75f);
+                textRight(g, clip(f.problem(), pw - 196, 0.5f), px + pw - 6, ry + 4, BAD, 0.5f);
+            }
+        }
+        if (files.isEmpty()) {
+            text(g, clip(Tr.t("no_files"), pw - 12, 0.6f), px + 6, ly + 6, MUTED, 0.6f);
+        }
+        scrollbar(g, px + pw, ly, lh, files.size(), FILE_ROWS, fileScroll);
+
+        int by = ly + lh + 5;
+        AdminViewPacket.FileRow picked = null;
+        for (AdminViewPacket.FileRow f : files) {
+            if (f.name().equals(fileChoice) && f.problem().isEmpty()) {
+                picked = f;
+            }
+        }
+        boolean canUse = picked != null && (img == null || !img.id().equals(picked.id()));
+        AdminViewPacket.FileRow use = picked;
+        button(g, px, by, 70, 13, Tr.t("use_image"), canUse ? TQ : LINE, canUse ? () -> send(AdminActionPacket.of(AdminActionPacket.PREFIX_SET, key, use.name())) : null);
+        button(g, px + 73, by, 84, 13, Tr.t("show_text_again"), img != null ? BAD : LINE, img != null ? () -> act(AdminActionPacket.PREFIX_CLEAR, key) : null);
+        String hint = picked == null && !files.isEmpty() ? Tr.t("pick_a_file") : Tr.t("saved_for_every_server");
+        text(g, clip(hint, pw - 164, 0.6f), px + 164, by + 3, MUTED, 0.6f);
+    }
+
     // ------------------------------------------------------------------ OPTIONS
 
     private void drawOptions(GuiGraphics g, int x, int y, Settings s, AdminViewPacket v) {
@@ -1206,6 +1495,9 @@ public class AdminScreen extends HoloScreen {
         text(g, Tr.t("seasonal_rewards"), px + 270, py + 28, MUTED, 0.6f);
         chip(g, px + 270, py + 35, 60, 13, Tr.t("each_season"), s.rewardsAgainEachSeason(), TQ, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.OPTION, "rewardsagain", "true")));
         chip(g, px + 333, py + 35, 40, 13, Tr.t("once"), !s.rewardsAgainEachSeason(), TQ, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.OPTION, "rewardsagain", "false")));
+        text(g, Tr.t("prefixes_in_chat"), px + 384, py + 28, MUTED, 0.6f);
+        chip(g, px + 384, py + 35, 30, 13, Tr.t("on"), s.showPrefixes(), TQ, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.OPTION, "showprefixes", "true")));
+        chip(g, px + 417, py + 35, 30, 13, Tr.t("off"), !s.showPrefixes(), TQ, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.OPTION, "showprefixes", "false")));
 
         int by = py + 60;
         dangerButton(g, px, by, 150, 13, Tr.t("make_track_in_luckperms"), "make-track", () -> act(AdminActionPacket.MAKE_TRACK, ""));
@@ -1286,6 +1578,14 @@ public class AdminScreen extends HoloScreen {
             browseScroll -= step;
             return true;
         }
+        if (tab == T_PREFIXES) {
+            if (mx < x + PFX_PANE_X) {
+                prefixScroll -= step;
+            } else {
+                fileScroll -= step;
+            }
+            return true;
+        }
         if (mx >= x + LIST_X && mx < x + LIST_X + LIST_W && my >= y + LIST_Y && my < y + LIST_Y + LIST_H) {
             if (tab == T_LADDER && my >= y + RUNGS_Y) {
                 listScroll -= step;
@@ -1300,6 +1600,7 @@ public class AdminScreen extends HoloScreen {
             signalScroll -= step;
             return true;
         }
+
         if ((tab == T_LADDER || tab == T_GROUPS) && mx >= x + PANE_X) {
             rewardScroll -= step;
             return true;

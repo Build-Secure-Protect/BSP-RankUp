@@ -138,6 +138,32 @@ public final class BspCore {
     private static List<KitInfo> kitCache;
     private static int kitCacheTick;
 
+    // ------------------------------------------------------------------ storage (BSP-Core 1.4.5)
+
+    /** A JDBC driver and the URL scheme it takes ({@code jdbc:mysql://} or {@code jdbc:mariadb://}). */
+    public record JdbcDriver(java.sql.Driver driver, String urlPrefix) {
+    }
+
+    /**
+     * The driver BSP-Core uses for its own database (its full jar's relocated MySQL driver, or the server's MySQL or
+     * MariaDB driver with the slim jar); empty without one, or with a BSP-Core older than 1.4.5.
+     */
+    public static java.util.Optional<JdbcDriver> jdbcDriver() {
+        try {
+            return Storage.driver();
+        } catch (LinkageError e) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    /** Holds BSP-Core's storage api, so an older BSP-Core only fails here. */
+    private static final class Storage {
+        static java.util.Optional<JdbcDriver> driver() {
+            java.util.Optional<java.sql.Driver> d = com.mrgregles.bsp_core.api.BspStorage.jdbcDriver();
+            return d.map(driver -> new JdbcDriver(driver, com.mrgregles.bsp_core.api.BspStorage.jdbcUrlPrefix().orElse("jdbc:mysql://")));
+        }
+    }
+
     // ------------------------------------------------------------------ scores (BSP-Core 1.4.5, request RU-R1)
 
     private static boolean scoresChecked, scoresPresent;

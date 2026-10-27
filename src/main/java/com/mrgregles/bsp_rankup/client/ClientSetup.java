@@ -40,6 +40,14 @@ public final class ClientSetup {
         event.register(OPEN_RANK);
     }
 
+    /** The prefix images' font, as a hidden pack that is always on (D62). */
+    @SubscribeEvent
+    public static void onAddPacks(net.minecraftforge.event.AddPackFindersEvent event) {
+        if (event.getPackType() == net.minecraft.server.packs.PackType.CLIENT_RESOURCES) {
+            event.addRepositorySource(add -> add.accept(PrefixPack.pack()));
+        }
+    }
+
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
         MinecraftForge.EVENT_BUS.addListener(ClientSetup::onClientTick);
@@ -58,6 +66,7 @@ public final class ClientSetup {
         while (OPEN_RANK.consumeClick()) {
             openRank();
         }
+        PrefixFont.tick();
     }
 
     /** The RankUp button in the survival inventory (its place is a client setting, so it can move off other mods' buttons). */

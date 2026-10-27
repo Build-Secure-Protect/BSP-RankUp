@@ -37,6 +37,9 @@ public final class Settings {
     private final int killCooldownMinutes;
     private final Announce announce;
     private final boolean rewardsAgainEachSeason;
+    /** Images drawn in place of prefixes, by rank key (D57); see {@link PrefixImage}. */
+    private final Map<String, PrefixImage> prefixImages;
+    private final boolean showPrefixes;
 
     private Settings(Builder b) {
         this.ladders = b.ladders.isEmpty() ? List.of(Ladder.of(DEFAULT_TRACK, DEFAULT_TRACK)) : List.copyOf(b.ladders);
@@ -45,6 +48,8 @@ public final class Settings {
         this.killCooldownMinutes = b.killCooldownMinutes;
         this.announce = b.announce;
         this.rewardsAgainEachSeason = b.rewardsAgainEachSeason;
+        this.prefixImages = java.util.Collections.unmodifiableMap(new java.util.TreeMap<>(b.prefixImages));
+        this.showPrefixes = b.showPrefixes;
     }
 
     /** The defaults: one ladder {@code rankup} on track {@code rankup} counting every signal, no ranks, no awards. */
@@ -153,6 +158,21 @@ public final class Settings {
         return rewardsAgainEachSeason;
     }
 
+    /** Every prefix image by rank key, keys in order. */
+    public Map<String, PrefixImage> prefixImages() {
+        return prefixImages;
+    }
+
+    @Nullable
+    public PrefixImage prefixImage(String key) {
+        return prefixImages.get(key);
+    }
+
+    /** Whether RankUp puts the player's LuckPerms prefix before their name in chat and the tab list (D55). */
+    public boolean showPrefixes() {
+        return showPrefixes;
+    }
+
     public Builder toBuilder() {
         Builder b = new Builder();
         b.ladders = new ArrayList<>(ladders);
@@ -161,6 +181,8 @@ public final class Settings {
         b.killCooldownMinutes = killCooldownMinutes;
         b.announce = announce;
         b.rewardsAgainEachSeason = rewardsAgainEachSeason;
+        b.prefixImages = new java.util.TreeMap<>(prefixImages);
+        b.showPrefixes = showPrefixes;
         return b;
     }
 
@@ -190,6 +212,10 @@ public final class Settings {
         tag.putInt("KillCooldownMinutes", killCooldownMinutes);
         tag.putString("Announce", announce.name());
         tag.putBoolean("RewardsAgainEachSeason", rewardsAgainEachSeason);
+        ListTag images = new ListTag();
+        prefixImages.forEach((key, image) -> images.add(image.save(key)));
+        tag.put("PrefixImages", images);
+        tag.putBoolean("ShowPrefixes", showPrefixes);
         return tag;
     }
 
@@ -227,6 +253,17 @@ public final class Settings {
         if (tag.contains("RewardsAgainEachSeason")) {
             b.rewardsAgainEachSeason = tag.getBoolean("RewardsAgainEachSeason");
         }
+        ListTag images = tag.getList("PrefixImages", Tag.TAG_COMPOUND);
+        for (int i = 0; i < images.size(); i++) {
+            CompoundTag image = images.getCompound(i);
+            String key = image.getString("Key");
+            if (PrefixImage.isKey(key) && !image.getString("Id").isEmpty()) {
+                b.prefixImages.put(key, PrefixImage.load(image));
+            }
+        }
+        if (tag.contains("ShowPrefixes")) {
+            b.showPrefixes = tag.getBoolean("ShowPrefixes");
+        }
         return b.build();
     }
 
@@ -237,6 +274,8 @@ public final class Settings {
         private int killCooldownMinutes = DEFAULT_KILL_COOLDOWN_MINUTES;
         private Announce announce = Announce.SERVER;
         private boolean rewardsAgainEachSeason = true;
+        private Map<String, PrefixImage> prefixImages = new java.util.TreeMap<>();
+        private boolean showPrefixes = true;
 
         public Builder() {
             for (Signal s : Signal.values()) {
@@ -368,6 +407,21 @@ public final class Settings {
 
         public Builder rewardsAgainEachSeason(boolean again) {
             this.rewardsAgainEachSeason = again;
+            return this;
+        }
+
+        /** Sets the image for a rank key; null takes it away (the text shows again). */
+        public Builder prefixImage(String key, @Nullable PrefixImage image) {
+            if (image == null) {
+                prefixImages.remove(key);
+            } else {
+                prefixImages.put(key, image);
+            }
+            return this;
+        }
+
+        public Builder showPrefixes(boolean show) {
+            this.showPrefixes = show;
             return this;
         }
 

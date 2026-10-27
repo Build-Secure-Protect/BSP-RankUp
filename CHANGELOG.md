@@ -4,6 +4,43 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-27
+
+Server and modpack must update together (protocol 3). Requires BSP Core 1.4.5 or newer; BSP Region Guard 0.6.0 needs BSP Core 1.4.6 or newer, so deploy BSP Core 1.6.2, Region Guard 0.6.0 and this RankUp together.
+
+### Changed (2026-10-27, the owner's answers after the audit)
+- BSP Core 1.4.5 or newer is required (`bsp_core_version_range=[1.4.5,)`, D77): the score signal, the team hook and the database driver lookup need it.
+- The rank screen's title chip shows each ladder's own title (the prefix at that ladder's priority), as its image when it has one, instead of the one title LuckPerms shows on every ladder's pane (D76). The rank view carries a title per ladder.
+- Titles follow the rung at a season's end (D75, confirmed).
+- README: how ranks gate regions and kits (exact groups; a region for "X and up" lists every rung from X, D78).
+
+### Fixed (2026-10-27, the full audit, AU-1)
+- On a network the login check (rewards kept while away, a season's end missed) waited for nothing: it ran on this server's old copy before the player's shared row arrived, so rewards already given on another server could be given again and a season handled there handled again. It now waits for the row (or for the read to find none or fail); nothing is checked for the player meanwhile.
+- A settings change was announced to the other servers before it was written, so with Redis a server could read the old settings and miss the change (a newly picked prefix image included) until the next edit. The notice now goes out after the write.
+- Notices read from the MySQL table when Redis is off: one committed after a later id could be skipped; the last few are read again (each acts once).
+- Prefixes with a dot (`[Lv.5]`) were read from LuckPerms with its key escape (`[Lv\.5]`): group prefixes with a dot never got their image, and the PREFIXES tab and the title chip showed the backslash.
+- Falling off a seasonal rung, or losing a seasonal award at a season's end, left its title on the player (now shown in chat). The title now follows the rung: the one the rung fallen to gives (or the nearest rung below that gives one), or none; a taken-back award's title gives way to the latest award kept that has one (D75).
+- `/rankup prefix image|clear` could not read the `title:<group>` keys `prefix list` printed: they now take `title <group>` or `group <group>`, as `prefix list` prints them.
+- A PNG whose chunk claims more bytes than the file could stop the images folder being read; it is now listed as broken.
+- A rung with two TITLE rewards matched its image against the first; LuckPerms shows the last.
+- The tab list name kept an old team colour after a team change until the prefix changed; a team change draws it again.
+- The PREFIXES chat preview is drawn with chat's shadow.
+
+### Changed (2026-10-27, the full audit, AU-1)
+- Holder counts for the rank and admin views are counted once and kept until a rank, award, season, load or reset changes them; the settings sent with each view are made once per change; the admin search looks up offline names without walking every world; LuckPerms' groups are asked once per check rather than once per ladder.
+- The images folder is read again only for files whose size or time changed; names are drawn again only when the switch, an image or a title's text changed, not on every settings edit.
+- The MySQL driver comes from BSP-Core (`BspStorage.jdbcDriver()`, BSP-Core 1.4.5 and newer, which also covers its slim jar and MariaDB); the old lookup stays for older BSP-Core.
+- Dev runs and GameTests use the LuckPerms Forge build the servers run (`luckperms_dev_version=5.5.88-bsp.2` in `gradle.properties`; `tools/make_luckperms_dev_jar.py` reads it).
+
+### Added (2026-10-27, prefix images, D55 to D74)
+- Prefixes before names: RankUp puts each player's LuckPerms prefix (the one LuckPerms ranks highest) before their name in chat and the tab list, inside vanilla's `<name>`, in its colours (`&` and `§` codes, `&#RRGGBB`). Nothing on a Forge network did this before. OPTIONS has PREFIXES IN CHAT on/off, and `/rankup option showprefixes true|false`, for a chat mod added later.
+- Prefix images: PNG files in `config/bsp_rankup/prefix_images/` (at most 256 x 64 pixels and 256 KB, not animated, no wider than 64 pixels once drawn one text line high) can be drawn in place of a rank's prefix. An image is tied to the rank: a rung's or an award's title (`title:<group>`), or a LuckPerms group's own prefix (`group:<group>`), so editing the prefix text keeps it. One image may serve several ranks. Hovering an image in chat shows the prefix text and the rank's name; the console and logs show the prefix text.
+- The picked image is kept on the server and in the shared MySQL storage (a new `<prefix>images` table), so the other servers draw it without the file, and deleting the file changes nothing (the screen marks it "not in folder"). Players are sent each image in use at login and when one is picked; the client draws it as a character of a font RankUp adds, reloading only the fonts.
+- A PREFIXES tab on the admin screen (mock-up A, D65): every prefix by where it comes from (each ladder's titles, the awards' titles, LuckPerms groups), the chosen one's text, image at line size and twice that, a chat preview, and the folder's files with previews and what is wrong with any that cannot be used; USE IMAGE, SHOW TEXT AGAIN, REFRESH, "only without image". A TITLE reward on LADDER and GROUPS shows its image in a small slot that opens PREFIXES on it.
+- The rank screen's title chip shows the title's image. The "Your title is now ..." line shows the title in its colours.
+- `/rankup prefix list`, `prefix files` (the folder read again, each file checked), `prefix image title|group <group> <file>`, `prefix clear title|group <group>`.
+- Protocol 3: the server and the players' modpack must update together.
+
 ## [0.3.0] - 2026-10-27
 
 ### Added (2026-10-27, the rank screen for several ladders and awards, RU-16)

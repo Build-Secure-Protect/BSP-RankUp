@@ -76,9 +76,11 @@ public final class Players {
     /** The player's name: from the online player, else the profile cache, else the uuid's first eight characters. */
     public static String name(MinecraftServer server, UUID player) {
         ServerPlayer p = online(server, player);
-        if (p != null) {
-            return p.getGameProfile().getName();
-        }
+        return p != null ? p.getGameProfile().getName() : offlineName(server, player);
+    }
+
+    /** As {@link #name} for a player known not to be online here: the profile cache only (in memory), without walking every world's players. */
+    public static String offlineName(MinecraftServer server, UUID player) {
         if (server.getProfileCache() != null) {
             var cached = server.getProfileCache().get(player);
             if (cached.isPresent()) {

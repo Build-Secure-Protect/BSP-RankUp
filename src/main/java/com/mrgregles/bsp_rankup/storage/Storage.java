@@ -48,7 +48,7 @@ import java.util.function.Consumer;
  */
 public final class Storage {
     public static final String KIND_SETTINGS = "settings", KIND_RANKUP = "rankup", KIND_PROGRESS = "progress", KIND_AWARD = "award";
-    private static final int NOTICE_BATCH = 100, SEEN_LIMIT = 20_000;
+    private static final int NOTICE_BATCH = 100, SEEN_LIMIT = 20_000, NOTICE_OVERLAP = 20;
     private static final long FLUSH_MS = 5000;
     /** Unsent changes are written this often; after a failure the wait doubles up to {@link #BACKOFF_MAX_MS}. */
     private static final long WRITE_EVERY_MS = 5000, BACKOFF_MAX_MS = 60_000;
@@ -507,8 +507,11 @@ public final class Storage {
         long version = Math.max(System.currentTimeMillis(), settingsVersion + 1);
         settingsVersion = version;
         String json = SettingsFiles.toJson(settings);
-        submit(() -> backend.saveSettings(json, version));
-        publish(KIND_SETTINGS, Long.toString(version));
+        // the notice goes out once the row is written: a server told sooner would read the old row and never look again
+        submit(() -> {
+            backend.saveSettings(json, version);
+            server.execute(() -> publish(KIND_SETTINGS, Long.toString(version)));
+        });
     }
 
     /** An award reached here is announced on the other servers too when announcements are network-wide (D53). */
@@ -540,16 +543,42 @@ public final class Storage {
         }
     }
 
+    /** Told on the server thread when a read of a player's row is over: applied, missing, or failed (the local copy stands). */
+    public interface ReadListener {
+        void read(MinecraftServer server, UUID player);
+    }
+
+    private static final List<ReadListener> READ_LISTENERS = new CopyOnWriteArrayList<>();
+
+    /** The ladder engine's login check waits for this (on a network the row read at login is the truth). */
+    public static void onPlayerRead(ReadListener listener) {
+        READ_LISTENERS.add(listener);
+    }
+
+    private void readDone(UUID player) {
+        for (ReadListener l : READ_LISTENERS) {
+            l.read(server, player);
+        }
+    }
+
     /**
      * Reads the player's row and replaces the local copy with it, the changes not yet written added on top (nothing
      * changes when the row is missing). The read and the batch writes share the worker, so the changes unsent at the
      * read are exactly those the row lacks; the ones made while the row travels to the server thread are collected
-     * on the way.
+     * on the way. The read listeners are told when it is over, whatever the outcome.
      */
     public void loadPlayer(UUID player) {
-        submit(() -> {
-            StorageBackend.PlayerRow row = backend.loadPlayer(player);
+        work.add(() -> {
+            StorageBackend.PlayerRow row;
+            try {
+                row = backend.loadPlayer(player);
+            } catch (Exception e) {
+                failed(e);
+                server.execute(() -> readDone(player));
+                return;
+            }
             if (row == null) {
+                server.execute(() -> readDone(player));
                 return;
             }
             Unsent before, since = new Unsent();
@@ -558,7 +587,10 @@ public final class Storage {
                 before = u == null ? new Unsent() : u.copy();
                 reading.computeIfAbsent(player, k -> new ArrayList<>()).add(since);
             }
-            server.execute(() -> apply(row, before, since));
+            server.execute(() -> {
+                apply(row, before, since);
+                readDone(player);
+            });
         });
     }
 
@@ -644,6 +676,27 @@ public final class Storage {
         return settingsVersion;
     }
 
+    // ------------------------------------------------------------------ prefix images (D59)
+
+    /** Keeps a prefix image in the shared table, for the other servers. */
+    public void saveImage(String id, byte[] png) {
+        submit(() -> backend.saveImage(id, png));
+    }
+
+    /** Reads a prefix image from the shared table; the answer (null when missing or unreadable) comes on the server thread. */
+    public void loadImage(String id, Consumer<byte[]> then) {
+        work.add(() -> {
+            byte[] png = null;
+            try {
+                png = backend.loadImage(id);
+            } catch (Exception e) {
+                failed(e);
+            }
+            byte[] found = png;
+            server.execute(() -> then.accept(found));
+        });
+    }
+
     // ------------------------------------------------------------------ notices
 
     /** Sends a notice to every server: through Redis at once when connected, and always into the table. */
@@ -699,7 +752,9 @@ public final class Storage {
     /** Reads the notices the table has gained since the last read; on the worker thread (or a test's drain). */
     public void pollNotices() {
         submit(() -> {
-            List<StorageBackend.Notice> rows = backend.fetchNoticesAfter(lastNoticeId, NOTICE_BATCH);
+            // a little below the last id too: two servers' inserts can commit out of id order, and a later id seen first
+            // must not hide an earlier one committed after it (the notices already handled are skipped by uid)
+            List<StorageBackend.Notice> rows = backend.fetchNoticesAfter(Math.max(0, lastNoticeId - NOTICE_OVERLAP), NOTICE_BATCH);
             for (StorageBackend.Notice n : rows) {
                 lastNoticeId = Math.max(lastNoticeId, n.id());
                 server.execute(() -> handle(n));

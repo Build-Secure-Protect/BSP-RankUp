@@ -15,14 +15,25 @@ import java.util.function.Supplier;
  * Server to client: everything the admin screen shows. The settings as their NBT, how many players hold each rung,
  * the players matching the last search, the selected player's standing, the lines of the OPTIONS tab's info, the
  * reset-everyone code waiting (empty when none) and its seconds, the server's last answer, whether to open the screen,
- * BSP-Core's kits (id to name) for the reward editor, and LuckPerms' groups for the GROUPS tab (D50). The holders
- * count every ladder's rungs and every award.
+ * BSP-Core's kits (id to name) for the reward editor, LuckPerms' groups for the GROUPS tab (D50), and for the
+ * PREFIXES tab (D65) every prefix RankUp lists and the files in the images folder. The holders count every ladder's
+ * rungs and every award; the prefixes' images are in the settings.
  */
 public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders, List<PlayerRow> players, PlayerDetail selected,
                               List<String> info, String resetCode, int resetSeconds, String message, boolean ok, boolean open, Map<String, String> kits,
-                              List<String> groups) {
+                              List<String> groups, List<PrefixRow> prefixes, List<FileRow> files) {
     /** The most LuckPerms groups one view carries. */
     public static final int MAX_GROUPS = 500;
+    /** The most prefixes and image files one view carries. */
+    public static final int MAX_PREFIXES = 500, MAX_FILES = 100;
+
+    /** One prefix (D56): its rank key ({@code title:<group>} or {@code group:<group>}), its text and the rank's name. */
+    public record PrefixRow(String key, String text, String rankName) {
+    }
+
+    /** One file of the images folder: name, size in pixels and bytes, id (empty when unusable) and what is wrong (empty when fine). */
+    public record FileRow(String name, int width, int height, int bytes, String id, String problem) {
+    }
 
     /** One row of the PLAYERS tab. */
     public record PlayerRow(UUID uuid, String name, String rank, long points, boolean online) {
@@ -67,6 +78,19 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
         buf.writeBoolean(msg.open);
         buf.writeMap(msg.kits, (b, k) -> b.writeUtf(k, 64), (b, v) -> b.writeUtf(v, 64));
         buf.writeCollection(msg.groups.size() > MAX_GROUPS ? msg.groups.subList(0, MAX_GROUPS) : msg.groups, (b, g) -> b.writeUtf(g, 64));
+        buf.writeCollection(msg.prefixes.size() > MAX_PREFIXES ? msg.prefixes.subList(0, MAX_PREFIXES) : msg.prefixes, (b, p) -> {
+            b.writeUtf(p.key, 72);
+            b.writeUtf(p.text, 128);
+            b.writeUtf(p.rankName, 128);
+        });
+        buf.writeCollection(msg.files.size() > MAX_FILES ? msg.files.subList(0, MAX_FILES) : msg.files, (b, f) -> {
+            b.writeUtf(f.name, 128);
+            b.writeVarInt(f.width);
+            b.writeVarInt(f.height);
+            b.writeVarInt(f.bytes);
+            b.writeUtf(f.id, 40);
+            b.writeUtf(f.problem, 128);
+        });
     }
 
     public static AdminViewPacket decode(FriendlyByteBuf buf) {
@@ -82,7 +106,9 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
         boolean ok = buf.readBoolean(), open = buf.readBoolean();
         Map<String, String> kits = buf.readMap(b -> b.readUtf(64), b -> b.readUtf(64));
         List<String> groups = buf.readList(b -> b.readUtf(64));
-        return new AdminViewPacket(settings == null ? new CompoundTag() : settings, holders, players, d, info, code, seconds, message, ok, open, kits, groups);
+        List<PrefixRow> prefixes = buf.readList(b -> new PrefixRow(b.readUtf(72), b.readUtf(128), b.readUtf(128)));
+        List<FileRow> files = buf.readList(b -> new FileRow(b.readUtf(128), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readUtf(40), b.readUtf(128)));
+        return new AdminViewPacket(settings == null ? new CompoundTag() : settings, holders, players, d, info, code, seconds, message, ok, open, kits, groups, prefixes, files);
     }
 
     public static void handle(AdminViewPacket msg, Supplier<NetworkEvent.Context> ctx) {

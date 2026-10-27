@@ -167,7 +167,7 @@ public final class Rewards {
                 ItemStack stack = stack(r);
                 yield Component.translatable("message.bsp_rankup.reward.item", r.amount(), stack.isEmpty() ? Component.literal(r.value()) : stack.getHoverName());
             }
-            case TITLE -> Component.translatable("message.bsp_rankup.reward.title", r.value());
+            case TITLE -> Component.translatable("message.bsp_rankup.reward.title", com.mrgregles.bsp_rankup.prefix.Legacy.parse(r.value().strip())); // in its colours, not its & codes
             case COMMAND -> Component.translatable("message.bsp_rankup.reward.command");
             case KIT -> Component.translatable("message.bsp_rankup.reward.kit", kitName(r.value()));
         };

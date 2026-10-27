@@ -129,6 +129,7 @@ public final class Seasons {
                 server.execute(() -> {
                     if (err == null && ok != null && ok) {
                         ledger.setAward(player, award.group(), false, 0);
+                        dropAwardTitle(server, settings, player, award);
                     } else {
                         BSPRankUp.LOGGER.warn("Season {}: LuckPerms did not take the award '{}' back from {}", season, award.group(), Players.name(server, player));
                     }
@@ -141,6 +142,42 @@ public final class Seasons {
             IN_FLIGHT.remove(player);
             RankEngine.check(server, player);
         }));
+    }
+
+    /** The title a holder of rung {@code index} has from the ladder: the last TITLE of that rung or the nearest rung below that gives one; null for none. */
+    @org.jetbrains.annotations.Nullable
+    static String titleAt(Ladder ladder, int index) {
+        for (int i = Math.min(index, ladder.ranks().size() - 1); i >= 0; i--) {
+            String title = com.mrgregles.bsp_rankup.prefix.PrefixDisplay.titleOf(ladder.ranks().get(i).rewards());
+            if (title != null) {
+                return title;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A taken-back award's title goes with it (D75): when the awards' prefix is that award's title, it becomes the
+     * title of the award the player reached most recently among those they keep, or none.
+     */
+    private static void dropAwardTitle(MinecraftServer server, Settings settings, UUID player, Award gone) {
+        String title = com.mrgregles.bsp_rankup.prefix.PrefixDisplay.titleOf(gone.rewards());
+        int priority = RankEngine.awardTitlePriority(settings);
+        if (title == null || !LuckPermsBridge.isPresent() || !LuckPermsBridge.prefixOf(player, priority).equals(java.util.Optional.of(title))) {
+            return;
+        }
+        Progress p = ProgressLedger.get(server).peek(player);
+        String next = null;
+        long latest = Long.MIN_VALUE;
+        for (Award a : settings.awards()) {
+            Long at = p == null ? null : p.awards().get(a.group());
+            String t = com.mrgregles.bsp_rankup.prefix.PrefixDisplay.titleOf(a.rewards());
+            if (at != null && t != null && at > latest) {
+                latest = at;
+                next = t;
+            }
+        }
+        LuckPermsBridge.setPrefix(player, priority, next);
     }
 
     /** Moves the player off a seasonal rung to the highest permanent rung below it on the same ladder (or off it). */
@@ -169,6 +206,10 @@ public final class Seasons {
                 }
                 Rank reached = to < 0 ? null : ladder.ranks().get(to);
                 RankEngine.setRung(server, settings, ladder, player, reached == null ? null : reached.group());
+                if (LuckPermsBridge.isPresent()) {
+                    // the title follows the rung (D75): the one the rung fallen to would have given, or none
+                    LuckPermsBridge.setPrefix(player, ladder.titlePriority(), titleAt(ladder, to));
+                }
                 ServerPlayer online = Players.online(server, player);
                 if (online != null) {
                     online.sendSystemMessage(reached == null

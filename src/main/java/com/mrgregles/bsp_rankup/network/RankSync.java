@@ -71,22 +71,7 @@ public final class RankSync {
             p = new Progress();
         }
         // how many hold each rung of every ladder, and each award (groups are on one ladder or one award)
-        Map<String, Integer> holders = new LinkedHashMap<>();
-        for (Ladder l : settings.ladders()) {
-            for (Rank r : l.ranks()) {
-                holders.put(r.group(), 0);
-            }
-        }
-        for (Award a : settings.awards()) {
-            holders.put(a.group(), 0);
-        }
-        ledger.forEach((id, other) -> {
-            if (other.rank() != null) {
-                holders.merge(other.rank(), 1, Integer::sum);
-            }
-            other.otherRanks().values().forEach(held -> holders.merge(held.group(), 1, Integer::sum));
-            other.awards().keySet().forEach(g -> holders.merge(g, 1, Integer::sum));
-        });
+        Map<String, Integer> holders = com.mrgregles.bsp_rankup.rank.Holders.of(server);
         Map<String, Long> counts = new LinkedHashMap<>();
         for (Signal s : Signal.values()) {
             counts.put(s.key(), p.count(s));
@@ -110,7 +95,9 @@ public final class RankSync {
                 ways = fastest(settings, l, Math.max(0, next.points() - (next.seasonal() ? ls : lp)));
             }
             String held = at < 0 ? "" : l.ranks().get(at).group();
-            ladders.add(new RankViewPacket.LadderView(cut(l.name(), 32), held, RankEngine.rankedAtOn(settings, l, p), lp, ls, ways));
+            String title = LuckPermsBridge.isPresent() ? LuckPermsBridge.prefixOf(player, l.titlePriority()).orElse("") : "";
+            ladders.add(new RankViewPacket.LadderView(cut(l.name(), 32), held, RankEngine.rankedAtOn(settings, l, p), lp, ls, ways,
+                    cut(title, 64), com.mrgregles.bsp_rankup.prefix.PrefixDisplay.imageIdFor(server, title)));
         }
         List<RankViewPacket.AwardView> awards = new ArrayList<>();
         for (Award a : settings.awards()) {
@@ -119,14 +106,16 @@ public final class RankSync {
             awards.add(new RankViewPacket.AwardView(a.group(), reachedAt != null, reachedAt == null ? 0 : reachedAt, have));
         }
         // the packet carries at most 64 characters of each (a colour-coded title passes that quickly)
-        String title = cut(shownTitle(settings, player), 64);
+        String fullTitle = shownTitle(settings, player);
+        String title = cut(fullTitle, 64);
+        String titleImage = com.mrgregles.bsp_rankup.prefix.PrefixDisplay.imageIdFor(server, fullTitle);
         String serverId = cut(Storage.active() == null ? "" : Storage.active().serverId(), 64);
         Map<String, String> kits = new LinkedHashMap<>();
         for (com.mrgregles.bsp_rankup.compat.BspCore.KitInfo k : com.mrgregles.bsp_rankup.compat.BspCore.kitsForViews(server)) {
             kits.put(cut(k.id(), 64), cut(k.name(), 64));
         }
-        return new RankViewPacket(settings.save(), holders, counts, p.bonus(), points, seasonPoints, p.seasonBase() != 0 || p.season() != 0,
-                p.rank() == null ? "" : p.rank(), p.rankedAtMs(), title, p.pending().size(), fastest, serverId, ledger.lastEndedSeason() + 1, open, kits,
+        return new RankViewPacket(settingsTag(settings), holders, counts, p.bonus(), points, seasonPoints, p.seasonBase() != 0 || p.season() != 0,
+                p.rank() == null ? "" : p.rank(), p.rankedAtMs(), title, titleImage, p.pending().size(), fastest, serverId, ledger.lastEndedSeason() + 1, open, kits,
                 ladders, awards);
     }
 
@@ -152,6 +141,22 @@ public final class RankSync {
             }
         }
         return "";
+    }
+
+    @org.jetbrains.annotations.Nullable
+    private static Settings taggedFor;
+    private static net.minecraft.nbt.CompoundTag tag;
+
+    /**
+     * The settings as the views carry them, made once per settings (they never change in place): every open rank screen
+     * asks once a second. Nothing writes to the tag; packets only read it.
+     */
+    public static synchronized net.minecraft.nbt.CompoundTag settingsTag(Settings settings) {
+        if (settings != taggedFor) {
+            tag = settings.save();
+            taggedFor = settings;
+        }
+        return tag;
     }
 
     /** {@code s} cut to {@code max} characters, for a packet field of that size. */

@@ -163,6 +163,13 @@ public interface StorageBackend {
     @Nullable
     SettingsRow loadSettings() throws Exception;
 
+    /** Keeps a prefix image's bytes under its id (D59); an id already kept is left as it is (the id is the bytes' hash). */
+    void saveImage(String id, byte[] png) throws Exception;
+
+    /** A prefix image's bytes, or null when no server has kept it. */
+    @Nullable
+    byte[] loadImage(String id) throws Exception;
+
     long publish(Notice notice) throws Exception;
 
     List<Notice> fetchNoticesAfter(long id, int limit) throws Exception;

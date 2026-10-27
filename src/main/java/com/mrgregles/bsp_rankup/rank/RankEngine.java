@@ -62,6 +62,14 @@ public final class RankEngine {
     public static void init() {
         ProgressLedger.onChange(RankEngine::onChange);
         SettingsLedger.onChange(RankEngine::onSettingsChanged);
+        com.mrgregles.bsp_rankup.storage.Storage.onPlayerRead((server, player) -> {
+            if (AWAITING_ROW.remove(player)) {
+                ServerPlayer online = Players.online(server, player);
+                if (online != null) {
+                    onLogin(online);
+                }
+            }
+        });
     }
 
     public static void onRankUp(Consumer<RankUp> listener) {
@@ -227,8 +235,24 @@ public final class RankEngine {
 
     public static void onLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            onLogin(player);
+            if (com.mrgregles.bsp_rankup.storage.Storage.active() != null) {
+                awaitRow(player.getUUID()); // the shared row decides: rewards given on another server, a season handled there
+            } else {
+                onLogin(player);
+            }
         }
+    }
+
+    /** Players whose shared row is being read at login: nothing is checked for them until it is in place. */
+    private static final Set<UUID> AWAITING_ROW = new HashSet<>();
+
+    /** Holds the login check for a player until the shared storage has read their row (see {@link #init}). */
+    public static void awaitRow(UUID player) {
+        AWAITING_ROW.add(player);
+    }
+
+    public static void forget(UUID player) {
+        AWAITING_ROW.remove(player);
     }
 
     /** On login: rewards kept while away, then the usual check (which also puts a new player on each ladder's first rung). */
@@ -293,6 +317,9 @@ public final class RankEngine {
     public static void check(MinecraftServer server, UUID player) {
         Settings settings = SettingsLedger.settings(server);
         ProgressLedger ledger = ProgressLedger.get(server);
+        if (AWAITING_ROW.contains(player)) {
+            return; // this server's copy may be old until the shared row is read; the read checks again
+        }
         Progress progress = ledger.peek(player); // never creates an entry: a reset must leave nothing behind
         if (progress == null) {
             progress = new Progress();
@@ -301,19 +328,20 @@ public final class RankEngine {
             Seasons.apply(server, player); // ends with this check again; a player who is away is handled on login
             return;
         }
+        Set<String>[] groups = new Set[1]; // LuckPerms' groups for the player, asked at most once per check (reapply)
         for (Ladder ladder : settings.ladders()) {
-            checkLadder(server, settings, ladder, player, progress);
+            checkLadder(server, settings, ladder, player, progress, groups);
         }
         for (Award award : settings.awards()) {
             checkAward(server, settings, award, player, progress);
         }
     }
 
-    private static void checkLadder(MinecraftServer server, Settings settings, Ladder ladder, UUID player, Progress progress) {
+    private static void checkLadder(MinecraftServer server, Settings settings, Ladder ladder, UUID player, Progress progress, Set<String>[] groups) {
         int current = ladder.indexOf(rankOn(settings, ladder, progress));
         int target = rankIndex(ladder, points(settings, ladder, progress), seasonPoints(settings, ladder, progress));
         if (target <= current) {
-            reapply(server, settings, ladder, player, current);
+            reapply(server, settings, ladder, player, current, groups);
             return;
         }
         String key = player + "/" + ladder.name();
@@ -381,12 +409,15 @@ public final class RankEngine {
     }
 
     /** A player who holds a rung but is on none of the track's groups in LuckPerms (someone cleared it) is put back. */
-    private static void reapply(MinecraftServer server, Settings settings, Ladder ladder, UUID player, int current) {
+    private static void reapply(MinecraftServer server, Settings settings, Ladder ladder, UUID player, int current, Set<String>[] lookedUp) {
         String key = player + "/" + ladder.name();
         if (current < 0 || !LuckPermsBridge.isPresent() || !Players.isOnline(server, player) || IN_FLIGHT.contains(key)) {
             return;
         }
-        Set<String> groups = LuckPermsBridge.groupsOf(player); // asked once: rankOn would ask again
+        if (lookedUp[0] == null) {
+            lookedUp[0] = LuckPermsBridge.groupsOf(player); // once for every ladder of this check: rankOn would ask again
+        }
+        Set<String> groups = lookedUp[0];
         if (groups.isEmpty() || LuckPermsBridge.rankOn(groups, ladder.track()).isPresent()) {
             return;
         }

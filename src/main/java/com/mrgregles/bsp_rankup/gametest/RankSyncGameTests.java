@@ -90,6 +90,7 @@ public class RankSyncGameTests {
                     h.assertTrue("ru_l_b".equals(ledger.progress(id).rank()), "on the second rung: " + ledger.progress(id));
                     if (LuckPermsBridge.isPresent()) {
                         h.assertTrue(RankSync.view(server, id, false).title().equals("[B] "), "the title comes from LuckPerms: '" + RankSync.view(server, id, false).title() + "'");
+                        h.assertTrue(RankSync.view(server, id, false).ladders().get(0).title().equals("[B] "), "and is the ladder's own title (D76): " + RankSync.view(server, id, false).ladders().get(0));
                     }
                 })
                 .thenExecute(() -> {

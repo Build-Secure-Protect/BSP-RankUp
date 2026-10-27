@@ -10,8 +10,8 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 /** The mod's channel: {@code bsp_rankup:main}. The server decides, the client displays. */
 public final class RankUpNetwork {
-    /** 2: several ladders and awards (D49 to D52); a server and its players must be on the same RankUp. */
-    private static final String PROTOCOL = "2";
+    /** 3: prefix images (D55 to D74); 2: several ladders and awards (D49 to D52). A server and its players must be on the same RankUp. */
+    private static final String PROTOCOL = "3";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath(BSPRankUp.MODID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 
@@ -32,6 +32,9 @@ public final class RankUpNetwork {
         CHANNEL.messageBuilder(RankActionPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
                 .encoder(RankActionPacket::encode).decoder(RankActionPacket::decode)
                 .consumerMainThread(RankActionPacket::handle).add();
+        CHANNEL.messageBuilder(PrefixImagePacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(PrefixImagePacket::encode).decoder(PrefixImagePacket::decode)
+                .consumerMainThread(PrefixImagePacket::handle).add();
     }
 
     public static void sendTo(ServerPlayer player, Object packet) {

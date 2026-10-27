@@ -6,6 +6,8 @@ import com.mrgregles.bsp_rankup.admin.Reply;
 import com.mrgregles.bsp_rankup.admin.ResetAll;
 import com.mrgregles.bsp_rankup.compat.BspCore;
 import com.mrgregles.bsp_rankup.compat.LuckPermsBridge;
+import com.mrgregles.bsp_rankup.prefix.PrefixDisplay;
+import com.mrgregles.bsp_rankup.prefix.PrefixImages;
 import com.mrgregles.bsp_rankup.progress.Progress;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
@@ -206,6 +208,19 @@ public final class AdminSync {
                     AdminEdits.makeTrack(server).thenAccept(reply -> server.execute(() -> send(admin, reply.text(), reply.ok(), false)));
                     return null;
                 }
+                case AdminActionPacket.PREFIX_SET -> {
+                    return AdminEdits.prefixImage(server, a, b);
+                }
+                case AdminActionPacket.PREFIX_CLEAR -> {
+                    return AdminEdits.prefixClear(server, a);
+                }
+                case AdminActionPacket.PREFIX_SCAN -> {
+                    // REFRESH on PREFIXES (D59): the folder and LuckPerms' group prefixes read again, previews sent
+                    PrefixImages.scan();
+                    PrefixDisplay.forgetGroups();
+                    PrefixImages.sendFiles(admin);
+                    return Reply.ok("");
+                }
                 case AdminActionPacket.EXPORT -> {
                     return AdminEdits.export(server, a);
                 }
@@ -245,6 +260,7 @@ public final class AdminSync {
             case "cooldown" -> AdminEdits.optionCooldown(server, Integer.parseInt(value.trim()));
             case "titlepriority" -> AdminEdits.optionTitlePriority(server, Integer.parseInt(value.trim()));
             case "rewardsagain" -> AdminEdits.optionRewardsAgain(server, Boolean.parseBoolean(value));
+            case "showprefixes" -> AdminEdits.optionShowPrefixes(server, Boolean.parseBoolean(value));
             default -> Reply.no("No option called " + name);
         };
     }
@@ -261,22 +277,7 @@ public final class AdminSync {
         Settings settings = SettingsLedger.settings(server);
         ProgressLedger ledger = ProgressLedger.get(server);
         // how many hold each rung of every ladder, and each award (groups are on one ladder or one award)
-        Map<String, Integer> holders = new LinkedHashMap<>();
-        for (var l : settings.ladders()) {
-            for (var r : l.ranks()) {
-                holders.put(r.group(), 0);
-            }
-        }
-        for (var aw : settings.awards()) {
-            holders.put(aw.group(), 0);
-        }
-        ledger.forEach((id, p) -> {
-            if (p.rank() != null) {
-                holders.merge(p.rank(), 1, Integer::sum);
-            }
-            p.otherRanks().values().forEach(held -> holders.merge(held.group(), 1, Integer::sum));
-            p.awards().keySet().forEach(g -> holders.merge(g, 1, Integer::sum));
-        });
+        Map<String, Integer> holders = com.mrgregles.bsp_rankup.rank.Holders.of(server);
         List<AdminViewPacket.PlayerRow> rows = search(server, SEARCH.getOrDefault(admin.getUUID(), ""));
         UUID sel = SELECTED.get(admin.getUUID());
         AdminViewPacket.PlayerDetail detail = sel == null ? AdminViewPacket.PlayerDetail.none() : detail(server, sel);
@@ -301,8 +302,19 @@ public final class AdminSync {
                 groups.add(RankSync.cut(g, 64));
             }
         }
-        return new AdminViewPacket(settings.save(), holders, rows, detail, info, ResetAll.pending(admin.getUUID()), ResetAll.secondsLeft(admin.getUUID()),
-                RankSync.cut(message.replace('\n', ' '), 500), ok, open, kits, groups);
+        // the PREFIXES tab (D65): every prefix RankUp lists, and the images folder as last read
+        List<AdminViewPacket.PrefixRow> prefixes = new ArrayList<>();
+        for (PrefixDisplay.Source src : PrefixDisplay.sources(settings, PrefixDisplay.groupPrefixes())) {
+            if (prefixes.size() < AdminViewPacket.MAX_PREFIXES) {
+                prefixes.add(new AdminViewPacket.PrefixRow(RankSync.cut(src.key(), 72), RankSync.cut(src.text(), 128), RankSync.cut(src.rankName(), 128)));
+            }
+        }
+        List<AdminViewPacket.FileRow> files = new ArrayList<>();
+        for (PrefixImages.FileInfo f : PrefixImages.files()) {
+            files.add(new AdminViewPacket.FileRow(RankSync.cut(f.name(), 128), f.width(), f.height(), f.bytes(), f.id(), RankSync.cut(f.problem(), 128)));
+        }
+        return new AdminViewPacket(RankSync.settingsTag(settings), holders, rows, detail, info, ResetAll.pending(admin.getUUID()), ResetAll.secondsLeft(admin.getUUID()),
+                RankSync.cut(message.replace('\n', ' '), 500), ok, open, kits, groups, prefixes, files);
     }
 
     /** Players online here plus every player with progress whose name matches; online first, then by points. */
@@ -324,7 +336,7 @@ public final class AdminSync {
             if (rows.containsKey(id)) {
                 return;
             }
-            String name = Players.name(server, id);
+            String name = Players.offlineName(server, id); // online players are already in rows
             if (q.isEmpty() || name.toLowerCase(Locale.ROOT).contains(q)) {
                 rows.put(id, new AdminViewPacket.PlayerRow(id, name, pr.rank() == null ? "" : pr.rank(), RankEngine.points(settings, pr), false));
             }

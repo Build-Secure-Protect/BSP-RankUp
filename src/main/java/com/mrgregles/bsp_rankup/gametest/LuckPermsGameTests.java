@@ -15,7 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The LuckPerms bridge against the real LuckPerms Forge mod (5.4.102, dev runs only: see build.gradle and
+ * The LuckPerms bridge against the real LuckPerms Forge mod (luckperms_dev_version, dev runs only: see build.gradle and
  * tools/make_luckperms_dev_jar.py). Skips itself with a note when LuckPerms is not on the classpath, so the suite
  * still passes in a checkout without the jar. The bridge talks to LuckPerms by reflection on every route, so this
  * run through the Forge edition exercises the same code the Bukkit plugin on Mohist will see.
@@ -73,6 +73,9 @@ public class LuckPermsGameTests {
             h.assertTrue(LuckPermsBridge.prefixOf(id, TITLE_PRIORITY).equals(Optional.of("[Hero] ")), "prefixOf reads it back: " + LuckPermsBridge.prefixOf(id, TITLE_PRIORITY));
             h.assertTrue(LuckPermsBridge.setPrefix(id, TITLE_PRIORITY, "[Legend] ").join(), "setPrefix replaces the title");
             h.assertTrue(LuckPermsBridge.prefixOf(id, TITLE_PRIORITY).equals(Optional.of("[Legend] ")), "one prefix at the priority: " + LuckPermsBridge.prefixOf(id, TITLE_PRIORITY));
+            h.assertTrue(LuckPermsBridge.setPrefix(id, TITLE_PRIORITY, "[Lv.5 St. Ive] ").join(), "a title with dots");
+            h.assertTrue(LuckPermsBridge.prefixOf(id, TITLE_PRIORITY).equals(Optional.of("[Lv.5 St. Ive] ")), "reads back without LuckPerms' key escapes: " + LuckPermsBridge.prefixOf(id, TITLE_PRIORITY));
+            h.assertTrue(LuckPermsBridge.shownPrefix(id).equals(Optional.of("[Lv.5 St. Ive] ")), "and is the prefix LuckPerms shows: " + LuckPermsBridge.shownPrefix(id));
             h.assertTrue(LuckPermsBridge.setPrefix(id, TITLE_PRIORITY, null).join(), "a null prefix clears the title");
             h.assertTrue(LuckPermsBridge.prefixOf(id, TITLE_PRIORITY).isEmpty(), "no prefix left");
 

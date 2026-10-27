@@ -13,6 +13,9 @@ import com.mrgregles.bsp_rankup.admin.Reply;
 import com.mrgregles.bsp_rankup.compat.BspCore;
 import com.mrgregles.bsp_rankup.compat.LuckPermsBridge;
 import com.mrgregles.bsp_rankup.network.AdminSync;
+import com.mrgregles.bsp_rankup.prefix.Legacy;
+import com.mrgregles.bsp_rankup.prefix.PrefixDisplay;
+import com.mrgregles.bsp_rankup.prefix.PrefixImages;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
@@ -228,7 +231,26 @@ public final class AdminCommands {
                 .executes(ctx -> reply(ctx, AdminEdits.optionTitlePriority(server(ctx), IntegerArgumentType.getInteger(ctx, "priority"))))));
         option.then(Commands.literal("rewardsagain").then(Commands.argument("again", BoolArgumentType.bool())
                 .executes(ctx -> reply(ctx, AdminEdits.optionRewardsAgain(server(ctx), BoolArgumentType.getBool(ctx, "again"))))));
+        option.then(Commands.literal("showprefixes").then(Commands.argument("show", BoolArgumentType.bool())
+                .executes(ctx -> reply(ctx, AdminEdits.optionShowPrefixes(server(ctx), BoolArgumentType.getBool(ctx, "show"))))));
         root.then(option);
+
+        // prefix images (D55 to D74): "title <group>" (a rung's or an award's title) or "group <group>" (a LuckPerms
+        // group's own prefix), and a file name in config/bsp_rankup/prefix_images/
+        LiteralArgumentBuilder<CommandSourceStack> prefix = Commands.literal("prefix");
+        prefix.then(Commands.literal("list").executes(ctx -> prefixList(ctx.getSource())));
+        prefix.then(Commands.literal("files").executes(ctx -> prefixFiles(ctx.getSource())));
+        LiteralArgumentBuilder<CommandSourceStack> image = Commands.literal("image");
+        LiteralArgumentBuilder<CommandSourceStack> clear = Commands.literal("clear");
+        for (String kind : new String[]{"title", "group"}) {
+            image.then(Commands.literal(kind).then(Commands.argument("group", StringArgumentType.word()).then(Commands.argument("file", StringArgumentType.greedyString())
+                    .executes(ctx -> reply(ctx, AdminEdits.prefixImage(server(ctx), kind + ":" + StringArgumentType.getString(ctx, "group"), StringArgumentType.getString(ctx, "file")))))));
+            clear.then(Commands.literal(kind).then(Commands.argument("group", StringArgumentType.word())
+                    .executes(ctx -> reply(ctx, AdminEdits.prefixClear(server(ctx), kind + ":" + StringArgumentType.getString(ctx, "group"))))));
+        }
+        prefix.then(image);
+        prefix.then(clear);
+        root.then(prefix);
 
         // files
         root.then(Commands.literal("export").then(Commands.argument("name", StringArgumentType.word())
@@ -237,6 +259,38 @@ public final class AdminCommands {
                 .executes(ctx -> reply(ctx, AdminEdits.importFile(server(ctx), StringArgumentType.getString(ctx, "name"))))));
 
         d.register(root);
+    }
+
+    // ------------------------------------------------------------------ prefix images
+
+    /** Every prefix RankUp lists, with its key and its image or "text". */
+    private static int prefixList(CommandSourceStack source) {
+        MinecraftServer server = source.getServer();
+        Settings settings = SettingsLedger.settings(server);
+        List<PrefixDisplay.Source> sources = PrefixDisplay.sources(settings, PrefixDisplay.groupPrefixes());
+        if (sources.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("No prefixes: give a rung or an award a TITLE reward, or a LuckPerms group a prefix"), false);
+            return 0;
+        }
+        for (PrefixDisplay.Source s : sources) {
+            String shown = s.image() == null ? "text" : s.image().file() + (PrefixImages.inFolder(s.image().id()) ? "" : " (not in folder)");
+            String key = s.key().replace(':', ' '); // as the image and clear commands take it
+            source.sendSuccess(() -> Component.literal(key + "  ").append(Legacy.parse(s.text())).append(Component.literal("  " + s.rankName() + ": " + shown)), false);
+        }
+        return sources.size();
+    }
+
+    /** The images folder, read again, each file with its size or what is wrong with it. */
+    private static int prefixFiles(CommandSourceStack source) {
+        List<PrefixImages.FileInfo> files = PrefixImages.scan();
+        if (files.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("No PNG files in " + PrefixImages.folder()), false);
+            return 0;
+        }
+        for (PrefixImages.FileInfo f : files) {
+            source.sendSuccess(() -> Component.literal(f.name() + ": " + (f.usable() ? f.width() + " x " + f.height() + ", " + PrefixImages.drawnWidth(f.width(), f.height()) + " px wide in chat" : f.problem())), false);
+        }
+        return files.size();
     }
 
     // ------------------------------------------------------------------ players

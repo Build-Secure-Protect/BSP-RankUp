@@ -157,7 +157,7 @@ public class RankScreen extends HoloScreen {
                 return lv;
             }
         }
-        return new RankViewPacket.LadderView(ladder.name(), "", 0, 0, 0, List.of());
+        return new RankViewPacket.LadderView(ladder.name(), "", 0, 0, 0, List.of(), "", "");
     }
 
     /** A chip per ladder, then AWARDS when there are awards. */
@@ -349,8 +349,12 @@ public class RankScreen extends HoloScreen {
             text(g, Tr.t("rank_i_of_n", current + 1, ranks.size()), bx, py + 6, MUTED, 0.6f);
             bx += (int) (font.width(Tr.t("rank_i_of_n", current + 1, ranks.size())) * 0.6f) + 6;
         }
-        if (!v.title().isEmpty()) {
-            String t = clip(v.title().replaceAll("[&§]#[0-9a-fA-F]{6}", "").replaceAll("[&§].", "").trim(), PANE_W - (bx - px) - 6, 0.6f);
+        // this ladder's own title (D76), as its image when it has one (D61); the text chip when it is not drawn yet or does not fit
+        Component image = lv.titleImage().isEmpty() ? null : PrefixFont.component(lv.titleImage(), lv.title());
+        if (image != null && PrefixFont.has(lv.titleImage()) && bx + font.width(image) <= px + PANE_W - 6) {
+            g.drawString(font, image, bx, py + 4, 0xFFFFFFFF, false);
+        } else if (!lv.title().isEmpty()) {
+            String t = clip(lv.title().replaceAll("[&§]#[0-9a-fA-F]{6}", "").replaceAll("[&§].", "").trim(), PANE_W - (bx - px) - 6, 0.6f);
             int tw = (int) (font.width(t) * 0.6f) + 6;
             frame(g, bx, py + 3, tw, 11, VIO);
             text(g, t, bx + 3, py + 5, VIO, 0.6f);

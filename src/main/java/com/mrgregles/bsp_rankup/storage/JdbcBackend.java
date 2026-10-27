@@ -33,6 +33,8 @@ public final class JdbcBackend implements StorageBackend {
     public static final List<String> DRIVERS = List.of("com.mrgregles.bsp_core.shaded.mysql.cj.jdbc.Driver", "com.mysql.cj.jdbc.Driver");
     @Nullable
     private static Driver driver;
+    /** The URL scheme the driver takes: MySQL's, or MariaDB's when BSP-Core's slim jar found only that. */
+    private static String scheme = "jdbc:mysql://";
     private static boolean driverLooked;
 
     /** After a failed connect, writes fail at once for this long instead of each waiting out the connect timeout. */
@@ -101,18 +103,25 @@ public final class JdbcBackend implements StorageBackend {
         Properties props = new Properties();
         props.setProperty("user", user);
         props.setProperty("password", password);
-        Connection c = d.connect(url, props);
+        Connection c = d.connect(scheme.equals("jdbc:mysql://") ? url : scheme + url.substring("jdbc:mysql://".length()), props);
         if (c == null) {
             throw new SQLException("The MySQL driver " + d.getClass().getName() + " does not accept " + url);
         }
         return c;
     }
 
-    /** The first driver of {@link #DRIVERS} that loads, created once; null when none does. */
+    /** The driver BSP-Core uses (1.4.5 and newer), else the first of {@link #DRIVERS} that loads; created once; null when none does. */
     @Nullable
     public static synchronized Driver driver() {
         if (!driverLooked) {
             driverLooked = true;
+            java.util.Optional<com.mrgregles.bsp_rankup.compat.BspCore.JdbcDriver> core = com.mrgregles.bsp_rankup.compat.BspCore.jdbcDriver();
+            if (core.isPresent()) {
+                driver = core.get().driver();
+                scheme = core.get().urlPrefix();
+                BSPRankUp.LOGGER.info("MySQL driver: {} (from BSP-Core)", driver.getClass().getName());
+                return driver;
+            }
             for (String name : DRIVERS) {
                 try {
                     driver = (Driver) Class.forName(name).getDeclaredConstructor().newInstance();
@@ -153,6 +162,7 @@ public final class JdbcBackend implements StorageBackend {
                 }
             }
             st.executeUpdate("CREATE TABLE IF NOT EXISTS " + prefix + "settings (id INT NOT NULL PRIMARY KEY, data MEDIUMTEXT NOT NULL, version BIGINT NOT NULL)");
+            st.executeUpdate("CREATE TABLE IF NOT EXISTS " + prefix + "images (id CHAR(40) NOT NULL PRIMARY KEY, png MEDIUMBLOB NOT NULL, created_at BIGINT NOT NULL)");
             st.executeUpdate("CREATE TABLE IF NOT EXISTS " + prefix + "notices (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, uid VARCHAR(36) NOT NULL, created_at BIGINT NOT NULL, source VARCHAR(64) NOT NULL, kind VARCHAR(32) NOT NULL, payload TEXT)");
         }
     }
@@ -404,6 +414,27 @@ public final class JdbcBackend implements StorageBackend {
     public SettingsRow loadSettings() throws SQLException {
         try (Statement st = conn().createStatement(); ResultSet rs = st.executeQuery("SELECT data, version FROM " + prefix + "settings WHERE id = 1")) {
             return rs.next() ? new SettingsRow(rs.getString(1), rs.getLong(2)) : null;
+        }
+    }
+
+    @Override
+    public void saveImage(String id, byte[] png) throws SQLException {
+        try (PreparedStatement ps = conn().prepareStatement("INSERT IGNORE INTO " + prefix + "images (id, png, created_at) VALUES (?, ?, ?)")) {
+            ps.setString(1, id);
+            ps.setBytes(2, png);
+            ps.setLong(3, System.currentTimeMillis());
+            ps.executeUpdate();
+        }
+    }
+
+    @Override
+    @Nullable
+    public byte[] loadImage(String id) throws SQLException {
+        try (PreparedStatement ps = conn().prepareStatement("SELECT png FROM " + prefix + "images WHERE id = ?")) {
+            ps.setString(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getBytes(1) : null;
+            }
         }
     }
 

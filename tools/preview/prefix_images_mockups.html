@@ -1,0 +1,343 @@
+<title>RankUp Prefix Images</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: the in-game look first (chat and tab list), then per option a brief, the admin screen at its real size (520 x 300 GUI units, 1.6 px a unit), then the decisions list. One dark look on purpose: the mod's own Holo HUD panels, as the earlier RankUp mock-ups. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0e13;
+  --panel: #10151c;
+  --inset: #0c0e12;
+  --line: #2a2f3a;
+  --accent: #19d3b0;
+  --violet: #b58cff;
+  --gold: #ffd23a;
+  --bad: #ff6b5c;
+  --text: #e6eaf2;
+  --muted: #9aa3b5;
+  --mc: 'VT323', 'Courier New', monospace;
+  --ui: 'IBM Plex Sans', system-ui, sans-serif;
+}
+body { background: var(--bg); color: var(--text); font-family: var(--ui); padding-block: 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); line-height: 1.5; }
+.wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 44px; }
+h1 { font-family: var(--mc); font-size: 40px; font-weight: 400; letter-spacing: 1px; color: var(--accent); margin: 0; text-wrap: balance; }
+h2 { font-family: var(--mc); font-size: 32px; font-weight: 400; margin: 0; text-wrap: balance; }
+h2 small { color: var(--muted); font-size: 22px; margin-left: 8px; }
+h3 { font-family: var(--mc); font-size: 22px; font-weight: 400; margin: 0; color: var(--muted); letter-spacing: 1px; }
+p { max-width: 68ch; margin: 0; }
+.lead { color: var(--muted); }
+.lead b { color: var(--text); font-weight: 600; }
+.option { display: grid; gap: 14px; }
+.brief { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 32px; }
+.brief > div { min-width: 0; }
+.brief p { font-size: 15px; }
+.brief b { color: var(--accent); font-weight: 600; }
+.brief .con b { color: var(--gold); }
+.frame { overflow-x: auto; border: 1px solid var(--line); background: #06080c; padding: 12px; }
+.screen { position: relative; width: 832px; height: 480px; font-family: var(--mc); font-size: 18px; line-height: 1; color: var(--text);
+  background: radial-gradient(ellipse at 30% 20%, #16331f 0, transparent 50%), radial-gradient(ellipse at 70% 80%, #2a2316 0, transparent 50%), #1a2230; }
+.screen.game { height: 304px; }
+.screen * { box-sizing: border-box; }
+.a { position: absolute; }
+.panel { background: rgba(16,21,28,.95); border: 2px solid var(--accent); }
+.inset { background: var(--inset); border: 2px solid var(--line); }
+.t10 { font-size: 20px; } .t85 { font-size: 18px; } .t75 { font-size: 16px; } .t60 { font-size: 14px; } .t50 { font-size: 12px; }
+.mut { color: var(--muted); } .tq { color: var(--accent); } .gold { color: var(--gold); } .vio { color: var(--violet); } .bad { color: var(--bad); }
+.chip { display: flex; align-items: center; justify-content: center; border: 2px solid var(--line); background: var(--inset); color: var(--muted); white-space: nowrap; overflow: hidden; }
+.chip.on { border-color: var(--accent); color: var(--accent); background: rgba(25,211,176,.13); }
+.chip.vio { border-color: var(--violet); color: var(--violet); background: rgba(181,140,255,.13); }
+.chip.gold { border-color: var(--gold); color: var(--gold); background: rgba(255,210,58,.1); }
+.chip.bad { border-color: var(--bad); color: var(--bad); background: rgba(255,107,92,.1); }
+.chip.dim { border-color: var(--line); color: var(--muted); background: transparent; }
+.row { display: flex; align-items: center; gap: 8px; padding: 0 8px; white-space: nowrap; overflow: hidden; }
+.row.sel { background: rgba(25,211,176,.14); box-shadow: inset 4px 0 0 var(--accent); }
+.row .r { margin-left: auto; }
+.lbl { font-size: 14px; color: var(--muted); letter-spacing: 1px; }
+.box { background: var(--inset); border: 2px solid var(--line); display: flex; align-items: center; padding: 0 6px; white-space: nowrap; overflow: hidden; }
+.head { font-size: 14px; color: var(--accent); letter-spacing: 2px; }
+/* A prefix image: drawn as the PNG would look, one text line high. */
+.img { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; font-family: var(--mc); letter-spacing: 1px; color: #fff; text-shadow: 1px 1px 0 rgba(0,0,0,.6); border-radius: 2px; white-space: nowrap; }
+.chat { background: rgba(0,0,0,.5); }
+.mc-gold { color: #ffaa00; } .mc-aqua { color: #55ffff; } .mc-green { color: #55ff55; } .mc-red { color: #ff5555; } .mc-blue { color: #5555ff; } .mc-white { color: #fff; } .mc-gray { color: #aaa; }
+.pick { border: 1px solid var(--line); padding: 20px 24px; display: grid; gap: 12px; }
+.pick ol { margin: 0; padding-left: 22px; font-size: 15px; display: grid; gap: 8px; }
+.pick li b { color: var(--accent); font-weight: 600; }
+.pick li .def { color: var(--gold); }
+.pick .note { color: var(--muted); font-size: 15px; }
+.example { display: grid; gap: 6px; font-size: 15px; }
+.example code { font-family: var(--mc); font-size: 18px; color: var(--gold); }
+@media (max-width: 700px) { .brief { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:10px">
+    <h1>Prefix images: three options</h1>
+    <p class="lead">Decisions D55 to D64. RankUp draws each player's LuckPerms prefix before their name in chat and the tab list. When the prefix's rank has an image, the image is drawn instead of the text. Each option below is the admin screen at its real size (520 by 300 GUI units, drawn at 1.6 pixels a unit). The same example data is used in all three:</p>
+    <div class="example">
+      <p>Ladder <code>Playtime</code>: the rung Warden gives the title <code>&amp;b[Warden]</code> and Legend gives <code>&amp;6[Legend]</code>. Ladder <code>Raider</code>: Reaver gives <code>&amp;c[Reaver]</code>. Award <code>apple_picker</code> gives <code>&amp;a[Apple Picker]</code>.</p>
+      <p>LuckPerms groups with their own prefix: <code>admin</code> <code>&amp;c[Admin]</code>, <code>moderator</code> <code>&amp;9[Mod]</code>, <code>founder</code> <code>&amp;6[Founder]</code>.</p>
+      <p>Files in <code>config/bsp_rankup/prefix_images/</code>: <code>warden.png</code> (40 x 9), <code>legend.png</code> (44 x 9), <code>reaver.png</code> (40 x 9), <code>admin.png</code> (36 x 9), <code>mod_badge.png</code> (28 x 9), <code>founder_banner.png</code> (300 x 80, too big).</p>
+    </div>
+  </header>
+
+  <section class="option" id="game">
+    <h2>In game <small>the same in every option</small></h2>
+    <p class="lead">Chat and the tab list. Warden, Admin and Mod have images. Apple Picker has none, so its text shows. The text after the name is the player's chat as usual.</p>
+    <div class="frame"><div class="screen game" id="g1"></div></div>
+  </section>
+
+  <section class="option" id="a">
+    <h2>A. PREFIXES tab <small>every prefix in one list</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> A new PREFIXES tab between PLAYERS and OPTIONS. The left side lists every prefix, grouped by where it comes from: each ladder's titles, award titles and LuckPerms groups. Each row shows the image or the text. On the right is the chosen rank: its prefix text, its image at line size and twice that, a chat line preview, and the folder's files to pick from. REFRESH rescans the folder.</p></div>
+      <div class="con"><p><b>Trade-off.</b> Everything about prefixes is in one place, matching your brief: see the prefixes, then assign an image. A seventh tab makes the tab row longer, and you edit a title's text on LADDER or GROUPS but its image here.</p></div>
+    </div>
+    <div class="frame"><div class="screen" id="a1"></div></div>
+  </section>
+
+  <section class="option" id="b">
+    <h2>B. Image slot on each rank <small>no new tab</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> Wherever a TITLE reward shows (a rung on LADDER, an award on GROUPS), the row gains an image slot beside the text. A LuckPerms group's own prefix gets the same slot on GROUPS. Clicking the slot opens a small picker over the editor, with the folder's files.</p></div>
+      <div class="con"><p><b>Trade-off.</b> The image sits next to the text it replaces, with nothing new to learn. But there's no single place that shows every prefix at once: to check which ranks still lack an image you'd go through each ladder and group.</p></div>
+    </div>
+    <h3>LADDER tab, picker open on Warden's title</h3>
+    <div class="frame"><div class="screen" id="b1"></div></div>
+    <h3>GROUPS tab, a LuckPerms group's own prefix</h3>
+    <div class="frame"><div class="screen" id="b2"></div></div>
+  </section>
+
+  <section class="option" id="c">
+    <h2>C. Image gallery <small>start from the files</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> A PREFIXES tab that shows the folder as a gallery of cards: each image at twice its size, its file name and dimensions, and the ranks using it. Pick an image, then tick the ranks it should replace in the list on the right. Files that are too big show the reason and can't be picked.</p></div>
+      <div class="con"><p><b>Trade-off.</b> Best when one image serves several ranks, or when you drop in a batch of new files. Ranks without an image are harder to spot: they're only in the narrow list on the right, and the prefix text is small there.</p></div>
+    </div>
+    <div class="frame"><div class="screen" id="c1"></div></div>
+  </section>
+
+  <section class="pick">
+    <h2>Pick one, and the open questions</h2>
+    <p class="note">Each question has a default in gold; say only where you want something else.</p>
+    <ol>
+      <li><b>Layout:</b> A, B or C, or parts combined. <span class="def">Default: A, with B's small image slot also shown (read-only, with a jump to PREFIXES) beside TITLE rewards on LADDER and GROUPS.</span></li>
+      <li><b>Which prefix a player shows:</b> the one LuckPerms ranks highest, as LuckPerms decides from priorities. RankUp titles are at 1000 and below, so a group prefix above 1000 (such as Admin) beats them. <span class="def">Default: yes, exactly what LuckPerms shows.</span></li>
+      <li><b>Chat format:</b> vanilla's <code>&lt;name&gt; message</code> with the prefix inside the brackets before the name, and the prefix text keeping its &amp; colour codes. <span class="def">Default: yes.</span></li>
+      <li><b>A space after the image:</b> one pixel of space after the image, then the name. <span class="def">Default: yes.</span></li>
+      <li><b>Group prefixes are read-only in RankUp:</b> PREFIXES shows a group's prefix from LuckPerms; you change the text in LuckPerms. RankUp titles keep being edited on LADDER and GROUPS. <span class="def">Default: yes.</span></li>
+      <li><b>One image on several ranks:</b> allowed. <span class="def">Default: yes.</span></li>
+      <li><b>Deleting a file from the folder</b> after assigning it changes nothing, since the image is saved in the shared storage. The list marks it "not in folder" so you know. <span class="def">Default: yes.</span></li>
+      <li><b>Hovering an image in chat</b> shows the prefix text and the rank's name. <span class="def">Default: yes.</span></li>
+      <li><b>Console and logs</b> show the prefix text, never the image's stand-in character. <span class="def">Default: yes.</span></li>
+      <li><b>Updating:</b> new packets (protocol 3), so the server and the players' modpack update together. <span class="def">Default: accepted.</span></li>
+    </ol>
+  </section>
+</div>
+
+<script>
+// Every screen is drawn from these helpers, in GUI units (1.6 px a unit), so positions match the mod's own layout constants.
+const U = 1.6;
+const pos = (x, y, w, h) => `left:${x * U}px;top:${y * U}px;` + (w != null ? `width:${w * U}px;` : '') + (h != null ? `height:${h * U}px;` : '');
+const el = (x, y, w, h, cls, html = '', extra = '') => `<div class="a ${cls}" style="${pos(x, y, w, h)}${extra}">${html}</div>`;
+const txt = (x, y, s, cls = 't75') => el(x, y, null, null, cls, s, 'white-space:nowrap;');
+const chip = (x, y, w, h, s, cls = '', size = 't60') => el(x, y, w, h, `chip ${cls} ${size}`, s);
+
+// The example PNGs: width x height in image pixels, drawn one text line (9 units) high times the scale.
+const IMG = {
+  warden: { w: 40, label: 'WARDEN', bg: 'linear-gradient(#2fd3e6,#127a8f)', border: '#bff6ff' },
+  legend: { w: 44, label: 'LEGEND', bg: 'linear-gradient(#ffd75a,#b9741a)', border: '#fff1b8' },
+  reaver: { w: 40, label: 'REAVER', bg: 'linear-gradient(#ff6a5a,#8f1d1d)', border: '#ffc2b8' },
+  admin: { w: 36, label: 'ADMIN', bg: 'linear-gradient(#ff4d6d,#7a1030)', border: '#ffd0d9' },
+  mod: { w: 28, label: 'MOD', bg: 'linear-gradient(#6d8bff,#22308f)', border: '#d0d9ff' },
+};
+function img(key, scale = 1) {
+  const i = IMG[key];
+  return `<span class="img" style="width:${i.w * scale * U}px;height:${9 * scale * U}px;background:${i.bg};box-shadow:inset 0 0 0 ${Math.max(1, scale) * U * .6}px ${i.border};font-size:${6.5 * scale * U}px;">${i.label}</span>`;
+}
+// A prefix as text in Minecraft colours (& codes turned into colour).
+function mc(code, s) { return `<span class="${code}">${s}</span>`; }
+
+function frame(tabs, on, status) {
+  let h = el(0, 0, 520, 300, 'panel');
+  h += txt(10, 8, 'RANKUP ADMIN', 't10 tq');
+  h += el(210, 10, 300, 8, 't60 mut', status, 'text-align:right;white-space:nowrap;');
+  const step = tabs.length > 5 ? 52 : 57, w = tabs.length > 5 ? 50 : 54;
+  tabs.forEach((t, i) => { h += chip(8 + i * step, 22, w, 12, t, i === on ? 'on' : '', 't75'); });
+  h += txt(10, 288, 'Changes save at once and reach every server. Esc closes.', 't60 mut');
+  return h;
+}
+
+// ---------------------------------------------------------------- in game
+(function () {
+  let h = '';
+  // Tab list (top centre), as vanilla draws it.
+  h += el(150, 6, 220, 52, 'chat');
+  h += el(150, 8, 220, 9, 't75 mut', 'BSP Spawn - 23 online', 'text-align:center;');
+  const tab = [[img('admin'), 'Steve_Admin'], [img('warden'), 'Mrgregles'], [mc('mc-green', '[Apple Picker]'), 'PieFarmer'], [img('mod'), 'Kestrel']];
+  tab.forEach(([p, n], i) => {
+    const x = 154 + (i % 2) * 108, y = 20 + Math.floor(i / 2) * 12;
+    h += el(x, y, 104, 10, 'row t75', `${p}<span class="mc-white">${n}</span>`, 'padding:0 2px;gap:4px;background:rgba(255,255,255,.08);');
+  });
+  h += el(150, 46, 220, 9, 't60 mut', 'tab list', 'text-align:center;');
+  // Chat (bottom left).
+  const lines = [
+    [img('warden'), 'Mrgregles', 'anyone up for a raid at Stormfall?'],
+    [img('admin'), 'Steve_Admin', 'restart in 5 minutes, find somewhere safe'],
+    [mc('mc-green', '[Apple Picker]'), 'PieFarmer', '5000 pieces of apple. never again'],
+    [img('mod'), 'Kestrel', 'gg on the totem'],
+  ];
+  lines.forEach(([p, n, m], i) => {
+    h += el(6, 112 + i * 11, 300, 11, 'chat row t85', `<span class="mc-white">&lt;</span>${p}<span class="mc-white">${n}&gt;</span><span class="mc-white">${m}</span>`, 'padding:0 4px;gap:4px;');
+  });
+  h += el(6, 160, 300, 11, 'chat row t75 mut', 'chat: hovering an image shows "&amp;b[Warden] - Playtime: Warden"', 'padding:0 4px;');
+  // Hover tooltip on the first image.
+  h += el(40, 96, 150, 13, 't75', mc('mc-aqua', '[Warden]') + '<span class="mut"> Playtime: Warden</span>', 'background:#100010;border:2px solid #2a0b5c;padding:0 4px;display:flex;align-items:center;white-space:nowrap;');
+  document.getElementById('g1').innerHTML = h;
+})();
+
+// ---------------------------------------------------------------- A
+(function () {
+  const tabs = ['LADDER', 'GROUPS', 'SIGNALS', 'PLAYERS', 'PREFIXES', 'OPTIONS'];
+  let h = frame(tabs, 4, '7 prefixes - 5 with an image - 6 files in the folder');
+  h += el(8, 40, 200, 216, 'inset');
+  const list = [['LADDER PLAYTIME', null], ['Warden', img('warden'), 0], ['Legend', img('legend'), 0],
+    ['LADDER RAIDER', null], ['Reaver', img('reaver'), 0],
+    ['AWARDS', null], ['apple_picker', mc('mc-green', '[Apple Picker]'), 1],
+    ['LUCKPERMS GROUPS', null], ['admin', img('admin'), 0], ['moderator', img('mod'), 0], ['founder', mc('mc-gold', '[Founder]'), 1]];
+  list.forEach(([n, p, none], i) => {
+    const y = 41 + i * 14;
+    if (p === null) { h += txt(14, y + 5, n, 'head'); return; }
+    const sel = n === 'Warden';
+    h += el(9, y, 198, 14, 'row t85' + (sel ? ' sel' : ''), `<span class="${sel ? '' : 'mut'}">${n}</span><span class="r">${p}</span>${none ? '<span class="t50 mut">text</span>' : ''}`);
+  });
+  h += chip(8, 262, 60, 13, 'REFRESH', '', 't75');
+  h += chip(71, 262, 92, 13, 'only without image', 'dim', 't60');
+
+  const px = 216, py = 40;
+  h += txt(px, py, 'WARDEN', 't10');
+  h += el(px, py + 2, 296, 8, 't60 mut', 'Playtime rung 6 - title priority 1000 - 9 players', 'text-align:right;white-space:nowrap;');
+  h += txt(px, py + 14, 'PREFIX TEXT', 'lbl');
+  h += el(px, py + 21, 110, 13, 'box t85', mc('mc-aqua', '&amp;b[Warden]'));
+  h += chip(px + 114, py + 21, 64, 13, 'EDIT ON LADDER', 'dim', 't50');
+  h += txt(px, py + 42, 'IMAGE', 'lbl');
+  h += el(px, py + 49, 296, 34, 'inset row', `${img('warden')}<span class="t60 mut">line size</span>${img('warden', 2)}<span class="t60 mut">x2</span><span class="r t60 mut">warden.png - 40 x 9 - 1 KB</span>`, 'gap:10px;');
+  h += txt(px, py + 90, 'IN CHAT', 'lbl');
+  h += el(px, py + 97, 296, 13, 'chat row t85', `<span class="mc-white">&lt;</span>${img('warden')}<span class="mc-white">Mrgregles&gt; hello</span>`, 'gap:4px;');
+  h += txt(px, py + 118, 'FILES IN prefix_images/', 'head');
+  h += el(px, py + 126, 296, 76, 'inset');
+  const files = [['warden.png', '40 x 9', 'Warden', 'warden'], ['legend.png', '44 x 9', 'Legend', 'legend'], ['reaver.png', '40 x 9', 'Reaver', 'reaver'], ['admin.png', '36 x 9', 'admin', 'admin'], ['mod_badge.png', '28 x 9', 'moderator', 'mod']];
+  files.forEach(([f, d, used, k], i) => {
+    const sel = i === 0;
+    h += el(px + 1, py + 127 + i * 12, 294, 12, 'row t75' + (sel ? ' sel' : ''), `${img(k)}<span>${f}</span><span class="t60 mut">${d}</span><span class="r t60 ${sel ? 'tq' : 'mut'}">${sel ? 'in use here' : 'on ' + used}</span>`);
+  });
+  h += el(px + 1, py + 189, 294, 12, 'row t75', `<span class="bad">founder_banner.png</span><span class="r t60 bad">300 x 80: over 256 x 64</span>`);
+  h += chip(px, py + 208, 70, 13, 'USE IMAGE', 'on', 't75');
+  h += chip(px + 73, py + 208, 84, 13, 'SHOW TEXT AGAIN', 'bad', 't60');
+  h += txt(px + 164, py + 211, 'saved for every server', 't60 mut');
+  document.getElementById('a1').innerHTML = h;
+})();
+
+// ---------------------------------------------------------------- B
+(function () {
+  const tabs = ['LADDER', 'GROUPS', 'SIGNALS', 'PLAYERS', 'OPTIONS'];
+  let h = frame(tabs, 0, 'ladder Playtime - track rankup - 12 rungs - LuckPerms: Forge edition');
+  h += chip(8, 40, 64, 12, 'PLAYTIME', 'on', 't75');
+  h += chip(75, 40, 56, 12, 'RAIDER', '', 't75');
+  h += chip(134, 40, 60, 12, '+ LADDER', 'dim', 't75');
+  h += el(8, 56, 504, 14, 'inset');
+  h += txt(13, 59, 'TRACK', 'lbl');
+  h += el(42, 57, 60, 12, 'box t75', 'rankup');
+  h += txt(110, 59, 'COUNTS', 'lbl');
+  h += chip(146, 57, 72, 12, 'minutes played', 'on');
+  h += el(8, 74, 164, 182, 'inset');
+  const PLAY = [['Wanderer', 0], ['Settler', 120], ['Recruit', 300], ['Scout', 600], ['Sentinel', 1200], ['Warden', 2100], ['Vanguard', 3600], ['Captain', 5400], ['Commander', 7800], ['Marshal', 10800], ['Warlord', 15000], ['Legend', 21000]];
+  PLAY.forEach(([n, p], i) => {
+    h += el(9, 75 + i * 14, 162, 14, 'row t85' + (i === 5 ? ' sel' : ''), `<span class="t75 mut">${i + 1}.</span><span class="${i === 5 ? '' : 'mut'}">${n}</span><span class="r t75 gold">${p}</span>`);
+  });
+  const px = 180, py = 76, w = 332;
+  h += txt(px, py, 'WARDEN', 't10');
+  h += el(px, py + 2, w, 8, 't60 mut', 'rung 6 of 12 - 9 players hold it', 'text-align:right;white-space:nowrap;');
+  h += txt(px, py + 14, 'GROUP', 'lbl'); h += el(px, py + 21, 100, 13, 'box t85 mut', 'warden');
+  h += txt(px + 106, py + 14, 'DISPLAY NAME', 'lbl'); h += el(px + 106, py + 21, 110, 13, 'box t85', 'Warden');
+  h += txt(px + 222, py + 14, 'POINTS', 'lbl'); h += el(px + 222, py + 21, 50, 13, 'box t85', '2100');
+  h += txt(px, py + 42, 'REWARDS WHEN REACHED', 'head');
+  h += el(px, py + 50, w, 76, 'inset');
+  h += el(px + 1, py + 51, w - 2, 12, 'row t75', `<span class="t60 vio" style="width:${44 * U}px">COINS</span><span>coins worth 256 Copper</span><span class="r t60 bad">x</span>`);
+  h += el(px + 1, py + 63, w - 2, 12, 'row t75', `<span class="t60 vio" style="width:${44 * U}px">ITEM</span><span>1 x Diamond Sword</span><span class="r t60 bad">x</span>`);
+  h += el(px + 1, py + 75, w - 2, 16, 'row t75 sel', `<span class="t60 vio" style="width:${44 * U}px">TITLE</span>${mc('mc-aqua', '&amp;b[Warden]')}<span class="t60 mut">image</span>${img('warden')}<span class="r t60 bad">x</span>`);
+  // The picker popup.
+  const qx = 300, qy = 168;
+  h += el(qx, qy, 212, 104, 'panel', '', 'border-color:var(--violet);');
+  h += txt(qx + 6, qy + 5, 'IMAGE FOR [Warden]', 't75 vio');
+  h += chip(qx + 152, qy + 3, 54, 12, 'REFRESH', '', 't60');
+  const files = [['warden', 'warden.png', '40 x 9', 1], ['legend', 'legend.png', '44 x 9', 0], ['reaver', 'reaver.png', '40 x 9', 0], ['admin', 'admin.png', '36 x 9', 0], ['mod', 'mod_badge.png', '28 x 9', 0]];
+  files.forEach(([k, f, d, sel], i) => {
+    h += el(qx + 4, qy + 18 + i * 13, 204, 13, 'row t75' + (sel ? ' sel' : ''), `${img(k)}<span>${f}</span><span class="r t60 mut">${d}</span>`);
+  });
+  h += chip(qx + 4, qy + 87, 50, 12, 'USE', 'on', 't60');
+  h += chip(qx + 57, qy + 87, 70, 12, 'TEXT ONLY', 'bad', 't60');
+  h += chip(qx + 130, qy + 87, 50, 12, 'CANCEL', '', 't60');
+  document.getElementById('b1').innerHTML = h;
+
+  let g = frame(tabs, 1, '27 LuckPerms groups - 15 on ladders - 2 awards');
+  g += el(8, 40, 200, 14, 'inset');
+  g += txt(13, 43, 'find group', 't75 mut');
+  g += chip(212, 40, 50, 14, 'REFRESH', '', 't60');
+  g += el(8, 56, 200, 198, 'inset');
+  const list = [['AWARDS', null], ['apple_picker', 'pieces earned'], ['bulwark', 'totems protected'],
+    ['NOT RANKUP\'S', null], ['admin', img('admin')], ['founder', mc('mc-gold', '[Founder]')], ['moderator', img('mod')], ['builder', 'no prefix']];
+  list.forEach(([n, t], i) => {
+    const y = 57 + i * 14;
+    if (t === null) { g += txt(14, y + 4, n, 'head'); return; }
+    const sel = n === 'admin';
+    g += el(9, y, 198, 14, 'row t85' + (sel ? ' sel' : ''), `<span class="${sel ? '' : 'mut'}">${n}</span><span class="r t60 ${t.startsWith('<') ? '' : 'gold'}">${t}</span>`);
+  });
+  const px2 = 216, py2 = 40;
+  g += txt(px2, py2 + 20, 'ADMIN', 't10');
+  g += chip(px2 + 50, py2 + 18, 70, 12, 'NOT RANKUP\'S', 'dim', 't50');
+  g += el(px2, py2 + 22, 296, 8, 't60 mut', '3 players hold it', 'text-align:right;white-space:nowrap;');
+  g += el(px2, py2 + 34, 296, 8, 't60 mut', 'RankUp never gives or takes this group.', 'white-space:nowrap;');
+  g += txt(px2, py2 + 50, 'LUCKPERMS PREFIX', 'head');
+  g += el(px2, py2 + 58, 296, 30, 'inset row', `<span class="t60 mut">text</span>${mc('mc-red', '&amp;c[Admin]')}<span class="t60 mut">priority 2000</span><span class="t60 mut">image</span>${img('admin', 2)}`, 'gap:10px;');
+  g += chip(px2, py2 + 94, 84, 13, 'CHOOSE IMAGE', 'on', 't60');
+  g += chip(px2 + 87, py2 + 94, 70, 13, 'TEXT ONLY', 'bad', 't60');
+  g += txt(px2, py2 + 114, 'The text is changed in LuckPerms; the image here.', 't60 mut');
+  g += chip(px2, py2 + 130, 120, 13, 'MAKE AN AWARD OF IT', '', 't60');
+  document.getElementById('b2').innerHTML = g;
+})();
+
+// ---------------------------------------------------------------- C
+(function () {
+  const tabs = ['LADDER', 'GROUPS', 'SIGNALS', 'PLAYERS', 'PREFIXES', 'OPTIONS'];
+  let h = frame(tabs, 4, '6 files in prefix_images/ - 5 in use - 2 prefixes without an image');
+  h += txt(8, 42, 'FILES', 'head');
+  h += chip(70, 39, 54, 12, 'REFRESH', '', 't60');
+  const cards = [['warden', 'warden.png', '40 x 9', 'Warden'], ['legend', 'legend.png', '44 x 9', 'Legend'], ['reaver', 'reaver.png', '40 x 9', 'Reaver'],
+    ['admin', 'admin.png', '36 x 9', 'admin'], ['mod', 'mod_badge.png', '28 x 9', 'moderator'], [null, 'founder_banner.png', '300 x 80', 'too big']];
+  cards.forEach(([k, f, d, used], i) => {
+    const x = 8 + (i % 3) * 104, y = 54 + Math.floor(i / 3) * 70;
+    const sel = i === 0;
+    h += el(x, y, 100, 66, 'inset', '', sel ? 'border-color:var(--accent);background:rgba(25,211,176,.07);' : k ? '' : 'border-color:var(--bad);');
+    h += el(x + 2, y + 6, 96, 22, '', k ? img(k, 2) : '<span class="t60 bad">no preview</span>', 'display:flex;justify-content:center;align-items:center;');
+    h += el(x + 4, y + 34, 92, 8, 't60' + (k ? '' : ' bad'), f, 'white-space:nowrap;overflow:hidden;');
+    h += el(x + 4, y + 44, 92, 8, 't50 mut', d, 'white-space:nowrap;');
+    h += el(x + 4, y + 54, 92, 8, 't50 ' + (k ? 'tq' : 'bad'), k ? 'on ' + used : 'over 256 x 64', 'white-space:nowrap;');
+  });
+  h += txt(8, 200, 'warden.png at line size:', 't60 mut');
+  h += el(100, 197, 212, 13, 'chat row t85', `<span class="mc-white">&lt;</span>${img('warden')}<span class="mc-white">Mrgregles&gt; hello</span>`, 'gap:4px;');
+  // Right: ranks to tick.
+  const px = 322;
+  h += txt(px, 42, 'USE warden.png ON', 'head');
+  h += el(px, 54, 190, 200, 'inset');
+  const ranks = [['Playtime', null], ['Warden', '&amp;b[Warden]', 1, 'mc-aqua'], ['Legend', '&amp;6[Legend]', 0, 'mc-gold'], ['Raider', null], ['Reaver', '&amp;c[Reaver]', 0, 'mc-red'],
+    ['Awards', null], ['apple_picker', '&amp;a[Apple Picker]', 0, 'mc-green'], ['LuckPerms', null], ['admin', '&amp;c[Admin]', 0, 'mc-red'], ['moderator', '&amp;9[Mod]', 0, 'mc-blue'], ['founder', '&amp;6[Founder]', 0, 'mc-gold']];
+  ranks.forEach(([n, p, on, c], i) => {
+    const y = 55 + i * 14;
+    if (p === null) { h += txt(px + 6, y + 5, n.toUpperCase(), 'head'); return; }
+    h += el(px + 1, y, 188, 14, 'row t75', `<span class="chip ${on ? 'on' : 'dim'} t50" style="width:${10 * U}px;height:${10 * U}px;">${on ? '&#10003;' : ''}</span><span class="${on ? '' : 'mut'}">${n}</span><span class="r t60 ${c}">${p}</span>`);
+  });
+  h += chip(px, 260, 60, 13, 'SAVE', 'on', 't75');
+  h += txt(px + 66, 263, 'founder and apple_picker: text only', 't50 mut');
+  document.getElementById('c1').innerHTML = h;
+})();
+</script>

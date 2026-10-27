@@ -13,20 +13,23 @@ import java.util.function.Supplier;
 /**
  * Server to client: a player's standing for the rank screen (owner decisions D38 to D46): the ladder (the settings'
  * NBT), how many hold each rung, the player's counts by signal key, bonus, lifetime and season points, the rung held
- * (empty for none) and when, their title, waiting rewards, the fastest ways to the next rung, and whether to open.
+ * (empty for none) and when, their title and its image's id (empty: drawn as text, D61), waiting rewards, the fastest ways to the next rung, and whether to open.
  * The single-ladder fields are the first ladder's; {@code ladders} has every ladder's standing and {@code awards} every
  * award's (D52), and the holders count every ladder's rungs and every award.
  */
 public record RankViewPacket(CompoundTag settings, Map<String, Integer> holders, Map<String, Long> counts, long bonus, long points,
-                             long seasonPoints, boolean seasonStarted, String rank, long rankedAt, String title, int pending,
+                             long seasonPoints, boolean seasonStarted, String rank, long rankedAt, String title, String titleImage, int pending,
                              List<Fastest> fastest, String server, int season, boolean open, Map<String, String> kits,
                              List<LadderView> ladders, List<AwardView> awards) {
     /** One way to the next rung: this many more units of a signal would do it alone. */
     public record Fastest(String signal, long units) {
     }
 
-    /** The player on one ladder: the rung held (empty for none) and when, its points and this season's, the fastest ways on. */
-    public record LadderView(String name, String rank, long rankedAt, long points, long seasonPoints, List<Fastest> fastest) {
+    /**
+     * The player on one ladder: the rung held (empty for none) and when, its points and this season's, the fastest ways
+     * on, and the ladder's own title (the prefix at its priority, empty for none) with its image's id (D76).
+     */
+    public record LadderView(String name, String rank, long rankedAt, long points, long seasonPoints, List<Fastest> fastest, String title, String titleImage) {
     }
 
     /** One award: reached or not (and when), and the points toward it (this season's for a seasonal award). */
@@ -47,6 +50,7 @@ public record RankViewPacket(CompoundTag settings, Map<String, Integer> holders,
         buf.writeUtf(msg.rank, 64);
         buf.writeVarLong(msg.rankedAt);
         buf.writeUtf(msg.title, 64);
+        buf.writeUtf(msg.titleImage, 40);
         buf.writeVarInt(msg.pending);
         buf.writeCollection(msg.fastest, (b, f) -> {
             b.writeUtf(f.signal, 32);
@@ -66,6 +70,8 @@ public record RankViewPacket(CompoundTag settings, Map<String, Integer> holders,
                 bb.writeUtf(f.signal, 32);
                 bb.writeVarLong(f.units);
             });
+            b.writeUtf(l.title, 64);
+            b.writeUtf(l.titleImage, 40);
         });
         buf.writeCollection(msg.awards.size() > MAX_AWARDS ? msg.awards.subList(0, MAX_AWARDS) : msg.awards, (b, a) -> {
             b.writeUtf(a.group, 64);
@@ -80,11 +86,11 @@ public record RankViewPacket(CompoundTag settings, Map<String, Integer> holders,
         return new RankViewPacket(settings == null ? new CompoundTag() : settings,
                 buf.readMap(b -> b.readUtf(64), FriendlyByteBuf::readVarInt),
                 buf.readMap(b -> b.readUtf(32), FriendlyByteBuf::readVarLong),
-                buf.readVarLong(), buf.readVarLong(), buf.readVarLong(), buf.readBoolean(), buf.readUtf(64), buf.readVarLong(), buf.readUtf(64), buf.readVarInt(),
+                buf.readVarLong(), buf.readVarLong(), buf.readVarLong(), buf.readBoolean(), buf.readUtf(64), buf.readVarLong(), buf.readUtf(64), buf.readUtf(40), buf.readVarInt(),
                 buf.readList(b -> new Fastest(b.readUtf(32), b.readVarLong())), buf.readUtf(64), buf.readVarInt(), buf.readBoolean(),
                 buf.readMap(b -> b.readUtf(64), b -> b.readUtf(64)),
                 buf.readList(b -> new LadderView(b.readUtf(32), b.readUtf(64), b.readVarLong(), b.readVarLong(), b.readVarLong(),
-                        b.readList(bb -> new Fastest(bb.readUtf(32), bb.readVarLong())))),
+                        b.readList(bb -> new Fastest(bb.readUtf(32), bb.readVarLong())), b.readUtf(64), b.readUtf(40))),
                 buf.readList(b -> new AwardView(b.readUtf(64), b.readBoolean(), b.readVarLong(), b.readVarLong())));
     }
 

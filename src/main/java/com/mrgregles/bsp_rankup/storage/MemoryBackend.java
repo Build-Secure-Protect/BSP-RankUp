@@ -20,6 +20,7 @@ public final class MemoryBackend implements StorageBackend {
     @Nullable
     private SettingsRow settings;
     private final List<Notice> notices = new ArrayList<>();
+    private final Map<String, byte[]> images = new HashMap<>();
     private long lastNoticeId;
     private boolean failing;
     private int writes;
@@ -159,11 +160,35 @@ public final class MemoryBackend implements StorageBackend {
     }
 
     @Override
+    public synchronized void saveImage(String id, byte[] png) throws Exception {
+        check();
+        images.putIfAbsent(id, png.clone());
+    }
+
+    @Override
+    @Nullable
+    public synchronized byte[] loadImage(String id) throws Exception {
+        check();
+        byte[] png = images.get(id);
+        return png == null ? null : png.clone();
+    }
+
+    @Override
     public synchronized long publish(Notice n) throws Exception {
         check();
         long id = ++lastNoticeId;
         notices.add(new Notice(id, n.uid(), n.createdAt(), n.source(), n.kind(), n.payload()));
         return id;
+    }
+
+    /**
+     * A notice with the id it carries, as a row another server's insert committed late (tests): ids are handed out in
+     * order but committed in any order.
+     */
+    public synchronized void insertNotice(Notice n) {
+        notices.add(n);
+        notices.sort(java.util.Comparator.comparingLong(Notice::id));
+        lastNoticeId = Math.max(lastNoticeId, n.id());
     }
 
     @Override
