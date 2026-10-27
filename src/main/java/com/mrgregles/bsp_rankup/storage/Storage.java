@@ -514,21 +514,23 @@ public final class Storage {
         });
     }
 
-    /** An award reached here is announced on the other servers too when announcements are network-wide (D53). */
+    /** An award reached here is announced on the other servers too when announcements are network-wide (D53); never for a player away (D86). */
     private void onAward(RankEngine.AwardReached reached) {
-        if (reached.server() == server && SettingsLedger.settings(server).announce() == Settings.Announce.NETWORK) {
+        Settings settings = SettingsLedger.settings(server);
+        if (reached.server() == server && settings.announce() == Settings.Announce.NETWORK && RankEngine.announces(server, settings, reached.player())) {
             publish(KIND_AWARD, Players.name(server, reached.player()) + "\t" + reached.award().displayName());
         }
     }
 
     private void onRankUp(RankEngine.RankUp up) {
-        if (up.server() != server || SettingsLedger.settings(server).announce() != Settings.Announce.NETWORK) {
+        Settings settings = SettingsLedger.settings(server);
+        if (up.server() != server || settings.announce() != Settings.Announce.NETWORK || !RankEngine.announces(server, settings, up.player())) {
             return;
         }
         boolean quiet = up.from() == null && up.ladder().indexOf(up.to().group()) == 0;
         if (!quiet) {
             // a third part names the ladder when there are several (D52)
-            String ladder = SettingsLedger.settings(server).ladders().size() > 1 ? "\t" + RankEngine.label(up.ladder()) : "";
+            String ladder = settings.ladders().size() > 1 ? "\t" + RankEngine.label(up.ladder()) : "";
             publish(KIND_RANKUP, Players.name(server, up.player()) + "\t" + up.to().displayName() + ladder);
         }
     }

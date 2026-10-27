@@ -1,0 +1,270 @@
+<title>RankUp Counted Signals</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: per option a brief, then the admin screen at its real size (520 x 300 GUI units, 1.6 px a unit) on the
+   tabs it changes, then the decisions list. One dark look on purpose: the mod's own Holo HUD panels. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0e13;
+  --inset: #0c0e12;
+  --line: #2a2f3a;
+  --accent: #19d3b0;
+  --violet: #b58cff;
+  --gold: #ffd23a;
+  --bad: #ff6b5c;
+  --text: #e6eaf2;
+  --muted: #9aa3b5;
+  --mc: 'VT323', 'Courier New', monospace;
+  --ui: 'IBM Plex Sans', system-ui, sans-serif;
+}
+body { background: var(--bg); color: var(--text); font-family: var(--ui); padding-block: 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); line-height: 1.5; }
+.wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 44px; }
+h1 { font-family: var(--mc); font-size: 40px; font-weight: 400; color: var(--accent); margin: 0; text-wrap: balance; }
+h2 { font-family: var(--mc); font-size: 32px; font-weight: 400; margin: 0; text-wrap: balance; }
+h2 small { color: var(--muted); font-size: 22px; margin-left: 8px; }
+h3 { font-family: var(--mc); font-size: 22px; font-weight: 400; margin: 0; color: var(--muted); }
+p { max-width: 68ch; margin: 0; }
+.lead { color: var(--muted); }
+.lead b { color: var(--text); font-weight: 600; }
+.option { display: grid; gap: 14px; }
+.brief { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 32px; }
+.brief > div { min-width: 0; }
+.brief p { font-size: 15px; }
+.brief b { color: var(--accent); font-weight: 600; }
+.brief .con b { color: var(--gold); }
+.frame { overflow-x: auto; border: 1px solid var(--line); background: #06080c; padding: 12px; }
+.screen { position: relative; width: 832px; height: 480px; font-family: var(--mc); font-size: 18px; line-height: 1; color: var(--text);
+  background: radial-gradient(ellipse at 30% 20%, #16331f 0, transparent 50%), radial-gradient(ellipse at 70% 80%, #2a2316 0, transparent 50%), #1a2230; }
+.screen * { box-sizing: border-box; }
+.a { position: absolute; }
+.panel { background: rgba(16,21,28,.95); border: 2px solid var(--accent); }
+.inset { background: var(--inset); border: 2px solid var(--line); }
+.t10 { font-size: 20px; } .t85 { font-size: 18px; } .t75 { font-size: 16px; } .t60 { font-size: 14px; } .t50 { font-size: 12px; }
+.mut { color: var(--muted); } .tq { color: var(--accent); } .gold { color: var(--gold); } .vio { color: var(--violet); } .bad { color: var(--bad); }
+.chip { display: flex; align-items: center; justify-content: center; border: 2px solid var(--line); background: var(--inset); color: var(--muted); white-space: nowrap; overflow: hidden; }
+.chip.on { border-color: var(--accent); color: var(--accent); background: rgba(25,211,176,.13); }
+.chip.gold { border-color: var(--gold); color: var(--gold); background: rgba(255,210,58,.1); }
+.chip.vio { border-color: var(--violet); color: var(--violet); background: rgba(181,140,255,.13); }
+.chip.bad { border-color: var(--bad); color: var(--bad); background: rgba(255,107,92,.1); }
+.chip.dim { border-color: var(--line); color: var(--muted); background: transparent; }
+.chip.two { flex-direction: column; gap: 2px; }
+.row { display: flex; align-items: center; gap: 8px; padding: 0 8px; white-space: nowrap; overflow: hidden; }
+.row.sel { background: rgba(25,211,176,.14); box-shadow: inset 4px 0 0 var(--accent); }
+.row .r { margin-left: auto; }
+.lbl { font-size: 14px; color: var(--muted); letter-spacing: 1px; }
+.box { background: var(--inset); border: 2px solid var(--line); display: flex; align-items: center; padding: 0 6px; white-space: nowrap; overflow: hidden; }
+.pick { border: 1px solid var(--line); padding: 20px 24px; display: grid; gap: 12px; }
+.pick ol { margin: 0; padding-left: 22px; font-size: 15px; display: grid; gap: 8px; }
+.pick li b { color: var(--accent); font-weight: 600; }
+.pick li .def { color: var(--gold); }
+.pick .note { color: var(--muted); font-size: 15px; }
+@media (max-width: 700px) { .brief { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:10px">
+    <h1>Which signals a ladder counts: three options</h1>
+    <p class="lead">Today the LADDER tab's strip lists a ladder's signals as small chips after COUNTS ("minutes played" is the <b>playtime</b> signal), and an award shows them in GROUPS. Nothing shows the whole picture: which signal feeds which ladder or award, and what it is worth there. Example data in all three: ladder <b>Rankup</b> counts minutes played (1 point a minute); ladder <b>Raider</b> counts player kills and totems stolen; the award <b>apple_picker</b> counts pieces earned.</p>
+  </header>
+
+  <section class="option" id="a">
+    <h2>A. A "progress from" line <small>on LADDER and GROUPS</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> The ladder's strip becomes two lines. The second, <b>PROGRESS FROM</b>, lists each counted signal as a bright chip with its worth ("minutes played, 1 pt a minute"); a click on its x takes it off, + SIGNAL adds one. The rung's POINTS field says what the points mean ("= 120 minutes played") when the ladder counts one signal. An award on GROUPS gets the same line.</p></div>
+      <div class="con"><p><b>Trade-off.</b> The answer sits right where you edit the ladder, in words. The rung list loses one row (12 visible, which still fits your 12 rungs; more scroll). You still look ladder by ladder.</p></div>
+    </div>
+    <h3>LADDER</h3>
+    <div class="frame"><div class="screen" id="a1"></div></div>
+    <h3>GROUPS, an award chosen</h3>
+    <div class="frame"><div class="screen" id="a2"></div></div>
+  </section>
+
+  <section class="option" id="b">
+    <h2>B. A matrix on SIGNALS <small>every ladder and award at once</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> SIGNALS gets a column per ladder and per award. A tick means that signal counts there; click a cell to switch it. The worth column stays as it is. LADDER and GROUPS keep their chips, drawn brighter.</p></div>
+      <div class="con"><p><b>Trade-off.</b> The best overview, on one screen. With many ladders and awards the columns run out (about six fit; the rest scroll sideways). You go to a different tab to see it.</p></div>
+    </div>
+    <h3>SIGNALS</h3>
+    <div class="frame"><div class="screen" id="b1"></div></div>
+  </section>
+
+  <section class="option" id="c">
+    <h2>C. Signals on the ladder chips <small>and on every group row</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> Each ladder chip at the top grows a second line naming what it counts ("minutes played", "kills, totems stolen"), so the ladder row itself is the overview. On GROUPS every row shows its signals, for rungs (from their ladder) and awards alike.</p></div>
+      <div class="con"><p><b>Trade-off.</b> Always in view, no extra click. Signal names are cut short when a ladder counts many; the chip row is taller, so the rung list loses one row; the worth is not shown.</p></div>
+    </div>
+    <h3>LADDER</h3>
+    <div class="frame"><div class="screen" id="c1"></div></div>
+    <h3>GROUPS</h3>
+    <div class="frame"><div class="screen" id="c2"></div></div>
+  </section>
+
+  <section class="pick">
+    <h2>Pick one, and the open questions</h2>
+    <p class="note">Each question has a default in gold; say only where you want something else.</p>
+    <ol>
+      <li><b>Layout:</b> A, B or C, or parts combined. <span class="def">Default: A and B together: the "progress from" line where you edit, the matrix for the overview.</span></li>
+      <li><b>Signal names:</b> the screen's names ("minutes played") with the command's key on hover ("playtime"), so typing a key in + SIGNAL is easy to match. <span class="def">Default: yes.</span></li>
+      <li><b>A ladder counting every signal</b> says "every signal" in gold, so it is not mistaken for a ladder counting nothing. <span class="def">Default: yes.</span></li>
+      <li><b>Signals that are off</b> (SIGNALS tab) but counted by a ladder show dimmed with "off: worth nothing now". <span class="def">Default: yes.</span></li>
+      <li><b>The player's rank screen</b> already lists only the chosen ladder's signals under WHAT COUNTS; no change there. <span class="def">Default: no change.</span></li>
+    </ol>
+  </section>
+</div>
+
+<script>
+// Every screen is drawn from these helpers, in GUI units (1.6 px a unit), at the mod's own layout constants.
+const U = 1.6;
+const pos = (x, y, w, h) => `left:${x * U}px;top:${y * U}px;` + (w != null ? `width:${w * U}px;` : '') + (h != null ? `height:${h * U}px;` : '');
+const el = (x, y, w, h, cls, html = '', extra = '') => `<div class="a ${cls}" style="${pos(x, y, w, h)}${extra}">${html}</div>`;
+const txt = (x, y, s, cls = 't75') => el(x, y, null, null, cls, s, 'white-space:nowrap;');
+const chip = (x, y, w, h, s, cls = '', size = 't60') => el(x, y, w, h, `chip ${cls} ${size}`, s);
+const TABS = ['LADDER', 'GROUPS', 'SIGNALS', 'PLAYERS', 'PREFIXES', 'OPTIONS'];
+
+function frame(on, status) {
+  let h = el(0, 0, 520, 300, 'panel');
+  h += txt(10, 8, 'RANKUP ADMIN', 't10 tq');
+  h += el(210, 10, 300, 8, 't60 mut', status, 'text-align:right;white-space:nowrap;');
+  TABS.forEach((t, i) => { h += chip(8 + i * 57, 22, 54, 12, t, i === on ? 'on' : '', 't75'); });
+  h += txt(10, 288, 'Changes save at once and reach every server. Esc closes.', 't60 mut');
+  return h;
+}
+
+const RUNGS = [['Wanderer', 0], ['Settler', 12], ['Recruit', 30], ['Scout', 60], ['Sentinel', 120], ['Warden', 210], ['Vanguard', 360], ['Captain', 540], ['Commander', 780], ['Marshal', 1080], ['Warlord', 1500], ['Legend', 2100]];
+
+function rungs(y, h, sel) {
+  let s = el(8, y, 164, h, 'inset');
+  const rows = Math.floor((h - 2) / 14);
+  RUNGS.slice(0, rows).forEach(([n, p], i) => {
+    s += el(9, y + 1 + i * 14, 162, 14, 'row t85' + (i === sel ? ' sel' : ''), `<span class="t75 mut">${i + 1}.</span><span class="${i === sel ? '' : 'mut'}">${n}</span><span class="t60 vio" style="margin-left:auto">S</span><span class="t75 gold" style="width:${34 * U}px;text-align:right">${p}</span>`);
+  });
+  s += chip(8, y + h + 6, 72, 13, '+ ADD RANK', 'on', 't75') + chip(83, y + h + 6, 24, 13, 'UP', '', 't75') + chip(110, y + h + 6, 24, 13, 'DOWN', '', 't75') + chip(137, y + h + 6, 35, 13, 'IMPORT', '', 't75');
+  return s;
+}
+
+function editor(py, pointsNote) {
+  const px = 180;
+  let s = txt(px, py, 'SENTINEL', 't10');
+  s += el(px, py + 2, 332, 8, 't60 mut', 'rung 5 of 12 - 0 players hold it', 'text-align:right;white-space:nowrap;');
+  s += txt(px, py + 14, 'GROUP', 'lbl') + el(px, py + 21, 100, 13, 'box t85 mut', 'sentinel');
+  s += txt(px + 106, py + 14, 'DISPLAY NAME', 'lbl') + el(px + 106, py + 21, 110, 13, 'box t85', 'Sentinel');
+  s += txt(px + 222, py + 14, 'POINTS', 'lbl') + el(px + 222, py + 21, 50, 13, 'box t85', '120');
+  if (pointsNote) {
+    s += txt(px + 222, py + 36, '= 120 minutes played', 't50 tq');
+  }
+  s += txt(px + 278, py + 14, 'SEASON', 'lbl') + chip(px + 278, py + 21, 26, 13, 'keep') + chip(px + 305, py + 21, 27, 13, 'reset', 'vio');
+  s += txt(px, py + 42, 'REWARDS WHEN REACHED', 't60 tq') + el(px, py + 50, 332, 76, 'inset', `<div class="a t75 mut" style="${pos(6, 6)}">This rung gives nothing yet.</div>`);
+  ['COINS', 'PIECES', 'ITEM', 'TITLE', 'COMMAND', 'KIT'].forEach((k, i) => { s += chip(px + i * 47, py + 131, 44, 13, '+ ' + k); });
+  s += chip(px + 282, py + 131, 50, 13, 'FROM HAND', 'gold', 't75');
+  s += chip(px + 256, py + 149, 76, 13, 'REMOVE RANK', 'bad', 't75');
+  return s;
+}
+
+function ladderChips(two) {
+  if (!two) {
+    return chip(8, 40, 50, 12, 'RANKUP', 'on', 't75') + chip(61, 40, 50, 12, 'RAIDER', '', 't75') + chip(114, 40, 60, 12, '+ LADDER', 'dim', 't75');
+  }
+  return chip(8, 40, 92, 22, '<span class="t75">RANKUP</span><span class="t50">minutes played</span>', 'on two')
+    + chip(103, 40, 110, 22, '<span class="t75">RAIDER</span><span class="t50">player kills, totems stolen</span>', 'two')
+    + chip(216, 40, 60, 22, '+ LADDER', 'dim', 't75');
+}
+
+function stripLine1(y) {
+  let s = el(8, y, 504, 14, 'inset');
+  s += txt(13, y + 4, 'TRACK', 'lbl') + chip(36, y + 1, 60, 12, 'rankup', '', 't75');
+  s += chip(380, y + 1, 72, 12, 'titles at 1000') + chip(458, y + 1, 52, 12, 'RENAME');
+  return s;
+}
+
+// ---------------------------------------------------------------- A
+(function () {
+  let h = frame(0, 'track rankup - 12 rungs - LuckPerms: Forge edition');
+  h += ladderChips(false);
+  h += el(8, 56, 504, 28, 'inset');
+  h += txt(13, 60, 'TRACK', 'lbl') + chip(36, 57, 60, 12, 'rankup', '', 't75') + chip(380, 57, 72, 12, 'titles at 1000') + chip(458, 57, 52, 12, 'RENAME');
+  h += txt(13, 74, 'PROGRESS FROM', 'lbl tq');
+  h += chip(70, 71, 150, 12, 'minutes played &nbsp;<span class="gold">1 pt a minute</span> &nbsp;<span class="bad">x</span>', 'on');
+  h += chip(224, 71, 52, 12, '+ SIGNAL', 'dim');
+  h += txt(282, 74, 'only these count on this ladder; the admin bonus counts everywhere', 't50 mut');
+  h += rungs(88, 170, 4);
+  h += editor(90, true);
+  document.getElementById('a1').innerHTML = h;
+
+  let g = frame(1, '27 LuckPerms groups - 12 on ladders - 1 award');
+  g += el(8, 40, 164, 14, 'inset') + txt(13, 43, 'find group', 't75 mut');
+  g += el(8, 56, 164, 198, 'inset');
+  const rows = [['ON A LADDER', null], ['wanderer', 'Rankup 1'], ['sentinel', 'Rankup 5'], ['cutpurse', 'Raider 1'], ['AWARDS', null], ['apple_picker', 'award'], ["NOT RANKUP'S", null], ['admin', 'not used']];
+  rows.forEach(([n, t], i) => {
+    const y = 57 + i * 14;
+    if (t === null) { g += txt(14, y + 4, n, 't60 tq'); return; }
+    g += el(9, y, 162, 14, 'row t85' + (n === 'apple_picker' ? ' sel' : ''), `<span class="${n === 'apple_picker' ? '' : 'mut'}">${n}</span><span class="r t60 ${t === 'award' ? 'gold' : t === 'not used' ? 'mut' : 'tq'}">${t}</span>`);
+  });
+  const px = 180, py = 40;
+  g += txt(px, py, 'APPLE_PICKER', 't10') + chip(px + 82, py - 1, 40, 11, 'AWARD', 'gold', 't50');
+  g += txt(px, py + 13, 'Given once a player reaches it, and kept. Not on any ladder.', 't60 mut');
+  g += txt(px, py + 24, 'DISPLAY NAME', 'lbl') + el(px, py + 31, 120, 13, 'box t85', 'Apple Picker');
+  g += txt(px + 126, py + 24, 'NEEDS (POINTS)', 'lbl') + el(px + 126, py + 31, 70, 13, 'box t85', '5000');
+  g += txt(px + 202, py + 48, '= 5000 pieces earned', 't50 tq');
+  g += el(px, py + 56, 332, 16, 'inset');
+  g += txt(px + 5, py + 61, 'PROGRESS FROM', 'lbl tq') + chip(px + 62, py + 58, 150, 12, 'pieces earned &nbsp;<span class="gold">1 pt a piece</span> &nbsp;<span class="bad">x</span>', 'on') + chip(px + 216, py + 58, 52, 12, '+ SIGNAL', 'dim');
+  g += txt(px, py + 78, 'REWARDS WHEN REACHED', 't60 tq') + el(px, py + 86, 332, 60, 'inset', `<div class="a row t75" style="${pos(1, 1, 330, 12)}"><span class="t60 vio" style="width:${44 * U}px">ITEM</span>16 x Golden Apple</div>`);
+  document.getElementById('a2').innerHTML = g;
+})();
+
+// ---------------------------------------------------------------- B
+(function () {
+  let h = frame(2, '12 signals - 2 ladders - 1 award');
+  const lx = 8, ly = 40;
+  h += el(lx, ly, 504, 230, 'inset');
+  h += txt(lx + 6, ly + 4, 'SIGNAL', 'lbl') + txt(lx + 128, ly + 4, 'ON', 'lbl') + txt(lx + 156, ly + 4, 'WORTH', 'lbl');
+  const cols = [['RANKUP', 'tq'], ['RAIDER', 'tq'], ['APPLE PICKER', 'gold']];
+  cols.forEach(([c, cl], i) => { h += el(lx + 300 + i * 66, ly + 3, 62, 8, 't50 ' + cl, c, 'text-align:center;white-space:nowrap;'); });
+  const sig = [['minutes played', '1 point per 1 minute', [1, 0, 0], true], ['player kills', '25 points per 1 kill', [0, 1, 0], true], ['mob kills', '1 point per 1 kill', [0, 0, 0], true],
+    ['deaths', 'off', [0, 0, 0], false], ['totems stolen', '150 points per 1 totem', [0, 1, 0], true], ['totems protected', '60 points per 1 totem', [0, 0, 0], true],
+    ['totems lost', 'off', [0, 0, 0], false], ['totems placed', 'off', [0, 0, 0], false], ['seasons survived', 'off', [0, 0, 0], false], ['season score', '1 point per 100 points', [0, 0, 0], true],
+    ['pieces earned', '1 point per 1 piece', [0, 0, 1], true], ['claims bought', 'off', [0, 0, 0], false]];
+  sig.forEach(([n, w, on, live], i) => {
+    const y = ly + 14 + i * 17;
+    if (i % 2 === 0) h += el(lx + 1, y, 502, 17, '', '', 'background:rgba(255,255,255,.04);');
+    h += txt(lx + 6, y + 5, n, 't85' + (live ? '' : ' mut'));
+    h += chip(lx + 126, y + 2, 22, 12, live ? 'on' : 'off', live ? 'on' : '');
+    h += el(lx + 154, y + 2, 136, 12, 'box t60 ' + (live ? 'gold' : 'mut'), w);
+    on.forEach((o, j) => {
+      const cls = o ? (j === 2 ? 'gold' : 'on') : 'dim';
+      h += chip(lx + 321 + j * 66, y + 2, 20, 12, o ? '&#10003;' : '', cls);
+    });
+  });
+  h += txt(lx, 276, 'a tick: that signal counts there; click to switch. A ladder with no tick counts every signal.', 't50 mut');
+  document.getElementById('b1').innerHTML = h;
+})();
+
+// ---------------------------------------------------------------- C
+(function () {
+  let h = frame(0, 'track rankup - 12 rungs - LuckPerms: Forge edition');
+  h += ladderChips(true);
+  h += el(8, 66, 504, 14, 'inset');
+  h += txt(13, 70, 'TRACK', 'lbl') + chip(36, 67, 60, 12, 'rankup', '', 't75');
+  h += txt(102, 70, 'COUNTS', 'lbl') + chip(130, 67, 70, 12, 'minutes played', 'on') + chip(203, 67, 46, 12, '+ signal', 'dim');
+  h += chip(380, 67, 72, 12, 'titles at 1000') + chip(458, 67, 52, 12, 'RENAME');
+  h += rungs(84, 170, 4);
+  h += editor(86, false);
+  document.getElementById('c1').innerHTML = h;
+
+  let g = frame(1, '27 LuckPerms groups - 12 on ladders - 1 award');
+  g += el(8, 40, 504, 14, 'inset') + txt(13, 43, 'find group', 't75 mut');
+  g += el(8, 56, 504, 214, 'inset');
+  g += txt(14, 59, 'GROUP', 'lbl') + txt(130, 59, 'WHERE', 'lbl') + txt(230, 59, 'PROGRESS FROM', 'lbl') + txt(460, 59, 'NEEDS', 'lbl');
+  const rows = [['wanderer', 'Rankup 1', 'minutes played', '0', 'tq'], ['sentinel', 'Rankup 5', 'minutes played', '120', 'tq'], ['legend', 'Rankup 12', 'minutes played', '2100', 'tq'],
+    ['cutpurse', 'Raider 1', 'player kills, totems stolen', '150', 'tq'], ['reaver', 'Raider 3', 'player kills, totems stolen', '3000', 'tq'],
+    ['apple_picker', 'award', 'pieces earned', '5000', 'gold'], ['admin', 'not used', '-', '-', 'mut']];
+  rows.forEach(([n, w, sigs, need, cl], i) => {
+    const y = 70 + i * 14;
+    g += el(9, y, 502, 14, 'row t85' + (n === 'sentinel' ? ' sel' : ''), `<span style="width:${110 * U}px" class="${n === 'sentinel' ? '' : 'mut'}">${n}</span><span class="t60 ${cl}" style="width:${96 * U}px">${w}</span><span class="t60 ${cl === 'mut' ? 'mut' : 'tq'}" style="width:${220 * U}px">${sigs}</span><span class="r t60 gold">${need}</span>`);
+  });
+  g += txt(10, 276, 'GROUPS as one table: every group with where it sits and what it progresses from; click a row to edit it.', 't50 mut');
+  document.getElementById('c2').innerHTML = g;
+})();
+</script>

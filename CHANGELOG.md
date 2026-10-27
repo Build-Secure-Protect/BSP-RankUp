@@ -4,6 +4,15 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+### Added (2026-10-27, seeing which signals count, D81 to D85)
+- LADDER: the ladder's strip has a second line, **PROGRESS FROM**, with a chip per counted signal and what it is worth there ("minutes played 1 pt / minute"), an x to take it off and + signal to add; "every signal" in gold when the ladder counts all of them. A signal switched off shows "off". Hovering a signal shows its command key ("playtime") and where it comes from. The rung list shows 12 rows (was 13) and the rewards list 5 (was 6) to make room.
+- Under a rung's POINTS (and an award's NEEDS on GROUPS), what the points mean when one signal is counted: "= 120 minutes".
+- GROUPS: an award's signals are the same PROGRESS FROM chips.
+- SIGNALS: a column per ladder and per award; a tick where the signal counts there, and a click on a cell switches it (the worth stays editable beside it). More than three ladders and awards page with < and >. The source column moved to the hover.
+
+### Fixed (2026-10-27, D86)
+- A rank-up or award reached while the player is away (a totem of theirs lost, an admin's points, their row read as the server starts) is no longer announced to the server, nor sent to the other servers on a network. It is still given, with its rewards waiting for the player's login. Before, a server could start with "Mrgregles reached the rank Settler!" and nobody online.
+
 ## [0.4.0] - 2026-10-27
 
 Server and modpack must update together (protocol 3). Requires BSP Core 1.4.5 or newer; BSP Region Guard 0.6.0 needs BSP Core 1.4.6 or newer, so deploy BSP Core 1.6.2, Region Guard 0.6.0 and this RankUp together.

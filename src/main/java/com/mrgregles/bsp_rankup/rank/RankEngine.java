@@ -52,6 +52,7 @@ public final class RankEngine {
 
     private static final List<Consumer<RankUp>> LISTENERS = new CopyOnWriteArrayList<>();
     private static final List<Consumer<AwardReached>> AWARD_LISTENERS = new CopyOnWriteArrayList<>();
+    private static final List<Consumer<Component>> ANNOUNCE_LISTENERS = new CopyOnWriteArrayList<>();
     /** Moves waiting for LuckPerms, by player and ladder ({@code uuid/ladder}) or award ({@code uuid/award:group}). */
     private static final Set<String> IN_FLIGHT = new HashSet<>();
     private static long lastWarnMs;
@@ -86,6 +87,30 @@ public final class RankEngine {
 
     public static void removeAwardListener(Consumer<AwardReached> listener) {
         AWARD_LISTENERS.remove(listener);
+    }
+
+    /** Hears every rank-up and award announced to the whole server here. For tests. */
+    public static void onAnnounce(Consumer<Component> listener) {
+        ANNOUNCE_LISTENERS.add(listener);
+    }
+
+    public static void removeAnnounceListener(Consumer<Component> listener) {
+        ANNOUNCE_LISTENERS.remove(listener);
+    }
+
+    /**
+     * Whether a rank-up or award of {@code player} is announced: only while they are online here (D86). One reached
+     * while they are away (a totem lost, an admin's points, a row read as the server starts) is still given, quietly.
+     */
+    public static boolean announces(MinecraftServer server, Settings settings, UUID player) {
+        return settings.announce() != Settings.Announce.OFF && Players.isOnline(server, player);
+    }
+
+    private static void announce(MinecraftServer server, Component message) {
+        server.getPlayerList().broadcastSystemMessage(message, false);
+        for (Consumer<Component> l : ANNOUNCE_LISTENERS) {
+            l.accept(message);
+        }
     }
 
     // ------------------------------------------------------------------ arithmetic
@@ -393,10 +418,10 @@ public final class RankEngine {
                 Rewards.give(server, player, rank.displayName(), rank.rewards(), settings, ladder.titlePriority());
                 ledger.addRewarded(player, rank.group());
             }
-            if (!quiet && settings.announce() != Settings.Announce.OFF) {
-                server.getPlayerList().broadcastSystemMessage(several
+            if (!quiet && announces(server, settings, player)) {
+                announce(server, several
                         ? Component.translatable("message.bsp_rankup.announce_on", Players.name(server, player), rank.displayName(), label(ladder))
-                        : Component.translatable("message.bsp_rankup.announce", Players.name(server, player), rank.displayName()), false);
+                        : Component.translatable("message.bsp_rankup.announce", Players.name(server, player), rank.displayName()));
             }
             RankUp up = new RankUp(server, player, ladder, previous, rank);
             for (Consumer<RankUp> l : LISTENERS) {
@@ -474,8 +499,8 @@ public final class RankEngine {
             if (online != null) {
                 online.sendSystemMessage(Component.translatable("message.bsp_rankup.award", current.displayName()));
             }
-            if (now.announce() != Settings.Announce.OFF) {
-                server.getPlayerList().broadcastSystemMessage(Component.translatable("message.bsp_rankup.award_announce", Players.name(server, player), current.displayName()), false);
+            if (announces(server, now, player)) {
+                announce(server, Component.translatable("message.bsp_rankup.award_announce", Players.name(server, player), current.displayName()));
             }
             AwardReached reached = new AwardReached(server, player, current);
             for (Consumer<AwardReached> l : AWARD_LISTENERS) {

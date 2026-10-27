@@ -47,7 +47,11 @@ public class AdminScreen extends HoloScreen {
     /** On PREFIXES (D65, mock-up A): the prefix list on the left, the chosen prefix and the folder's files on the right. */
     private static final int PFX_LIST_W = 200, PFX_PANE_X = 216, PFX_PANE_W = 296, FILE_ROW = 12, FILE_ROWS = 6;
     /** On LADDER (D51, mock-up A): the ladder chips, the chosen ladder's strip, then its rungs and the rung editor. */
-    private static final int CHIPS_Y = 40, STRIP_Y = 56, RUNGS_Y = 74, RUNGS_H = 182, EDIT_Y = 76, REWARD_ROWS_H = 76;
+    private static final int CHIPS_Y = 40, STRIP_Y = 56, RUNGS_Y = 88, RUNGS_H = 168, EDIT_Y = 90, REWARD_ROWS_H = 76;
+    /** The strip is two lines (D81): the track and title priority, then PROGRESS FROM; a rung's rewards list is shorter to make room. */
+    private static final int STRIP_H = 28, LADDER_REWARDS_H = 62;
+    /** On SIGNALS (D81): the matrix's ladder and award columns, so many at a time. */
+    private static final int MATRIX_X = 318, MATRIX_COL = 60, MATRIX_COLS = 3;
     /** The item browser opens over the editor, down to the input line. */
     private static final int BROWSER_Y = EDIT_Y, BROWSER_H = 244 - EDIT_Y;
     private static final int LIST_X = 8, LIST_Y = 40, LIST_W = 164, LIST_H = 214, ROW = 14;
@@ -127,6 +131,13 @@ public class AdminScreen extends HoloScreen {
     private String fileChoice;
     private int prefixScroll, fileScroll;
     private boolean onlyWithoutImage;
+    /** The SIGNALS matrix's first column shown, when there are more ladders and awards than fit. */
+    private int matrixScroll;
+    /** A line to show beside the mouse this frame (a counted signal's key, D82), or null. */
+    @Nullable
+    private String tooltip;
+    /** The mouse this frame, in the screen's units, for hover hints drawn deep in the helpers. */
+    private int lastMouseX, lastMouseY;
 
     public AdminScreen() {
         super(Component.literal(Tr.t("rankup_admin")), W, H);
@@ -403,6 +414,9 @@ public class AdminScreen extends HoloScreen {
     @Override
     protected void draw(GuiGraphics g, int mouseX, int mouseY, float partial) {
         hits.clear();
+        tooltip = null;
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
         renderBackground(g);
         int x = left(), y = top();
         g.fill(x, y, x + W, y + H, BG);
@@ -444,6 +458,9 @@ public class AdminScreen extends HoloScreen {
             text(g, Tr.t("changes_save_at_once"), x + 10, y + H - 12, MUTED, 0.6f);
         }
         super.draw(g, mouseX, mouseY, partial);
+        if (tooltip != null) {
+            g.renderTooltip(font, Component.literal(tooltip), mouseX, mouseY);
+        }
     }
 
     /** Every two seconds (game ticks, not frames): the player search when it changed, else a fresh view on PLAYERS, OPTIONS and GROUPS. */
@@ -542,12 +559,16 @@ public class AdminScreen extends HoloScreen {
         field(g, px, py + 14, 100, Tr.t("group"), sel.group(), null);
         field(g, px + 106, py + 14, 110, Tr.t("display_name"), sel.displayName(), () -> openInput(Input.NAME, sel.displayName(), Tr.t("the_name_players_see")));
         field(g, px + 222, py + 14, 50, Tr.t("points"), String.valueOf(sel.points()), () -> openInput(Input.POINTS, String.valueOf(sel.points()), Tr.t("points_needed")));
+        String means = pointsMean(s, ladder.counts(), sel.points());
+        if (means != null) {
+            text(g, clip(means, 54, 0.5f), px + 222, py + 36, TQ, 0.5f);
+        }
         text(g, Tr.t("season"), px + 278, py + 14, MUTED, 0.6f);
         chip(g, px + 278, py + 21, 26, 13, Tr.t("keep"), !sel.seasonal(), TQ, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.LADDER_SEASONAL, sel.group(), "false")));
         chip(g, px + 305, py + 21, 27, 13, Tr.t("reset"), sel.seasonal(), VIO, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.LADDER_SEASONAL, sel.group(), "true")));
 
         text(g, Tr.t("rewards_when_reached"), px, py + 42, TQ, 0.6f);
-        int ay = drawRewards(g, px, py + 50, REWARD_ROWS_H, sel.group(), sel.rewards(), Tr.t("this_rung_gives_nothing_yet"));
+        int ay = drawRewards(g, px, py + 50, LADDER_REWARDS_H, sel.group(), sel.rewards(), Tr.t("this_rung_gives_nothing_yet"));
         drawRewardKinds(g, px, ay, sel.group());
         if (pickingKit) {
             drawKitPicker(g, px, ay + 17, sel.group(), v);
@@ -592,15 +613,14 @@ public class AdminScreen extends HoloScreen {
     /** The chosen ladder's track, what it counts, its title priority, and RENAME (the first) or REMOVE (the others). */
     private void drawLadderStrip(GuiGraphics g, int x, int y, Settings s, Ladder l) {
         int sy = y + STRIP_Y;
-        inset(g, x + 8, sy, W - 16, 14);
+        inset(g, x + 8, sy, W - 16, STRIP_H);
         text(g, Tr.t("track"), x + 13, sy + 4, MUTED, 0.6f);
         int tx = x + 13 + (int) (font.width(Tr.t("track")) * 0.6f) + 4;
         chip(g, tx, sy + 1, 60, 12, clip(l.track(), 54, 0.75f), false, TEXT, 0.75f, () -> openInput(Input.LADDER_TRACK, l.track(), Tr.t("hint.ladder_track")));
-        int cx = tx + 66;
-        text(g, Tr.t("counts"), cx, sy + 4, MUTED, 0.6f);
-        cx += (int) (font.width(Tr.t("counts")) * 0.6f) + 4;
+        // the second line (D81): what this ladder progresses from, each signal with its worth
+        text(g, Tr.t("progress_from"), x + 13, sy + 18, TQ, 0.6f);
         String keys = keysOf(l.counts());
-        cx = drawCountChips(g, cx, sy + 1, x + 380, l.counts(),
+        drawCountChips(g, x + 13 + (int) (font.width(Tr.t("progress_from")) * 0.6f) + 4, sy + 15, x + W - 10, s, l.counts(),
                 sig -> send(AdminActionPacket.of(AdminActionPacket.LADDERS_COUNTS, l.name(), without(l.counts(), sig))),
                 () -> openInput(Input.LADDER_COUNTS, keys, Tr.t("hint.counts")));
         String pr = Tr.t("titles_at", l.titlePriority());
@@ -620,14 +640,16 @@ public class AdminScreen extends HoloScreen {
     }
 
     /**
-     * The counted signals as chips (a click takes one off) and + signal (opens the input); "every signal" when none is
-     * chosen. Stops at {@code end}, naming how many more. Returns the x after the last chip.
+     * The counted signals as chips (D81): each its name and worth ("off" when switched off, D84) with an x that takes
+     * it off, its key on hover (D82); "every signal" in gold when none is chosen (D83); then + signal (opens the input).
+     * Stops before {@code end}, naming how many more. Returns the x after the last chip.
      */
-    private int drawCountChips(GuiGraphics g, int cx, int cy, int end, Set<Signal> counts, java.util.function.Consumer<Signal> remove, Runnable add) {
+    private int drawCountChips(GuiGraphics g, int cx, int cy, int end, Settings s, Set<Signal> counts, java.util.function.Consumer<Signal> remove, Runnable add) {
+        int addW = 46;
         if (counts.isEmpty()) {
             String all = Tr.t("every_signal");
             int w = (int) (font.width(all) * 0.6f) + 8;
-            chip(g, cx, cy, w, 12, all, true, TQ, 0.6f, null);
+            chip(g, cx, cy, w, 12, all, true, GOLD, 0.6f, null);
             cx += w + 3;
         } else {
             int shown = 0;
@@ -635,20 +657,62 @@ public class AdminScreen extends HoloScreen {
                 if (!counts.contains(sig)) {
                     continue;
                 }
-                String label = clip(I18n.get("signal.bsp_rankup." + sig.key()), 66, 0.6f);
-                int w = (int) (font.width(label) * 0.6f) + 8;
-                if (cx + w > end - 50) {
-                    text(g, Tr.t("n_more", counts.size() - shown), cx, cy + 3, MUTED, 0.6f);
-                    cx += (int) (font.width(Tr.t("n_more", counts.size() - shown)) * 0.6f) + 4;
+                SignalSetting v = s.signal(sig);
+                String name = I18n.get("signal.bsp_rankup." + sig.key());
+                String worth = v.on() ? worth(sig, v) : Tr.t("signal_off");
+                int nw = (int) (font.width(name) * 0.6f), ww = (int) (font.width(worth) * 0.6f);
+                int w = nw + ww + 20;
+                if (cx + w > end - addW - 3) {
+                    String more = Tr.t("n_more", counts.size() - shown);
+                    text(g, more, cx, cy + 3, MUTED, 0.6f);
+                    cx += (int) (font.width(more) * 0.6f) + 4;
                     break;
                 }
-                chip(g, cx, cy, w, 12, label, true, TQ, 0.6f, () -> remove.accept(sig));
+                g.fill(cx, cy, cx + w, cy + 12, v.on() ? 0x2219D3B0 : INSET);
+                frame(g, cx, cy, w, 12, v.on() ? TQ : LINE);
+                text(g, name, cx + 4, cy + 3, v.on() ? TQ : MUTED, 0.6f);
+                text(g, worth, cx + 4 + nw + 4, cy + 3, v.on() ? GOLD : MUTED, 0.6f);
+                text(g, "x", cx + w - 8, cy + 3, BAD, 0.6f);
+                hits.add(new Hit(cx + w - 11, cy, 11, 12, () -> remove.accept(sig)));
+                hoverHint(cx, cy, w, 12, sig, v);
                 cx += w + 3;
                 shown++;
             }
         }
-        chip(g, cx, cy, 46, 12, Tr.t("add_signal"), false, MUTED, 0.6f, add);
-        return cx + 49;
+        chip(g, cx, cy, addW, 12, Tr.t("add_signal"), false, MUTED, 0.6f, add);
+        return cx + addW + 3;
+    }
+
+    /** A signal's worth in a few words: "1 pt / minute", "1 pt / 10 minutes". */
+    private static String worth(Signal sig, SignalSetting v) {
+        return v.per() == 1 ? Tr.t("worth_per_one", v.points(), I18n.get("signal.bsp_rankup." + sig.key() + ".unit_one"))
+                : Tr.t("worth_per_many", v.points(), v.per(), I18n.get("signal.bsp_rankup." + sig.key() + ".unit"));
+    }
+
+    /** The mouse over a signal shows its key and where it comes from (D82), and "off: worth nothing now" when it is off (D84). */
+    private void hoverHint(int bx, int by, int bw, int bh, Signal sig, SignalSetting v) {
+        if (lastMouseX >= bx && lastMouseX < bx + bw && lastMouseY >= by && lastMouseY < by + bh) {
+            String hint = Tr.t("signal_key_hint", I18n.get("signal.bsp_rankup." + sig.key()), sig.key(), Tr.t("source." + sig.source().name().toLowerCase(Locale.ROOT)));
+            tooltip = v.on() ? hint : hint + " - " + Tr.t("signal_off_hint");
+        }
+    }
+
+    /**
+     * What a rung's or an award's points mean when one signal is counted and on: "= 120 minutes" (D81). Null otherwise
+     * (several signals, every signal, or the signal off).
+     */
+    @Nullable
+    private static String pointsMean(Settings s, Set<Signal> counts, long points) {
+        if (counts.size() != 1 || points <= 0) {
+            return null;
+        }
+        Signal sig = counts.iterator().next();
+        SignalSetting v = s.signal(sig);
+        if (!v.on() || v.points() <= 0 || v.per() <= 0) {
+            return null;
+        }
+        long units = (points * v.per() + v.points() - 1) / v.points();
+        return Tr.t("equals_units", units, I18n.get("signal.bsp_rankup." + sig.key() + (units == 1 ? ".unit_one" : ".unit")));
     }
 
     private static String keysOf(Set<Signal> counts) {
@@ -937,9 +1001,13 @@ public class AdminScreen extends HoloScreen {
         text(g, Tr.t("season"), px + 278, py + 22, MUTED, 0.6f);
         chip(g, px + 278, py + 29, 26, 13, Tr.t("keep"), !award.seasonal(), TQ, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.AWARD_SEASONAL, group, "false")));
         chip(g, px + 305, py + 29, 27, 13, Tr.t("reset"), award.seasonal(), VIO, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.AWARD_SEASONAL, group, "true")));
-        text(g, Tr.t("counts"), px, py + 47, MUTED, 0.6f);
+        String needsMean = pointsMean(s, award.counts(), award.points());
+        if (needsMean != null) {
+            text(g, clip(needsMean, 76, 0.5f), px + 200, py + 33, TQ, 0.5f);
+        }
+        text(g, Tr.t("progress_from"), px, py + 47, TQ, 0.6f);
         String keys = keysOf(award.counts());
-        drawCountChips(g, px + (int) (font.width(Tr.t("counts")) * 0.6f) + 4, py + 44, px + PANE_W, award.counts(),
+        drawCountChips(g, px + (int) (font.width(Tr.t("progress_from")) * 0.6f) + 4, py + 44, px + PANE_W, s, award.counts(),
                 sig -> send(AdminActionPacket.of(AdminActionPacket.AWARD_COUNTS, group, without(award.counts(), sig))),
                 () -> openInput(Input.AWARD_COUNTS, keys, Tr.t("hint.counts")));
         text(g, Tr.t("rewards_when_reached"), px, py + 62, TQ, 0.6f);
@@ -1079,13 +1147,37 @@ public class AdminScreen extends HoloScreen {
 
     // ------------------------------------------------------------------ SIGNALS
 
+    /** A column of the SIGNALS matrix (D81): a ladder or an award, the signals it counts, and how to change them. */
+    private record MatrixColumn(String label, int colour, Set<Signal> counts, java.util.function.Consumer<String> setCounts) {
+    }
+
     private void drawSignals(GuiGraphics g, int x, int y, int mouseX, int mouseY, Settings s) {
         int lx = x + 8, ly = y + LIST_Y, lw = W - 16, lh = 230;
         inset(g, lx, ly, lw, lh);
         text(g, Tr.t("signal"), lx + 6, ly + 4, MUTED, 0.6f);
-        text(g, Tr.t("on"), lx + 150, ly + 4, MUTED, 0.6f);
-        text(g, Tr.t("worth"), lx + 200, ly + 4, MUTED, 0.6f);
-        text(g, Tr.t("source"), lx + 380, ly + 4, MUTED, 0.6f);
+        text(g, Tr.t("on"), lx + 126, ly + 4, MUTED, 0.6f);
+        text(g, Tr.t("worth"), lx + 154, ly + 4, MUTED, 0.6f);
+        // a column per ladder, then per award; a click on a cell switches that signal there
+        List<MatrixColumn> columns = new ArrayList<>();
+        for (Ladder l : s.ladders()) {
+            columns.add(new MatrixColumn(RankEngine.label(l).toUpperCase(Locale.ROOT), TQ, l.counts(), keys -> send(AdminActionPacket.of(AdminActionPacket.LADDERS_COUNTS, l.name(), keys))));
+        }
+        for (Award a : s.awards()) {
+            columns.add(new MatrixColumn(a.displayName().toUpperCase(Locale.ROOT), GOLD, a.counts(), keys -> send(AdminActionPacket.of(AdminActionPacket.AWARD_COUNTS, a.group(), keys))));
+        }
+        matrixScroll = Mth.clamp(matrixScroll, 0, Math.max(0, columns.size() - MATRIX_COLS));
+        int mx = lx + MATRIX_X;
+        List<MatrixColumn> shownColumns = columns.subList(matrixScroll, Math.min(columns.size(), matrixScroll + MATRIX_COLS));
+        for (int c = 0; c < shownColumns.size(); c++) {
+            MatrixColumn col = shownColumns.get(c);
+            String label = clip(col.label(), MATRIX_COL - 4, 0.5f);
+            text(g, label, mx + c * MATRIX_COL + (MATRIX_COL - (int) (font.width(label) * 0.5f)) / 2, ly + 5, col.colour(), 0.5f);
+        }
+        if (columns.size() > MATRIX_COLS) {
+            chip(g, lx + lw - 30, ly + 2, 12, 9, "<", false, MUTED, 0.5f, matrixScroll > 0 ? () -> matrixScroll-- : null);
+            chip(g, lx + lw - 16, ly + 2, 12, 9, ">", false, MUTED, 0.5f, matrixScroll + MATRIX_COLS < columns.size() ? () -> matrixScroll++ : null);
+            text(g, Tr.t("matrix_more", matrixScroll + shownColumns.size(), columns.size()), lx + lw - 30 - 4 - (int) (font.width(Tr.t("matrix_more", matrixScroll + shownColumns.size(), columns.size())) * 0.5f), ly + 4, MUTED, 0.5f);
+        }
         Signal[] all = Signal.values();
         int rowH = 17, visible = (lh - 14) / rowH;
         signalScroll = Mth.clamp(signalScroll, 0, Math.max(0, all.length - visible));
@@ -1096,19 +1188,41 @@ public class AdminScreen extends HoloScreen {
             if (i % 2 == 0) {
                 g.fill(lx + 1, ry, lx + lw - 1, ry + rowH, 0x0AFFFFFF);
             }
-            text(g, clip(I18n.get("signal.bsp_rankup." + sig.key()), 136, 0.85f), lx + 6, ry + 5, v.on() ? TEXT : MUTED, 0.85f);
-            chip(g, lx + 148, ry + 2, 22, 12, v.on() ? Tr.t("on") : Tr.t("off"), v.on(), TQ, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.SIGNAL_ON, sig.key(), String.valueOf(!v.on()))));
+            text(g, clip(I18n.get("signal.bsp_rankup." + sig.key()), 116, 0.85f), lx + 6, ry + 5, v.on() ? TEXT : MUTED, 0.85f);
+            hoverHint(lx + 6, ry + 3, 116, 11, sig, v);
+            chip(g, lx + 124, ry + 2, 22, 12, v.on() ? Tr.t("on") : Tr.t("off"), v.on(), TQ, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.SIGNAL_ON, sig.key(), String.valueOf(!v.on()))));
             String worth = Tr.t("n_points_per_m_units", v.points(), v.per(), I18n.get("signal.bsp_rankup." + sig.key() + ".unit"));
-            inset(g, lx + 198, ry + 2, 176, 12);
-            text(g, clip(worth, 168, 0.75f), lx + 202, ry + 4, v.on() ? GOLD : MUTED, 0.75f);
-            hits.add(new Hit(lx + 198, ry + 2, 176, 12, () -> {
+            inset(g, lx + 152, ry + 2, 158, 12);
+            text(g, clip(worth, 150, 0.75f), lx + 156, ry + 4, v.on() ? GOLD : MUTED, 0.75f);
+            hits.add(new Hit(lx + 152, ry + 2, 158, 12, () -> {
                 inputTarget = sig.key();
                 openInput(Input.SIGNAL, v.points() + " " + v.per(), Tr.t("points_per_enter_sets_them"));
                 inputTarget = sig.key();
             }));
-            text(g, Tr.t("source." + sig.source().name().toLowerCase(Locale.ROOT)), lx + 380, ry + 5, MUTED, 0.6f);
+            for (int c = 0; c < shownColumns.size(); c++) {
+                MatrixColumn col = shownColumns.get(c);
+                boolean every = col.counts().isEmpty();
+                boolean counted = every || col.counts().contains(sig);
+                int cx = mx + c * MATRIX_COL + (MATRIX_COL - 20) / 2;
+                // "every signal" ticks in gold, dimmed (D83); an off signal's tick dimmed (D84)
+                int colour = every ? GOLD : v.on() ? col.colour() : MUTED;
+                chip(g, cx, ry + 2, 20, 12, counted ? "\u2713" : "", counted && !every && v.on(), colour, 0.75f, () -> col.setCounts().accept(toggled(col.counts(), sig)));
+            }
         }
         scrollbar(g, lx + lw, ly + 14, lh - 14, all.length, visible, signalScroll);
+        text(g, clip(Tr.t("matrix_hint"), lw, 0.5f), lx, ly + lh + 4, MUTED, 0.5f);
+    }
+
+    /**
+     * The counted signals with one switched, as the counts action takes them: on a ladder counting every signal a click
+     * leaves every other one; taking off the last one leaves "all".
+     */
+    private static String toggled(Set<Signal> counts, Signal sig) {
+        Set<Signal> next = new java.util.LinkedHashSet<>(counts.isEmpty() ? java.util.EnumSet.allOf(Signal.class) : counts);
+        if (!next.remove(sig)) {
+            next.add(sig);
+        }
+        return keysOf(next.size() == Signal.values().length ? Set.of() : next);
     }
 
     // ------------------------------------------------------------------ PLAYERS

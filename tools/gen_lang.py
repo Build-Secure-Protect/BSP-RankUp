@@ -68,6 +68,10 @@ UNITS = {"playtime": "minutes", "player_kills": "kills", "mob_kills": "kills", "
          "totems_lost": "totems", "totems_placed": "totems", "seasons_survived": "seasons", "score": "points", "coins_earned": "pieces", "claims_bought": "claims"}
 for key, text in UNITS.items():
     KEYS["signal.bsp_rankup." + key + ".unit"] = text
+UNIT_ONE = {"playtime": "minute", "player_kills": "kill", "mob_kills": "kill", "deaths": "death", "totems_stolen": "totem", "totems_protected": "totem",
+            "totems_lost": "totem", "totems_placed": "totem", "seasons_survived": "season", "score": "point", "coins_earned": "piece", "claims_bought": "claim"}
+for key, text in UNIT_ONE.items():
+    KEYS["signal.bsp_rankup." + key + ".unit_one"] = text
 
 # Screen text (client/Tr.java looks these up as gui.bsp_rankup.<key>; %s marks a value filled in; keys ending in
 # .one / .many are the singular and plural of a count). tools/check_lang.py checks the code against this table.
@@ -139,7 +143,6 @@ GUI = {
     "on": "on",
     "off": "off",
     "worth": "WORTH",
-    "source": "FROM",
     "n_points_per_m_units": "%s points per %s %s",
     "points_per_enter_sets_them": "points per - e.g. 25 1 - Enter sets them",
     "source.rankup": "RankUp",
@@ -229,7 +232,6 @@ GUI = {
     "hint.new_ladder": "name track - Enter adds the ladder (it counts every signal)",
     "track": "TRACK",
     "hint.ladder_track": "the ladder's track in LuckPerms - Enter",
-    "counts": "COUNTS",
     "hint.counts": "signal keys, comma separated, or all - Enter",
     "every_signal": "every signal",
     "add_signal": "+ signal",
@@ -308,6 +310,16 @@ GUI = {
     "pick_a_file": "Pick a file, then USE IMAGE.",
     "image_slot": "image",
     "prefixes_in_chat": "PREFIXES IN CHAT",
+    # which signals a ladder or award counts (D81 to D84)
+    "progress_from": "PROGRESS FROM",
+    "worth_per_one": "%s pt / %s",
+    "worth_per_many": "%s pt / %s %s",
+    "equals_units": "= %s %s",
+    "signal_off": "off",
+    "signal_off_hint": "off: worth nothing now",
+    "signal_key_hint": "%s (key %s, from %s)",
+    "matrix_hint": "A tick: the signal counts there. Click to switch. A ladder with no tick counts every signal.",
+    "matrix_more": "%s of %s",
 }
 KEYS.update({"gui.bsp_rankup." + k: v for k, v in GUI.items()})
 

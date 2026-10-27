@@ -205,6 +205,78 @@ public class LadderGameTests {
                 .thenSucceed();
     }
 
+    @GameTest(template = EMPTY, timeoutTicks = 400, batch = "ladder-away-quiet")
+    public void a_player_who_is_away_ranks_up_without_an_announcement(GameTestHelper h) {
+        ServerLevel level = h.getLevel();
+        MinecraftServer server = level.getServer();
+        ServerPlayer player = TestPlayers.mockServerPlayer(h); // not in a world yet: away, as at a server's start
+        String name = player.getGameProfile().getName();
+        String awardGroup = "ru_l_quiet_award";
+        install(server);
+        SettingsLedger.get(server).set(ladder().toBuilder()
+                .award(com.mrgregles.bsp_rankup.settings.Award.of(awardGroup, "Quiet Award", java.util.Set.of(Signal.MOB_KILLS), 1))
+                .signal(Signal.MOB_KILLS, new SignalSetting(true, 1, 1))
+                .announce(Settings.Announce.NETWORK).build());
+        if (LuckPermsBridge.isPresent()) {
+            net.luckperms.api.LuckPermsProvider.get().getGroupManager().createAndLoadGroup(awardGroup).join();
+        }
+        com.mrgregles.bsp_rankup.storage.MemoryBackend db = new com.mrgregles.bsp_rankup.storage.MemoryBackend();
+        com.mrgregles.bsp_rankup.storage.Storage alpha = com.mrgregles.bsp_rankup.storage.Storage.startWith(server, db, "alpha");
+        alpha.drain();
+        List<Component> heard = new ArrayList<>();
+        java.util.function.Consumer<Component> listener = c -> {
+            if (c.toString().contains(name)) { // another test's announcements may still be arriving
+                heard.add(c);
+            }
+        };
+        RankEngine.onAnnounce(listener);
+        java.util.function.Supplier<List<com.mrgregles.bsp_rankup.storage.StorageBackend.Notice>> sent = () -> {
+            alpha.drain();
+            try {
+                return db.fetchNoticesAfter(0, 50).stream().filter(n -> n.payload().startsWith(name + "\t")).toList();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        };
+        ProgressLedger ledger = ProgressLedger.get(server);
+        ledger.add(player.getUUID(), Signal.MOB_KILLS, 1); // the award, while away
+        ledger.addBonus(player.getUUID(), 60);              // the second rung, while away
+        h.startSequence()
+                .thenWaitUntil(() -> {
+                    Progress p = ledger.progress(player.getUUID());
+                    h.assertTrue("ru_l_b".equals(p.rank()) && p.hasAward(awardGroup), "ranked and awarded while away: " + p);
+                })
+                .thenExecute(() -> {
+                    h.assertTrue(heard.isEmpty(), "nothing announced here for a player who is away: " + heard);
+                    h.assertTrue(sent.get().isEmpty(), "nor sent to the other servers: " + sent.get());
+                })
+                .thenExecute(() -> {
+                    level.addNewPlayer(player);
+                    RankEngine.onLogin(player);
+                    ledger.addBonus(player.getUUID(), 150); // the top rung, online (seasonal: past any season ended by an earlier test)
+                })
+                .thenWaitUntil(() -> h.assertTrue("ru_l_c".equals(ledger.progress(player.getUUID()).rank()), "the top rung: " + ledger.progress(player.getUUID())))
+                .thenExecute(() -> {
+                    h.assertTrue(heard.size() == 1 && heard.get(0).toString().contains("C"), "the rank-up made online is announced here: " + heard);
+                    h.assertTrue(sent.get().size() == 1 && sent.get().get(0).kind().equals(com.mrgregles.bsp_rankup.storage.Storage.KIND_RANKUP),
+                            "and to the other servers: " + sent.get());
+                })
+                .thenExecute(() -> {
+                    RankEngine.removeAnnounceListener(listener);
+                    alpha.close();
+                    level.removePlayerImmediately(player, Entity.RemovalReason.DISCARDED);
+                    uninstall(server, player.getUUID());
+                    if (LuckPermsBridge.isPresent()) {
+                        var lp = net.luckperms.api.LuckPermsProvider.get();
+                        var g = lp.getGroupManager().getGroup(awardGroup);
+                        if (g != null) {
+                            lp.getGroupManager().deleteGroup(g).join();
+                        }
+                    }
+                })
+                .thenSucceed();
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /** Three rungs: a at 0 with nothing, b at 50 with every kind of reward, c at 100 (seasonal) with bread. */

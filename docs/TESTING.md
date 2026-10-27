@@ -275,3 +275,23 @@ Headless: 68 GameTests on three runs against LuckPerms Forge 5.5.88-bsp.2 (the s
 - [ ] Velocity Additions' tab list (live config: on, every 3 s) replaces RankUp's tab names with its own text prefix; until request RU-R3 is done, images show in chat but not in the tab list. Check what the tab list shows.
 - [ ] The log at start: "MySQL driver: ... (from BSP-Core)" with BSP-Core 1.4.5 or newer.
 
+## Seeing which signals count (2026-10-27, D81 to D85)
+
+Headless: the build and 68 GameTests (nothing server-side changed: the matrix sends the existing counts commands); the new labels measured (9 of 9 fit). Not seen in a client.
+
+- [ ] LADDER: under TRACK, a PROGRESS FROM line: your ladder shows "minutes played 1 pt / minute"; hover it: "minutes played (key playtime, from RankUp)".
+- [ ] A rung's POINTS shows "= 120 minutes" under it on a ladder counting one signal; none when it counts several.
+- [ ] The x on a chip takes the signal off (the ladder then counts every signal when it was the last one: "every signal" in gold).
+- [ ] SIGNALS: columns RANKUP (and every other ladder and award). Click an empty cell: a tick, and LADDER's PROGRESS FROM gains it. Click a tick: gone. A ladder with no tick shows dim gold ticks everywhere (every signal).
+- [ ] Switch a counted signal off on SIGNALS: its tick and chip dim, the chip says "off".
+- [ ] With four or more ladders and awards, < and > page the columns.
+- [ ] GROUPS: an award shows PROGRESS FROM chips and "= 5000 pieces" beside NEEDS.
+- [ ] The rung list still shows all 12 rungs; a rung with six rewards scrolls its list.
+
+## Rank-ups while away are quiet (2026-10-27, D86)
+
+Headless: 69 GameTests, new `a_player_who_is_away_ranks_up_without_an_announcement` (an away player crosses a rung and reaches an award with announcements on network: nothing is announced here or sent to the other servers; after login the next rung is announced both ways).
+
+- [ ] Restart a server with a player offline who is owed a rung: the log at start has no "reached the rank" line.
+- [ ] `/rankup add <offline player> <points>` past a rung: no announcement in chat; the player logs in and gets the waiting rewards.
+- [ ] The same for an online player: announced as before (and on the other servers with announce network).
