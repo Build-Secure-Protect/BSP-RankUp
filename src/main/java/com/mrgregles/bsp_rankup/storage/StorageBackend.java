@@ -30,7 +30,7 @@ public interface StorageBackend {
             StringBuilder b = new StringBuilder();
             p.otherBases().forEach((key, base) -> b.append(key).append('\t').append(base).append('\n'));
             StringBuilder a = new StringBuilder();
-            p.awards().forEach((group, at) -> a.append(group).append('\t').append(at).append('\n'));
+            p.awardMarks().forEach((group, at) -> a.append(group).append('\t').append(at).append('\n')); // taken: a negative time (D115)
             return new LadderValue(r.toString(), b.toString(), a.toString());
         }
 

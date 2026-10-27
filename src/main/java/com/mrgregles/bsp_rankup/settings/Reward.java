@@ -10,7 +10,8 @@ import net.minecraft.nbt.CompoundTag;
  * delivers it when it fits, so it needs no online check).
  */
 public record Reward(Kind kind, String value, long amount) {
-    public enum Kind { COINS, PIECES, ITEM, TITLE, COMMAND, KIT }
+    /** NOTE is not a reward an admin gives: it is a line kept for the player's next login (what they reached while away, D119). */
+    public enum Kind { COINS, PIECES, ITEM, TITLE, COMMAND, KIT, NOTE }
 
     public static Reward coins(long copperValue) {
         return new Reward(Kind.COINS, "", copperValue);
@@ -36,9 +37,19 @@ public record Reward(Kind kind, String value, long amount) {
         return new Reward(Kind.KIT, kitId, 0);
     }
 
-    /** True for rewards that need the player on this server to be handed over (coins, items, commands). */
+    /** A rung reached while away, told at the next login (D119): its name and, with several ladders, the ladder's. */
+    public static Reward reachedNote(String rankName, String ladderLabel) {
+        return new Reward(Kind.NOTE, "rank\t" + rankName + (ladderLabel.isEmpty() ? "" : "\t" + ladderLabel), 0);
+    }
+
+    /** An award earned while away, told at the next login (D119). */
+    public static Reward earnedNote(String awardName) {
+        return new Reward(Kind.NOTE, "award\t" + awardName, 0);
+    }
+
+    /** True for rewards that need the player on this server to be handed over (coins, items, commands, the login notes). */
     public boolean needsPlayerOnline() {
-        return kind == Kind.COINS || kind == Kind.ITEM || kind == Kind.COMMAND;
+        return kind == Kind.COINS || kind == Kind.ITEM || kind == Kind.COMMAND || kind == Kind.NOTE;
     }
 
     public CompoundTag save() {

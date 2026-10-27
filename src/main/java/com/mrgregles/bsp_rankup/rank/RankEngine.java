@@ -8,6 +8,7 @@ import com.mrgregles.bsp_rankup.progress.Progress;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
 import com.mrgregles.bsp_rankup.settings.Award;
+import com.mrgregles.bsp_rankup.settings.Reward;
 import com.mrgregles.bsp_rankup.settings.Ladder;
 import com.mrgregles.bsp_rankup.settings.Rank;
 import com.mrgregles.bsp_rankup.settings.Settings;
@@ -70,8 +71,9 @@ public final class RankEngine {
                     onLogin(online);
                 }
             } else if (online != null) {
-                // read again while they play here (another server changed their row): rewards kept for them there are given now (AU-2g)
-                Rewards.givePending(online, SettingsLedger.settings(server));
+                // read again while they play here (another server changed their row): rewards kept for them there are given now (AU-2g);
+                // the lines about what they reached are dropped, they were told live (D122)
+                Rewards.givePending(online, SettingsLedger.settings(server), false);
             }
         });
     }
@@ -353,6 +355,57 @@ public final class RankEngine {
         return done;
     }
 
+    /**
+     * Gives an award by an admin's hand (D110): LuckPerms first when present, then the ledger (reached, any taken mark
+     * gone); no rewards then or later, no announcement; the player is told. The future says whether it happened.
+     */
+    public static CompletableFuture<Boolean> giveAward(MinecraftServer server, UUID player, Award award) {
+        CompletableFuture<LuckPermsBridge.Added> apply = LuckPermsBridge.isPresent()
+                ? LuckPermsBridge.addGroup(player, award.group())
+                : CompletableFuture.completedFuture(LuckPermsBridge.Added.ADDED);
+        CompletableFuture<Boolean> done = new CompletableFuture<>();
+        apply.whenComplete((added, err) -> server.execute(() -> {
+            boolean ok = err == null && added != null && added != LuckPermsBridge.Added.FAILED;
+            if (ok) {
+                ProgressLedger ledger = ProgressLedger.get(server);
+                ledger.setAwardTaken(player, award.group(), false);
+                ledger.setAward(player, award.group(), true, System.currentTimeMillis());
+                ledger.addRewarded(player, award.group()); // an admin's gift: its rewards never come later (as D51)
+                ServerPlayer online = Players.online(server, player);
+                if (online != null) {
+                    online.sendSystemMessage(Component.translatable("message.bsp_rankup.award_given", award.displayName()));
+                }
+            }
+            done.complete(ok);
+        }));
+        return done;
+    }
+
+    /**
+     * Takes an award by an admin's hand (D111, D112): LuckPerms first when present, then the ledger marks it taken, so
+     * the check never gives it again until it is given back; rewards given stay, and a title it gave gives way to the
+     * next award's kept (as D75). The player is told.
+     */
+    public static CompletableFuture<Boolean> takeAward(MinecraftServer server, UUID player, Award award) {
+        CompletableFuture<Boolean> apply = LuckPermsBridge.isPresent()
+                ? LuckPermsBridge.removeGroup(player, award.group())
+                : CompletableFuture.completedFuture(true);
+        CompletableFuture<Boolean> done = new CompletableFuture<>();
+        apply.whenComplete((removed, err) -> server.execute(() -> {
+            boolean ok = err == null && removed != null && removed;
+            if (ok) {
+                ProgressLedger.get(server).setAwardTaken(player, award.group(), true);
+                Seasons.dropAwardTitle(server, SettingsLedger.settings(server), player, award);
+                ServerPlayer online = Players.online(server, player);
+                if (online != null) {
+                    online.sendSystemMessage(Component.translatable("message.bsp_rankup.award_taken", award.displayName()));
+                }
+            }
+            done.complete(ok);
+        }));
+        return done;
+    }
+
     /** Records the rung RankUp put the player on, on one ladder. */
     static void setRung(MinecraftServer server, Settings settings, Ladder ladder, UUID player, @Nullable String group) {
         ProgressLedger ledger = ProgressLedger.get(server);
@@ -448,6 +501,9 @@ public final class RankEngine {
                 online.sendSystemMessage(several
                         ? Component.translatable("message.bsp_rankup.reached_on", rank.displayName(), label(ladder))
                         : Component.translatable("message.bsp_rankup.reached", rank.displayName()));
+            } else if (!quiet) {
+                // away: told at their next login, or live on the server they play on (D119, D122)
+                ledger.addPending(player, List.of(Reward.reachedNote(rank.displayName(), several ? label(ladder) : "")));
             }
             Progress now = ledger.progress(player);
             if (settings.rewardsAgainEachSeason() || !now.rewarded().contains(rank.group())) {
@@ -496,8 +552,8 @@ public final class RankEngine {
      * no rewards.
      */
     private static void checkAward(MinecraftServer server, Settings settings, Award award, UUID player, Progress progress) {
-        if (progress.hasAward(award.group()) || settings.ladderOf(award.group()) != null) {
-            return;
+        if (progress.hasAward(award.group()) || progress.isAwardTaken(award.group()) || settings.ladderOf(award.group()) != null) {
+            return; // held, taken by an admin (D111), or a ladder's rung
         }
         long have = award.seasonal() ? seasonPoints(settings, award, progress) : points(settings, award, progress);
         if (have < award.points()) {
@@ -519,8 +575,8 @@ public final class RankEngine {
             }
             Settings now = SettingsLedger.settings(server);
             Award current = now.award(award.group());
-            if (current == null || ledger.progress(player).hasAward(award.group())) {
-                return; // the award was removed, or given, while LuckPerms was answering
+            if (current == null || ledger.progress(player).hasAward(award.group()) || ledger.progress(player).isAwardTaken(award.group())) {
+                return; // the award was removed, given or taken while LuckPerms was answering
             }
             ledger.setAward(player, current.group(), true, System.currentTimeMillis());
             if (added == LuckPermsBridge.Added.ALREADY) {
@@ -534,6 +590,8 @@ public final class RankEngine {
             ServerPlayer online = Players.online(server, player);
             if (online != null) {
                 online.sendSystemMessage(Component.translatable("message.bsp_rankup.award", current.displayName()));
+            } else {
+                ledger.addPending(player, List.of(Reward.earnedNote(current.displayName()))); // told at their next login (D119)
             }
             if (announces(server, now, player)) {
                 announce(server, Component.translatable("message.bsp_rankup.award_announce", Players.name(server, player), current.displayName()));

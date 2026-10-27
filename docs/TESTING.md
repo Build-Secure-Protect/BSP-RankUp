@@ -335,3 +335,15 @@ Headless: 78 GameTests, three runs clean. Not seen in a client; the network part
 - [ ] SIGNALS with four or more ladders and awards: < > and "1 of n" sit under the matrix on the right, clear of the column names; the hint beside them is readable.
 - [ ] PREFIXES: open HOVER NOTE on one prefix, click another in the list: the box closes. Set a note on a suffix, delete the group in LuckPerms, then `/rankup prefix note suffix <group>`: the note goes.
 - [ ] PLAYERS: select an online player, then search for someone else: the pane still says "online". Open SET on a ladder with 12 rungs: three rows of rungs, "+n more: /rankup set <player> <group>" readable under them, no empty row before COUNTS.
+
+## Awards by hand, ladder chips, the login line (2026-10-27, D109 to D122)
+
+Headless: 81 GameTests, three runs clean (`AwardGameTests` 2, `ChipRowsGameTests` 1, and the away tests extended). Not seen in a client.
+
+- [ ] PLAYERS: select a player, click an award they haven't reached: it is ringed and a line opens: "GIVE IT", "no rewards, no announcement". Give it: the chip says REACHED, the player is told "An admin gave you ...", no rewards arrive, `/lp user <name> info` shows the group.
+- [ ] Click the reached award, TAKE IT: the chip turns red and says TAKEN, the player is told, the LuckPerms group is gone, rewards given earlier stay. Add enough points for it (`/rankup add <name> 100000`): it stays TAKEN. GIVE IT again: reached, and still no rewards.
+- [ ] The same with `/rankup award give <player> <award>` and `/rankup award take <player> <award>`; taking one not reached, or giving one held, is refused with a reason.
+- [ ] Log out. From the console, `/rankup add <you> <enough for the next rung>`. Log in: after any "Rewards you earned while away:" lines, "While you were away you reached ...". Log out and in again: not said twice.
+- [ ] Two backends: the same while you play on B: you are told live on B ("You are now ...") and nothing more at your next login.
+- [ ] With 12 or more ladders (a test settings file): the rank screen's chips go onto a second row with AWARDS last and the ladder card starts lower; the admin LADDER tab the same with + LADDER last, its rung list and rewards list a little shorter. With 30 or more, a "+n" chip; on the admin tab a click lists every ladder in chat.
+

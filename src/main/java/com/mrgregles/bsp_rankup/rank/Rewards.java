@@ -68,14 +68,45 @@ public final class Rewards {
         return given;
     }
 
-    /** Gives the rewards kept for the player while they were away. */
+    /** The most login lines about what was reached while away; past it the last says how many more (D119). */
+    static final int MAX_NOTES = 5;
+
+    /** Gives the rewards kept for the player while they were away, then tells them what they reached meanwhile (D119). */
     public static List<Reward> givePending(ServerPlayer player, Settings settings) {
+        return givePending(player, settings, true);
+    }
+
+    /**
+     * Gives the rewards kept for the player; {@code tellNotes} false drops the lines about what they reached while
+     * away instead of saying them (their row read again while they play here: they were told live, D122).
+     */
+    public static List<Reward> givePending(ServerPlayer player, Settings settings, boolean tellNotes) {
         List<Reward> pending = ProgressLedger.get(player.server).takePending(player.getUUID());
-        if (pending.isEmpty()) {
-            return pending;
+        List<Reward> rewards = new ArrayList<>(), notes = new ArrayList<>();
+        for (Reward r : pending) {
+            (r.kind() == Reward.Kind.NOTE ? notes : rewards).add(r);
         }
-        player.sendSystemMessage(Component.translatable("message.bsp_rankup.reward.kept"));
-        return give(player.server, player.getUUID(), "earlier", pending, settings);
+        List<Reward> given = List.of();
+        if (!rewards.isEmpty()) {
+            player.sendSystemMessage(Component.translatable("message.bsp_rankup.reward.kept"));
+            given = give(player.server, player.getUUID(), "earlier", rewards, settings);
+        }
+        if (tellNotes) {
+            loginLines(notes).forEach(player::sendSystemMessage);
+        }
+        return given;
+    }
+
+    /** The login lines for what was reached while away (D119): one each, at most five, then how many more. */
+    public static List<Component> loginLines(List<Reward> notes) {
+        List<Component> out = new ArrayList<>();
+        for (int i = 0; i < notes.size() && i < MAX_NOTES; i++) {
+            out.add(describe(notes.get(i)));
+        }
+        if (notes.size() > MAX_NOTES) {
+            out.add(Component.translatable("message.bsp_rankup.away_more", notes.size() - MAX_NOTES));
+        }
+        return out;
     }
 
     private static boolean apply(MinecraftServer server, UUID player, @Nullable ServerPlayer online, Reward r, String forWhat, int titlePriority) {
@@ -117,6 +148,9 @@ public final class Rewards {
                     CommandSourceStack source = server.createCommandSourceStack().withSuppressedOutput();
                     String command = r.value().replace("%player%", online.getGameProfile().getName());
                     server.getCommands().performPrefixedCommand(source, command);
+                }
+                case NOTE -> {
+                    return false; // said at login, never handed over (givePending keeps it apart)
                 }
                 case KIT -> {
                     if (!BspCore.giveKit(server, player, r.value())) {
@@ -170,6 +204,17 @@ public final class Rewards {
             case TITLE -> Component.translatable("message.bsp_rankup.reward.title", com.mrgregles.bsp_rankup.prefix.Legacy.parse(r.value().strip())); // in its colours, not its & codes
             case COMMAND -> Component.translatable("message.bsp_rankup.reward.command");
             case KIT -> Component.translatable("message.bsp_rankup.reward.kit", kitName(r.value()));
+            case NOTE -> note(r.value());
         };
+    }
+
+    /** A login line from a note's text: {@code rank <name> [ladder]} or {@code award <name>}. */
+    private static Component note(String value) {
+        String[] parts = value.split("\t", 3);
+        if (parts.length >= 2 && parts[0].equals("award")) {
+            return Component.translatable("message.bsp_rankup.away_earned", parts[1]);
+        }
+        String name = parts.length >= 2 ? parts[1] : value;
+        return parts.length == 3 ? Component.translatable("message.bsp_rankup.away_reached_on", name, parts[2]) : Component.translatable("message.bsp_rankup.away_reached", name);
     }
 }

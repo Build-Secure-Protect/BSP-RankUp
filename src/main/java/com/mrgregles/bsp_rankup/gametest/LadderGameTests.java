@@ -188,7 +188,8 @@ public class LadderGameTests {
                     Progress p = ledger.progress(player.getUUID());
                     h.assertTrue("ru_l_b".equals(p.rank()), "ranked while away: " + p);
                     h.assertTrue(BspCore.balance(server, player.getUUID()) == balanceBefore + 10, "pieces go into the bank at once");
-                    h.assertTrue(p.pending().size() == 3, "coins, item and command wait: " + p.pending());
+                    h.assertTrue(p.pending().size() == 4, "coins, item and command wait, and the line for the login (D119): " + p.pending());
+                    h.assertTrue(p.pending().contains(com.mrgregles.bsp_rankup.settings.Reward.reachedNote("B", "")), "the line names the rung: " + p.pending());
                     h.assertTrue(player.getInventory().countItem(Items.STICK) == 0, "nothing in the inventory yet");
                 })
                 .thenExecute(() -> {

@@ -28,7 +28,9 @@ public record AdminActionPacket(String action, String a, String b, String c) {
             AWARD_COUNTS = "award-counts", AWARD_SEASONAL = "award-seasonal",
             // prefix images (D65): a = the rank key, b = the file name
             PREFIX_SET = "prefix-set", PREFIX_CLEAR = "prefix-clear", PREFIX_SCAN = "prefix-scan",
-            PREFIX_NOTE = "prefix-note";
+            PREFIX_NOTE = "prefix-note",
+            // an award given or taken by hand on PLAYERS (D109): a = the player's uuid, b = the award's group
+            AWARD_GIVE = "award-give", AWARD_TAKE = "award-take";
 
     public static AdminActionPacket of(String action) {
         return new AdminActionPacket(action, "", "", "");

@@ -52,6 +52,10 @@ import static com.mrgregles.bsp_rankup.client.AdminScreen.inset;
 public class RankScreen extends HoloScreen {
     static final int W = 520, H = 300;
     private static final int LADDER_X = 8, LADDER_Y = 36, LADDER_W = 172, LADDER_H = 248; // under the chips; ends with the right pane, above the hint line
+    /** The ladder chips' rows (D116, D118): at most so many, so far apart. */
+    private static final int CHIP_ROWS = 3, CHIP_ROW = 13;
+    /** Where the ladder card (and the awards list) starts and how tall it is this frame: lower by each extra row of chips. */
+    private int ladderY = LADDER_Y, ladderH = LADDER_H;
     private static final int CHIPS_Y = 22, CARD_STEP = 46;
     /** The chip that shows the awards instead of a ladder. */
     static final String AWARDS = "\u0000awards";
@@ -160,36 +164,49 @@ public class RankScreen extends HoloScreen {
         return new RankViewPacket.LadderView(ladder.name(), "", 0, 0, 0, List.of(), "", "");
     }
 
-    /** A chip per ladder, then AWARDS when there are awards. */
+    /**
+     * A chip per ladder, then AWARDS when there are awards (D52). The chips wrap onto up to three rows, AWARDS last;
+     * past that a "+n" says how many ladders are not shown (D116, D118). The card and the pane move down below them.
+     */
     private void drawChips(GuiGraphics g, int x, int y, Settings s, String chosen) {
         chipBoxes.clear();
         chipTargets.clear();
-        int cx = x + LADDER_X;
-        List<String> targets = new ArrayList<>();
-        List<String> labels = new ArrayList<>();
-        for (Ladder l : s.ladders()) {
-            targets.add(l.name());
-            labels.add(RankEngine.label(l).toUpperCase(Locale.ROOT));
+        List<Ladder> all = s.ladders();
+        String[] labels = new String[all.size()];
+        int[] widths = new int[all.size()];
+        for (int i = 0; i < all.size(); i++) {
+            labels[i] = clip(RankEngine.label(all.get(i)).toUpperCase(Locale.ROOT), 90, 0.75f);
+            widths[i] = chipWidth(labels[i]);
         }
-        if (!s.awards().isEmpty()) {
-            targets.add(AWARDS);
-            labels.add(Tr.t("awards_tab"));
+        String awards = Tr.t("awards_tab");
+        int awardsW = s.awards().isEmpty() ? 0 : chipWidth(awards);
+        ChipRows.Layout lay = ChipRows.lay(widths, awardsW, x + LADDER_X, x + W - 8, CHIP_ROWS, 22, 3);
+        for (ChipRows.Placed p : lay.chips()) {
+            String target = all.get(p.index()).name();
+            drawChip(g, p.x(), y + CHIPS_Y + p.row() * CHIP_ROW, widths[p.index()], labels[p.index()], target, target.equals(chosen), TQ);
         }
-        for (int i = 0; i < targets.size(); i++) {
-            String label = clip(labels.get(i), 90, 0.75f);
-            int w = Math.max(40, (int) (font.width(label) * 0.75f) + 10);
-            if (cx + w > x + W - 8) {
-                break;
-            }
-            boolean on = targets.get(i).equals(chosen);
-            int colour = targets.get(i).equals(AWARDS) ? GOLD : TQ;
-            g.fill(cx, y + CHIPS_Y, cx + w, y + CHIPS_Y + 11, on ? (colour & 0xFFFFFF) | 0x22000000 : INSET);
-            frame(g, cx, y + CHIPS_Y, w, 11, on ? colour : LINE);
-            text(g, label, cx + (w - (int) (font.width(label) * 0.75f)) / 2, y + CHIPS_Y + 2, on ? colour : MUTED, 0.75f);
-            chipBoxes.add(new int[]{cx, y + CHIPS_Y, w, 11});
-            chipTargets.add(targets.get(i));
-            cx += w + 3;
+        if (lay.hidden() > 0) {
+            String more = "+" + lay.hidden();
+            text(g, more, lay.moreX() + (22 - (int) (font.width(more) * 0.75f)) / 2, y + CHIPS_Y + lay.moreRow() * CHIP_ROW + 2, MUTED, 0.75f);
         }
+        if (awardsW > 0) {
+            drawChip(g, lay.tailX(), y + CHIPS_Y + lay.tailRow() * CHIP_ROW, awardsW, awards, AWARDS, AWARDS.equals(chosen), GOLD);
+        }
+        int extra = (lay.rows() - 1) * CHIP_ROW;
+        ladderY = LADDER_Y + extra;
+        ladderH = LADDER_H - extra;
+    }
+
+    private int chipWidth(String label) {
+        return Math.max(40, (int) (font.width(label) * 0.75f) + 10);
+    }
+
+    private void drawChip(GuiGraphics g, int cx, int cy, int w, String label, String target, boolean on, int colour) {
+        g.fill(cx, cy, cx + w, cy + 11, on ? (colour & 0xFFFFFF) | 0x22000000 : INSET);
+        frame(g, cx, cy, w, 11, on ? colour : LINE);
+        text(g, label, cx + (w - (int) (font.width(label) * 0.75f)) / 2, cy + 2, on ? colour : MUTED, 0.75f);
+        chipBoxes.add(new int[]{cx, cy, w, 11});
+        chipTargets.add(target);
     }
 
     @Override
@@ -217,8 +234,8 @@ public class RankScreen extends HoloScreen {
     // ------------------------------------------------------------------ the ladder
 
     private void drawLadder(GuiGraphics g, int x, int y, int mouseX, int mouseY, Ladder ladder, RankViewPacket.LadderView lv, RankViewPacket v) {
-        int lx = x + LADDER_X, ly = y + LADDER_Y;
-        inset(g, lx, ly, LADDER_W, LADDER_H);
+        int lx = x + LADDER_X, ly = y + ladderY;
+        inset(g, lx, ly, LADDER_W, ladderH);
         List<Rank> ranks = ladder.ranks();
         if (ranks.isEmpty()) {
             text(g, Tr.t("no_ladder_yet"), lx + 8, ly + 10, MUTED, 0.75f);
@@ -227,8 +244,8 @@ public class RankScreen extends HoloScreen {
         }
         int current = ladder.indexOf(lv.rank());
         int n = ranks.size();
-        int step = Mth.clamp((LADDER_H - 12) / n, 30, 44);
-        int visible = Math.max(1, (LADDER_H - 12) / step);
+        int step = Mth.clamp((ladderH - 12) / n, 30, 44);
+        int visible = Math.max(1, (ladderH - 12) / step);
         if (!ladderPlaced) {
             // open with the player's rung and the next one in view: the top row shows the rung half a screen above theirs
             ladderPlaced = true;
@@ -288,8 +305,8 @@ public class RankScreen extends HoloScreen {
             }
         }
         if (n > visible) {
-            int barH = Math.max(6, (LADDER_H - 2) * visible / n);
-            int barY = ly + 1 + (LADDER_H - 2 - barH) * ladderScroll / Math.max(1, n - visible);
+            int barH = Math.max(6, (ladderH - 2) * visible / n);
+            int barY = ly + 1 + (ladderH - 2 - barH) * ladderScroll / Math.max(1, n - visible);
             g.fill(lx + LADDER_W - 3, barY, lx + LADDER_W - 1, barY + barH, LINE);
         }
         Rank h = hovered == null ? null : ladder.rank(hovered);
@@ -325,6 +342,7 @@ public class RankScreen extends HoloScreen {
                 case TITLE -> Tr.t("the_title", rw.value());
                 case COMMAND -> Tr.t("a_reward_from_the_server");
                 case KIT -> Tr.t("the_kit", v == null ? rw.value() : v.kits().getOrDefault(rw.value(), rw.value()));
+                case NOTE -> rw.value(); // never a rung's reward: only kept for a login
             });
         }
         return String.join(" - ", parts);
@@ -338,7 +356,7 @@ public class RankScreen extends HoloScreen {
     // ------------------------------------------------------------------ the standing
 
     private void drawStanding(GuiGraphics g, int x, int y, Settings s, Ladder ladder, RankViewPacket.LadderView lv, RankViewPacket v) {
-        int px = x + PANE_X, py = y + LADDER_Y + 2;
+        int px = x + PANE_X, py = y + ladderY + 2;
         List<Rank> ranks = ladder.ranks();
         int current = ladder.indexOf(lv.rank());
         Rank mine = current < 0 ? null : ranks.get(current);
@@ -440,10 +458,10 @@ public class RankScreen extends HoloScreen {
     // ------------------------------------------------------------------ the awards (D52)
 
     private void drawAwards(GuiGraphics g, int x, int y, int mouseX, int mouseY, Settings s, RankViewPacket v) {
-        int ax = x + LADDER_X, ay = y + LADDER_Y, aw = W - 16;
-        inset(g, ax, ay, aw, LADDER_H);
+        int ax = x + LADDER_X, ay = y + ladderY, aw = W - 16;
+        inset(g, ax, ay, aw, ladderH);
         List<Award> awards = s.awards();
-        int visible = Math.max(1, (LADDER_H - 6) / CARD_STEP);
+        int visible = Math.max(1, (ladderH - 6) / CARD_STEP);
         awardScroll = Mth.clamp(awardScroll, 0, Math.max(0, awards.size() - visible));
         int reached = 0;
         for (Award a : awards) {
@@ -474,8 +492,8 @@ public class RankScreen extends HoloScreen {
             text(g, clip(gives, bw, 0.6f), cx + 6, cy + 29, MUTED, 0.6f);
         }
         if (awards.size() > visible) {
-            int barH = Math.max(6, (LADDER_H - 2) * visible / awards.size());
-            int barY = ay + 1 + (LADDER_H - 2 - barH) * awardScroll / Math.max(1, awards.size() - visible);
+            int barH = Math.max(6, (ladderH - 2) * visible / awards.size());
+            int barY = ay + 1 + (ladderH - 2 - barH) * awardScroll / Math.max(1, awards.size() - visible);
             g.fill(ax + aw - 3, barY, ax + aw - 1, barY + barH, LINE);
         }
         text(g, clip(Tr.t("awards_summary", reached, awards.size()), W - 20, 0.6f), x + 10, y + H - 10, MUTED, 0.6f);
@@ -517,7 +535,7 @@ public class RankScreen extends HoloScreen {
             awardScroll -= (int) Math.signum(delta);
             return true;
         }
-        if (mx >= x + LADDER_X && mx < x + LADDER_X + LADDER_W && my >= y + LADDER_Y && my < y + LADDER_Y + LADDER_H) {
+        if (mx >= x + LADDER_X && mx < x + LADDER_X + LADDER_W && my >= y + ladderY && my < y + ladderY + ladderH) {
             ladderScroll -= (int) Math.signum(delta);
             return true;
         }

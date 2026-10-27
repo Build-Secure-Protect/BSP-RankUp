@@ -114,7 +114,7 @@ public class PlayersGameTests {
             // a name longer than the wire takes (settings read from a file are not length-checked) is cut, never thrown (AU-2b)
             String longGroup = "ru_plaw_" + "z".repeat(70);
             AdminViewPacket.PlayerDetail wide = new AdminViewPacket.PlayerDetail(id, "n".repeat(60), Map.of(), 0, longGroup, 0, 0, 0, 0, true,
-                    List.of(new AdminViewPacket.LadderLine("ru_pl_play", longGroup, 1, 1)), List.of(new AdminViewPacket.AwardLine(longGroup, 1, false)));
+                    List.of(new AdminViewPacket.LadderLine("ru_pl_play", longGroup, 1, 1)), List.of(new AdminViewPacket.AwardLine(longGroup, 1, false, false)));
             FriendlyByteBuf wideBuf = new FriendlyByteBuf(Unpooled.buffer());
             AdminViewPacket.encode(new AdminViewPacket(new CompoundTag(), Map.of(), List.of(), wide, List.of(), "", 0, "", true, false, Map.of(), List.of(), List.of(), List.of()), wideBuf);
             AdminViewPacket.PlayerDetail cut = AdminViewPacket.decode(wideBuf).selected();

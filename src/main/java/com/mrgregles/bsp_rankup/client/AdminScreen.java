@@ -50,6 +50,8 @@ public class AdminScreen extends HoloScreen {
     private static final int CHIPS_Y = 40, STRIP_Y = 56, RUNGS_Y = 88, RUNGS_H = 168, EDIT_Y = 90, REWARD_ROWS_H = 76;
     /** The strip is two lines (D81): the track and title priority, then PROGRESS FROM; a rung's rewards list is shorter to make room. */
     private static final int STRIP_H = 28, LADDER_REWARDS_H = 62;
+    /** The ladder chips' rows (D117, D118): at most so many, so far apart. */
+    private static final int CHIP_ROWS = 3, CHIP_ROW = 14;
     /** On SIGNALS (D81): the matrix's ladder and award columns, so many at a time. */
     private static final int MATRIX_X = 318, MATRIX_COL = 60, MATRIX_COLS = 3;
     /** The item browser opens over the editor, down to the input line. */
@@ -128,6 +130,9 @@ public class AdminScreen extends HoloScreen {
     /** The ladder whose rungs SET opened on PLAYERS (D100); null when closed. */
     @Nullable
     private String settingLadder;
+    /** The award picked on PLAYERS, its GIVE IT or TAKE IT line open under the chips (D109); null when none. */
+    @Nullable
+    private String pickedAward;
     /** The kit picker (K-1) open under the reward kinds. */
     private boolean pickingKit;
     private int ticks;
@@ -139,6 +144,8 @@ public class AdminScreen extends HoloScreen {
     private String fileChoice;
     private int prefixScroll, fileScroll;
     private boolean onlyWithoutImage;
+    /** How far the LADDER tab's extra chip rows push it down this frame (0 on the other tabs). */
+    private int chipShift;
     /** The SIGNALS matrix's first column shown, when there are more ladders and awards than fit. */
     private int matrixScroll;
     /** A line to show beside the mouse this frame (a counted signal's key, D82), or null. */
@@ -427,6 +434,7 @@ public class AdminScreen extends HoloScreen {
     protected void draw(GuiGraphics g, int mouseX, int mouseY, float partial) {
         hits.clear();
         tooltip = null;
+        chipShift = 0;
         lastMouseX = mouseX;
         lastMouseY = mouseY;
         renderBackground(g);
@@ -512,15 +520,17 @@ public class AdminScreen extends HoloScreen {
 
     private void drawLadder(GuiGraphics g, int x, int y, int mouseX, int mouseY, Settings s, AdminViewPacket v) {
         Ladder ladder = ladder(s);
-        drawLadderChips(g, x, y, s, ladder);
-        drawLadderStrip(g, x, y, s, ladder);
-        inset(g, x + LIST_X, y + RUNGS_Y, LIST_W, RUNGS_H);
+        // the chips may take more rows (D117): everything under them moves down, the lists get shorter
+        chipShift = drawLadderChips(g, x, y, s, ladder);
+        drawLadderStrip(g, x, y + chipShift, s, ladder);
+        int rungsH = RUNGS_H - chipShift;
+        inset(g, x + LIST_X, y + RUNGS_Y + chipShift, LIST_W, rungsH);
         List<Rank> ranks = ladder.ranks();
-        int visible = RUNGS_H / ROW;
+        int visible = rungsH / ROW;
         listScroll = Mth.clamp(listScroll, 0, Math.max(0, ranks.size() - visible));
         for (int i = 0; i < visible && i + listScroll < ranks.size(); i++) {
             Rank r = ranks.get(i + listScroll);
-            int ry = y + RUNGS_Y + 1 + i * ROW;
+            int ry = y + RUNGS_Y + chipShift + 1 + i * ROW;
             boolean sel = r.group().equals(selectedGroup);
             boolean hover = mouseX >= x + LIST_X && mouseX < x + LIST_X + LIST_W && mouseY >= ry && mouseY < ry + ROW;
             if (sel) {
@@ -544,10 +554,10 @@ public class AdminScreen extends HoloScreen {
             }));
         }
         if (ranks.isEmpty()) {
-            text(g, Tr.t("the_ladder_is_empty"), x + LIST_X + 6, y + RUNGS_Y + 8, MUTED, 0.75f);
-            text(g, clip(Tr.t("add_a_rung_or_import_from_the_track"), LIST_W - 12, 0.6f), x + LIST_X + 6, y + RUNGS_Y + 20, MUTED, 0.6f);
+            text(g, Tr.t("the_ladder_is_empty"), x + LIST_X + 6, y + RUNGS_Y + chipShift + 8, MUTED, 0.75f);
+            text(g, clip(Tr.t("add_a_rung_or_import_from_the_track"), LIST_W - 12, 0.6f), x + LIST_X + 6, y + RUNGS_Y + chipShift + 20, MUTED, 0.6f);
         }
-        scrollbar(g, x + LIST_X + LIST_W, y + RUNGS_Y, RUNGS_H, ranks.size(), visible, listScroll);
+        scrollbar(g, x + LIST_X + LIST_W, y + RUNGS_Y + chipShift, rungsH, ranks.size(), visible, listScroll);
         int by = y + RUNGS_Y + RUNGS_H + 6;
         button(g, x + LIST_X, by, 72, 13, inputMode == Input.NEW_RANK ? Tr.t("cancel") : Tr.t("add_rank"), TQ, () -> {
             if (inputMode == Input.NEW_RANK) {
@@ -563,10 +573,10 @@ public class AdminScreen extends HoloScreen {
         button(g, x + LIST_X + 129, by, 35, 13, Tr.t("import"), MUTED, () -> act(AdminActionPacket.LADDERS_IMPORT, ladder.name()));
 
         if (sel == null) {
-            text(g, Tr.t("pick_a_rung_or_add_one"), x + PANE_X + 4, y + EDIT_Y + 8, MUTED, 0.75f);
+            text(g, Tr.t("pick_a_rung_or_add_one"), x + PANE_X + 4, y + EDIT_Y + chipShift + 8, MUTED, 0.75f);
             return;
         }
-        int px = x + PANE_X, py = y + EDIT_Y;
+        int px = x + PANE_X, py = y + EDIT_Y + chipShift;
         int holders = v.holders().getOrDefault(sel.group(), 0);
         text(g, clip(sel.displayName().toUpperCase(Locale.ROOT), 180, 1f), px, py, TEXT, 1f);
         textRight(g, Tr.t("rung_i_of_n_holders", idx + 1, ranks.size(), holders), px + PANE_W, py + 2, MUTED, 0.6f);
@@ -582,7 +592,7 @@ public class AdminScreen extends HoloScreen {
         chip(g, px + 305, py + 21, 27, 13, Tr.t("reset"), sel.seasonal(), VIO, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.LADDER_SEASONAL, sel.group(), "true")));
 
         text(g, Tr.t("rewards_when_reached"), px, py + 42, TQ, 0.6f);
-        int ay = drawRewards(g, px, py + 50, LADDER_REWARDS_H, sel.group(), sel.rewards(), Tr.t("this_rung_gives_nothing_yet"));
+        int ay = drawRewards(g, px, py + 50, LADDER_REWARDS_H - chipShift, sel.group(), sel.rewards(), Tr.t("this_rung_gives_nothing_yet"));
         drawRewardKinds(g, px, ay, sel.group());
         if (pickingKit) {
             drawKitPicker(g, px, ay + 17, sel.group(), v);
@@ -592,18 +602,23 @@ public class AdminScreen extends HoloScreen {
         }
     }
 
-    /** One chip per ladder, then + LADDER; a click chooses the ladder (D51). */
-    private void drawLadderChips(GuiGraphics g, int x, int y, Settings s, Ladder chosen) {
-        int cx = x + LIST_X;
-        int end = x + W - 8 - 60;
-        for (Ladder l : s.ladders()) {
-            String label = clip(RankEngine.label(l).toUpperCase(Locale.ROOT), 90, 0.75f);
-            int w = Math.max(40, (int) (font.width(label) * 0.75f) + 10);
-            if (cx + w > end) {
-                break; // more ladders than fit: /rankup ladders lists them all
-            }
+    /**
+     * One chip per ladder, then + LADDER; a click chooses the ladder (D51). The chips wrap onto up to three rows, + LADDER
+     * last; past that a "+n" chip lists every ladder in chat (D117, D118). Returns how far the rows push the tab down.
+     */
+    private int drawLadderChips(GuiGraphics g, int x, int y, Settings s, Ladder chosen) {
+        List<Ladder> all = s.ladders();
+        String[] labels = new String[all.size()];
+        int[] widths = new int[all.size()];
+        for (int i = 0; i < all.size(); i++) {
+            labels[i] = clip(RankEngine.label(all.get(i)).toUpperCase(Locale.ROOT), 90, 0.75f);
+            widths[i] = Math.max(40, (int) (font.width(labels[i]) * 0.75f) + 10);
+        }
+        ChipRows.Layout lay = ChipRows.lay(widths, 60, x + LIST_X, x + W - 8, CHIP_ROWS, 24, 3);
+        for (ChipRows.Placed p : lay.chips()) {
+            Ladder l = all.get(p.index());
             boolean on = l.name().equals(chosen.name());
-            chip(g, cx, y + CHIPS_Y, w, 12, label, on, TQ, 0.75f, () -> {
+            chip(g, p.x(), y + CHIPS_Y + p.row() * CHIP_ROW, widths[p.index()], 12, labels[p.index()], on, TQ, 0.75f, () -> {
                 selectedLadder = l.name();
                 selectedGroup = l.ranks().isEmpty() ? null : l.ranks().get(0).group();
                 listScroll = 0;
@@ -613,15 +628,18 @@ public class AdminScreen extends HoloScreen {
                 pickingKit = false;
                 armed = null;
             });
-            cx += w + 3;
         }
-        chip(g, cx, y + CHIPS_Y, 60, 12, inputMode == Input.NEW_LADDER ? Tr.t("cancel") : Tr.t("add_ladder"), false, TQ, 0.75f, () -> {
+        if (lay.hidden() > 0 && minecraft != null && minecraft.player != null) {
+            chip(g, lay.moreX(), y + CHIPS_Y + lay.moreRow() * CHIP_ROW, 24, 12, "+" + lay.hidden(), false, MUTED, 0.75f, () -> minecraft.player.connection.sendCommand("rankup ladders"));
+        }
+        chip(g, lay.tailX(), y + CHIPS_Y + lay.tailRow() * CHIP_ROW, 60, 12, inputMode == Input.NEW_LADDER ? Tr.t("cancel") : Tr.t("add_ladder"), false, TQ, 0.75f, () -> {
             if (inputMode == Input.NEW_LADDER) {
                 closeInput();
             } else {
                 openInput(Input.NEW_LADDER, "", Tr.t("hint.new_ladder"));
             }
         });
+        return (lay.rows() - 1) * CHIP_ROW;
     }
 
     /** The chosen ladder's track, what it counts, its title priority, and RENAME (the first) or REMOVE (the others). */
@@ -1071,6 +1089,7 @@ public class AdminScreen extends HoloScreen {
             case TITLE -> r.value();
             case COMMAND -> "/" + r.value();
             case KIT -> Tr.t("the_kit", view() == null ? r.value() : view().kits().getOrDefault(r.value(), r.value()));
+            case NOTE -> r.value(); // never a rung's reward: only kept for a login
         };
     }
 
@@ -1125,7 +1144,7 @@ public class AdminScreen extends HoloScreen {
     }
 
     private void drawBrowser(GuiGraphics g, int x, int y, int mouseX, int mouseY) {
-        int bx = x + PANE_X, by = y + BROWSER_Y, bw = PANE_W, bh = BROWSER_H;
+        int bx = x + PANE_X, by = y + BROWSER_Y + chipShift, bw = PANE_W, bh = BROWSER_H - chipShift;
         // the browser covers the rung's fields, reward chips and REMOVE RANK: nothing under it takes a click
         hits.removeIf(h -> h.overlaps(bx, by, bw, bh));
         hits.add(new Hit(bx, by, bw, bh, () -> {
@@ -1293,6 +1312,7 @@ public class AdminScreen extends HoloScreen {
             textRight(g, rowPoints, x + LIST_X + LIST_W - 6, ry + 4, GOLD, 0.6f);
             hits.add(new Hit(x + LIST_X, ry, LIST_W, ROW, () -> {
                 settingLadder = null;
+                pickedAward = null;
                 armed = null;
                 act(AdminActionPacket.PLAYER_SELECT, r.uuid().toString());
             }));
@@ -1356,7 +1376,10 @@ public class AdminScreen extends HoloScreen {
                 text(g, Tr.t("top_rung"), px + 214, ry + 4, MUTED, 0.5f);
             }
             if (!l.ranks().isEmpty()) {
-                chip(g, px + PANE_W - 38, ry, 32, 12, Tr.t("set"), open, TQ, 0.6f, () -> settingLadder = open ? null : l.name());
+                chip(g, px + PANE_W - 38, ry, 32, 12, Tr.t("set"), open, TQ, 0.6f, () -> {
+                    settingLadder = open ? null : l.name();
+                    pickedAward = null;
+                });
             }
         }
         scrollbar(g, px + PANE_W, ty + 11, th - 11, ladders.size(), LADDER_LINES, ladderLineScroll);
@@ -1461,17 +1484,30 @@ public class AdminScreen extends HoloScreen {
         int perRow = PANE_W / (AWARD_W + 4), max = perRow * AWARD_ROWS;
         if (awards.size() > max) {
             textRight(g, Tr.t("more_awards", awards.size() - max + 1), px + PANE_W, zy, MUTED, 0.5f);
+        } else {
+            textRight(g, Tr.t("click_award_hint"), px + PANE_W, zy, MUTED, 0.5f);
         }
         int shown = awards.size() > max ? max - 1 : awards.size();
+        AdminViewPacket.AwardLine picked = null;
         for (int i = 0; i < shown; i++) {
             AdminViewPacket.AwardLine a = awards.get(i);
             Award award = s.award(a.group());
             int ax = px + (i % perRow) * (AWARD_W + 4), ay = zy + 7 + (i / perRow) * 23;
+            boolean on = a.group().equals(pickedAward);
+            if (on) {
+                picked = a;
+            }
             g.fill(ax, ay, ax + AWARD_W, ay + 20, a.reached() ? 0x22B58CFF : INSET);
-            frame(g, ax, ay, AWARD_W, 20, a.reached() ? VIO : LINE);
+            frame(g, ax, ay, AWARD_W, 20, on ? TQ : a.reached() ? VIO : a.taken() ? BAD : LINE);
             drawPrefix(g, s, rankImageKey(s, award.group()), award.displayName(), ax + 3, ay + 3, 0.6f, AWARD_W - 6);
+            hits.add(new Hit(ax, ay, AWARD_W, 20, () -> {
+                pickedAward = on ? null : a.group();
+                settingLadder = null;
+            }));
             if (a.reached()) {
                 text(g, Tr.t("reached"), ax + 3, ay + 12, VIO, 0.5f);
+            } else if (a.taken()) {
+                text(g, Tr.t("taken"), ax + 3, ay + 12, BAD, 0.5f);
             } else {
                 String have = a.points() + "/" + award.points();
                 text(g, have, ax + 3, ay + 12, GOLD, 0.5f);
@@ -1480,7 +1516,27 @@ public class AdminScreen extends HoloScreen {
                 g.fill(bx, ay + 13, bx + (int) ((ax + AWARD_W - 4 - bx) * Math.min(1.0, award.points() <= 0 ? 1.0 : (double) Math.max(0, a.points()) / award.points())), ay + 15, GOLD);
             }
         }
-        return zy + 7 + ((shown + perRow - 1) / perRow) * 23 + 2;
+        int after = zy + 7 + ((shown + perRow - 1) / perRow) * 23 + 2;
+        if (picked == null) {
+            pickedAward = null; // gone from the list (removed, or past the chips shown)
+            return after;
+        }
+        return drawAwardLine(g, px, after, s.award(picked.group()), picked, d);
+    }
+
+    /** The picked award's line (D109): its state, GIVE IT or TAKE IT with what it does, and CANCEL; returns the y after it. */
+    private int drawAwardLine(GuiGraphics g, int px, int ly, Award award, AdminViewPacket.AwardLine a, AdminViewPacket.PlayerDetail d) {
+        text(g, clip(award.displayName().toUpperCase(Locale.ROOT), 66, 0.6f), px, ly + 3, TEXT, 0.6f);
+        String state = a.reached() ? Tr.t("reached_lower") : a.taken() ? Tr.t("taken_not_again") : Tr.t("award_points_of", a.points(), award.points());
+        text(g, clip(state, 66, 0.5f), px, ly + 11, a.taken() ? BAD : MUTED, 0.5f);
+        String action = a.reached() ? AdminActionPacket.AWARD_TAKE : AdminActionPacket.AWARD_GIVE;
+        button(g, px + 70, ly, 60, 13, a.reached() ? Tr.t("take_it") : Tr.t("give_it"), a.reached() ? BAD : VIO, () -> {
+            pickedAward = null;
+            send(AdminActionPacket.of(action, d.uuid().toString(), award.group()));
+        });
+        text(g, clip(a.reached() ? Tr.t("take_note") : Tr.t("give_note"), PANE_W - 136 - 46, 0.5f), px + 136, ly + 4, MUTED, 0.5f);
+        button(g, px + PANE_W - 40, ly, 40, 13, Tr.t("cancel"), MUTED, () -> pickedAward = null);
+        return ly + 17;
     }
 
     /** The image a rank shows in chat: its title's when it has one, else its group's own prefix's (D57); text when neither. */
@@ -1890,7 +1946,7 @@ public class AdminScreen extends HoloScreen {
             return true;
         }
         if (mx >= x + LIST_X && mx < x + LIST_X + LIST_W && my >= y + LIST_Y && my < y + LIST_Y + LIST_H) {
-            if (tab == T_LADDER && my >= y + RUNGS_Y) {
+            if (tab == T_LADDER && my >= y + RUNGS_Y + chipShift) {
                 listScroll -= step;
             } else if (tab == T_PLAYERS && my >= y + PLAYERS_Y) {
                 playerScroll -= step;

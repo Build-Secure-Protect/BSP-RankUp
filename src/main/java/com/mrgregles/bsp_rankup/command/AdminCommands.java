@@ -168,6 +168,11 @@ public final class AdminCommands {
                         .then(Commands.argument("name", StringArgumentType.greedyString())
                                 .executes(ctx -> reply(ctx, AdminEdits.awardAdd(server(ctx), StringArgumentType.getString(ctx, "newgroup"), LongArgumentType.getLong(ctx, "points"), StringArgumentType.getString(ctx, "name"))))))));
         award.then(Commands.literal("remove").then(awardArg().executes(ctx -> reply(ctx, AdminEdits.awardRemove(server(ctx), awardGroup(ctx))))));
+        // by hand (D109 to D114): give without rewards, or take so the check never gives it again until given back
+        for (boolean give : new boolean[]{true, false}) {
+            award.then(Commands.literal(give ? "give" : "take").then(Commands.argument("player", StringArgumentType.word()).suggests(PLAYERS)
+                    .then(awardArg().executes(ctx -> awardByHand(ctx, give)))));
+        }
         award.then(Commands.literal("points").then(awardArg().then(Commands.argument("points", LongArgumentType.longArg(0))
                 .executes(ctx -> reply(ctx, AdminEdits.awardPoints(server(ctx), awardGroup(ctx), LongArgumentType.getLong(ctx, "points")))))));
         award.then(Commands.literal("name").then(awardArg().then(Commands.argument("name", StringArgumentType.greedyString())
@@ -319,6 +324,27 @@ public final class AdminCommands {
                 source.sendFailure(Component.literal(reply.text()));
             }
         });
+        return 1;
+    }
+
+    private static int awardByHand(CommandContext<CommandSourceStack> ctx, boolean give) {
+        CommandSourceStack source = ctx.getSource();
+        Optional<UUID> player = find(source, StringArgumentType.getString(ctx, "player"));
+        if (player.isEmpty()) {
+            return 0;
+        }
+        java.util.function.Consumer<Reply> answer = reply -> {
+            if (reply.ok()) {
+                source.sendSuccess(() -> Component.literal(reply.text()), true);
+            } else {
+                source.sendFailure(Component.literal(reply.text()));
+            }
+        };
+        if (give) {
+            AdminEdits.awardGive(source.getServer(), player.get(), awardGroup(ctx), answer);
+        } else {
+            AdminEdits.awardTake(source.getServer(), player.get(), awardGroup(ctx), answer);
+        }
         return 1;
     }
 

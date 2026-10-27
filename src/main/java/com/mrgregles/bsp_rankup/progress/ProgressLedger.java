@@ -156,7 +156,7 @@ public final class ProgressLedger extends SavedData {
             // a row written before several ladders (RankUp 0.2) has none of them: this server's copy stays
             local.otherRanks().forEach((ladder, held) -> p.setOtherRank(ladder, held.group(), held.atMs()));
             p.setOtherBases(local.otherBases());
-            local.awards().forEach((group, at) -> p.setAward(group, true, at));
+            local.awardMarks().forEach((group, at) -> p.setAward(group, true, at));
         }
         if (p.isEmpty()) {
             players.remove(player);
@@ -207,6 +207,17 @@ public final class ProgressLedger extends SavedData {
             return;
         }
         p.setAward(group, reached, atMs);
+        setDirty();
+        notify(new Change(server, player, Kind.AWARD, null, 0, p));
+    }
+
+    /** Marks an award taken from the player by an admin (D111), or clears the mark; a reached award taken is no longer held. */
+    public void setAwardTaken(UUID player, String group, boolean taken) {
+        Progress p = progress(player);
+        if (p.isAwardTaken(group) == taken) {
+            return;
+        }
+        p.setAwardTaken(group, taken);
         setDirty();
         notify(new Change(server, player, Kind.AWARD, null, 0, p));
     }

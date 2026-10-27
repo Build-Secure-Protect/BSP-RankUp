@@ -129,13 +129,13 @@ public class StorageGameTests {
 
             // alpha wrote the row with a reward kept for them; its notice makes beta read the row again and give it now
             db.setRank(id, "ru_st_away", now);
-            db.setPending(id, com.mrgregles.bsp_rankup.storage.PendingJson.toJson(List.of(Reward.coins(9))));
+            db.setPending(id, com.mrgregles.bsp_rankup.storage.PendingJson.toJson(List.of(Reward.coins(9), Reward.reachedNote("Captain", "Pvp"))));
             db.publish(new StorageBackend.Notice(0, UUID.randomUUID().toString(), now, "alpha", Storage.KIND_PROGRESS, id.toString()));
             beta.pollNotices();
             beta.drain();
             Progress p = ledger.progress(id);
             h.assertTrue("ru_st_away".equals(p.rank()), "the row read again: beta's copy has alpha's rank, so it never ranks them again from an old one: " + p);
-            h.assertTrue(p.pending().isEmpty(), "the kept reward given at once, not at the next login: " + p.pending());
+            h.assertTrue(p.pending().isEmpty(), "the kept reward given at once, not at the next login; the line dropped, they were told live (D122): " + p.pending());
         } finally {
             com.mrgregles.bsp_rankup.rank.RankEngine.removeAnnounceListener(listener);
             beta.close();

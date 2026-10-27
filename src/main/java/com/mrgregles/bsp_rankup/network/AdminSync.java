@@ -189,6 +189,16 @@ public final class AdminSync {
                     AdminEdits.playerSet(server, who, b, reply -> send(admin, reply.text(), reply.ok(), false));
                     return null;
                 }
+                case AdminActionPacket.AWARD_GIVE, AdminActionPacket.AWARD_TAKE -> {
+                    UUID who = UUID.fromString(a);
+                    java.util.function.Consumer<Reply> answer = reply -> send(admin, reply.text(), reply.ok(), false);
+                    if (msg.action().equals(AdminActionPacket.AWARD_GIVE)) {
+                        AdminEdits.awardGive(server, who, b, answer);
+                    } else {
+                        AdminEdits.awardTake(server, who, b, answer);
+                    }
+                    return null;
+                }
                 case AdminActionPacket.PLAYER_ADD -> {
                     return AdminEdits.playerAdd(server, UUID.fromString(a), Long.parseLong(b.trim()));
                 }
@@ -255,6 +265,7 @@ public final class AdminSync {
             case TITLE -> Reward.title(value);
             case COMMAND -> Reward.command(value.startsWith("/") ? value.substring(1) : value);
             case KIT -> Reward.kit(value.trim());
+            case NOTE -> throw new IllegalArgumentException("No reward kind called note");
         };
     }
 
@@ -373,7 +384,7 @@ public final class AdminSync {
         List<AdminViewPacket.AwardLine> awards = new ArrayList<>();
         for (Award a : settings.awards()) {
             long have = a.seasonal() ? RankEngine.seasonPoints(settings, a, p) : RankEngine.points(settings, a, p);
-            awards.add(new AdminViewPacket.AwardLine(a.group(), have, p.hasAward(a.group())));
+            awards.add(new AdminViewPacket.AwardLine(a.group(), have, p.hasAward(a.group()), p.isAwardTaken(a.group())));
         }
         return new AdminViewPacket.PlayerDetail(player, Players.name(server, player), counts, p.bonus(), p.rank() == null ? "" : p.rank(), p.rankedAtMs(),
                 p.pending().size(), RankEngine.points(settings, p), RankEngine.seasonPoints(settings, p), Players.isOnline(server, player), ladders, awards);

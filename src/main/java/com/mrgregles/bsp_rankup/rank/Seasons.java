@@ -160,7 +160,7 @@ public final class Seasons {
      * A taken-back award's title goes with it (D75): when the awards' prefix is that award's title, it becomes the
      * title of the award the player reached most recently among those they keep, or none.
      */
-    private static void dropAwardTitle(MinecraftServer server, Settings settings, UUID player, Award gone) {
+    static void dropAwardTitle(MinecraftServer server, Settings settings, UUID player, Award gone) {
         String title = com.mrgregles.bsp_rankup.prefix.PrefixDisplay.titleOf(gone.rewards());
         int priority = RankEngine.awardTitlePriority(settings);
         if (title == null || !LuckPermsBridge.isPresent() || !LuckPermsBridge.prefixOf(player, priority).equals(java.util.Optional.of(title))) {

@@ -446,6 +446,7 @@ public final class AdminEdits {
             case TITLE -> "the title " + r.value();
             case COMMAND -> "the command /" + r.value();
             case KIT -> "the kit " + r.value();
+            case NOTE -> "a line for the next login";
         };
     }
 
@@ -527,6 +528,42 @@ public final class AdminEdits {
         RankEngine.assign(server, player, rank).thenAccept(ok -> then.accept(ok
                 ? Reply.ok(name + " is now " + rank.displayName() + " (" + rank.group() + ") on " + ladder.name() + ", without rewards")
                 : Reply.no("LuckPerms did not put " + name + " on " + rank.group() + ". Is the group on track " + ladder.track() + "?")));
+    }
+
+    /** Gives an award by hand (D110): no rewards, no announcement; refused when the player holds it already. */
+    public static void awardGive(MinecraftServer server, UUID player, String group, Consumer<Reply> then) {
+        Award award = SettingsLedger.settings(server).award(group.trim().toLowerCase(Locale.ROOT));
+        if (award == null) {
+            then.accept(noAward(group));
+            return;
+        }
+        String name = Players.name(server, player);
+        Progress p = ProgressLedger.get(server).peek(player);
+        if (p != null && p.hasAward(award.group())) {
+            then.accept(Reply.no(name + " has " + award.displayName() + " already"));
+            return;
+        }
+        RankEngine.giveAward(server, player, award).thenAccept(ok -> then.accept(ok
+                ? Reply.ok(name + " has " + award.displayName() + " now, without rewards")
+                : Reply.no("LuckPerms did not add group " + award.group() + " to " + name + ". Does the group exist?")));
+    }
+
+    /** Takes an award by hand (D111): it is not given again until given back; refused when the player doesn't hold it. */
+    public static void awardTake(MinecraftServer server, UUID player, String group, Consumer<Reply> then) {
+        Award award = SettingsLedger.settings(server).award(group.trim().toLowerCase(Locale.ROOT));
+        if (award == null) {
+            then.accept(noAward(group));
+            return;
+        }
+        String name = Players.name(server, player);
+        Progress p = ProgressLedger.get(server).peek(player);
+        if (p == null || !p.hasAward(award.group())) {
+            then.accept(Reply.no(name + (p != null && p.isAwardTaken(award.group()) ? " had " + award.displayName() + " taken already" : " hasn't reached " + award.displayName())));
+            return;
+        }
+        RankEngine.takeAward(server, player, award).thenAccept(ok -> then.accept(ok
+                ? Reply.ok(award.displayName() + " taken from " + name + "; it isn't given again until you give it back")
+                : Reply.no("LuckPerms did not take group " + award.group() + " from " + name)));
     }
 
     public static Reply playerAdd(MinecraftServer server, UUID player, long points) {

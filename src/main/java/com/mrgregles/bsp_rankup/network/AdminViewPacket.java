@@ -59,8 +59,8 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
     public record LadderLine(String ladder, String rank, long points, long seasonPoints) {
     }
 
-    /** A player and one award (D101): the group, the points that count toward it (this season's when seasonal), reached or not. */
-    public record AwardLine(String group, long points, boolean reached) {
+    /** A player and one award (D101): the group, the points that count toward it (this season's when seasonal), reached or not, taken by an admin (D111). */
+    public record AwardLine(String group, long points, boolean reached, boolean taken) {
     }
 
     /** The most ladders and awards one player's standing carries. */
@@ -98,6 +98,7 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
             b.writeUtf(RankSync.cut(a.group, 64), 64);
             b.writeVarLong(a.points);
             b.writeBoolean(a.reached);
+            b.writeBoolean(a.taken);
         });
         buf.writeCollection(msg.info, (b, s) -> b.writeUtf(s, 512));
         buf.writeUtf(msg.resetCode, 8);
@@ -129,7 +130,7 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
         PlayerDetail d = new PlayerDetail(buf.readUUID(), buf.readUtf(48), buf.readMap(b -> b.readUtf(32), FriendlyByteBuf::readVarLong),
                 buf.readVarLong(), buf.readUtf(64), buf.readVarLong(), buf.readVarInt(), buf.readVarLong(), buf.readVarLong(), buf.readBoolean(),
                 buf.readList(b -> new LadderLine(b.readUtf(64), b.readUtf(64), b.readVarLong(), b.readVarLong())),
-                buf.readList(b -> new AwardLine(b.readUtf(64), b.readVarLong(), b.readBoolean())));
+                buf.readList(b -> new AwardLine(b.readUtf(64), b.readVarLong(), b.readBoolean(), b.readBoolean())));
         List<String> info = buf.readList(b -> b.readUtf(512));
         String code = buf.readUtf(8);
         int seconds = buf.readVarInt();

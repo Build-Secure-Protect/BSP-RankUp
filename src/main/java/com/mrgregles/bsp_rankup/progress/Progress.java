@@ -39,7 +39,7 @@ public final class Progress {
     private final Map<String, Held> otherRanks = new LinkedHashMap<>();
     /** Season bases of the ladders after the first and of seasonal awards ({@code award:<group>}), by that key. */
     private final Map<String, Long> otherBases = new LinkedHashMap<>();
-    /** Awards reached (D50): the group and when. */
+    /** Awards reached (D50): the group and when; a negative time marks one an admin took (D111), never given again until given back. */
     private final Map<String, Long> awards = new LinkedHashMap<>();
 
     /** A rung held: the LuckPerms group and when RankUp gave it. */
@@ -135,16 +135,35 @@ public final class Progress {
         });
     }
 
-    /** True when the player reached this award (D50). */
+    /** True when the player reached this award (D50) and holds it. */
     public boolean hasAward(String group) {
-        return awards.containsKey(group);
+        Long at = awards.get(group);
+        return at != null && at >= 0;
     }
 
-    /** Awards reached: group and when. */
+    /** True when an admin took this award from the player (D111): the check does not give it again. */
+    public boolean isAwardTaken(String group) {
+        Long at = awards.get(group);
+        return at != null && at < 0;
+    }
+
+    /** Awards reached and held: group and when. */
     public Map<String, Long> awards() {
+        Map<String, Long> out = new LinkedHashMap<>();
+        awards.forEach((group, at) -> {
+            if (at >= 0) {
+                out.put(group, at);
+            }
+        });
+        return out;
+    }
+
+    /** Awards reached and awards taken (a negative time), as the shared row and a copy keep them. */
+    public Map<String, Long> awardMarks() {
         return Map.copyOf(awards);
     }
 
+    /** Records an award reached ({@code atMs} negative: taken, as a row carries it), or forgets it. */
     void setAward(String group, boolean reached, long atMs) {
         if (reached) {
             awards.put(group, atMs);
@@ -152,6 +171,17 @@ public final class Progress {
             awards.remove(group);
         }
     }
+
+    void setAwardTaken(String group, boolean taken) {
+        if (taken) {
+            awards.put(group, TAKEN);
+        } else if (isAwardTaken(group)) {
+            awards.remove(group);
+        }
+    }
+
+    /** The time a taken award is kept with. */
+    public static final long TAKEN = -1;
 
     /** Rewards earned while the player was away, handed over on their next login here. */
     public List<Reward> pending() {
