@@ -248,7 +248,18 @@ public class LadderGameTests {
                 })
                 .thenExecute(() -> {
                     h.assertTrue(heard.isEmpty(), "nothing announced here for a player who is away: " + heard);
-                    h.assertTrue(sent.get().isEmpty(), "nor sent to the other servers: " + sent.get());
+                    h.assertTrue(sent.get().isEmpty(), "nor announced to the other servers: " + sent.get());
+                    // the server the player plays on (if any) hears of it, and reads their row again (AU-2g)
+                    List<com.mrgregles.bsp_rankup.storage.StorageBackend.Notice> toThem;
+                    try {
+                        toThem = db.fetchNoticesAfter(0, 50).stream().filter(n -> n.payload().startsWith(player.getUUID().toString())).toList();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                    h.assertTrue(toThem.stream().anyMatch(n -> n.kind().equals(com.mrgregles.bsp_rankup.storage.Storage.KIND_AWAY_RANKUP) && n.payload().startsWith(player.getUUID() + "\t") && n.payload().endsWith("\tB"))
+                            && toThem.stream().anyMatch(n -> n.kind().equals(com.mrgregles.bsp_rankup.storage.Storage.KIND_AWAY_AWARD) && n.payload().endsWith("\tQuiet Award"))
+                            && toThem.stream().anyMatch(n -> n.kind().equals(com.mrgregles.bsp_rankup.storage.Storage.KIND_PROGRESS)),
+                            "the rung and the award go to the server they play on, and their row is re-read there: " + toThem);
                 })
                 .thenExecute(() -> {
                     level.addNewPlayer(player);

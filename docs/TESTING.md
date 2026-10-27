@@ -311,3 +311,27 @@ Set up first: copy `docs/prefix_images/*.png` into `config/bsp_rankup/prefix_ima
 - [ ] The server console's chat lines read `[Admin] [Warden] Mrgregles ✦ Totem Reaver ✦ Founder`, no stand-in characters.
 - [ ] A player on RankUp 0.4.x joins a 0.5.0 server: they connect and see the icons in chat.
 
+## PLAYERS for every ladder (2026-10-27, D98 to D105)
+
+Needs: two ladders (the second counting player kills, say) and an award on GROUPS. Server and client both on this build (protocol 4).
+
+1. `/rankup admin`, PLAYERS, pick yourself. LADDERS shows a row for each ladder: your rung (its image if it has one) and "i/n", points, this season, the bar and "<next rung> at <points>" (or "top rung").
+2. Kill a mob or wait a minute: the points on the ladders that count it go up within two seconds; the others stay.
+3. SET on the second ladder: its rungs open under the table, with the row lit. Pick one: you move on that ladder only, with no rewards; the first ladder and the list's rank don't change. CANCEL or SET again closes it.
+4. AWARDS: a reached award is lit with REACHED; one not reached shows "points/needed" and a bar. A seasonal award counts this season's points. No awards: "No awards yet: add them on GROUPS."
+5. COUNTS: each signal shows the letters of the ladders that count it, with the key after COUNTS. Scroll over the counts when they don't all fit (SET open makes the box shorter).
+6. ADD POINTS 10: every ladder's points and every award's go up by 10. RESET (click twice): every ladder's rank, every count and the bonus are forgotten.
+7. With four ladders, scroll over LADDERS to see the fourth.
+8. A 0.4.x client can't join this server (protocol 4); that is expected.
+
+## The audit of 0.5.0 (2026-10-27, AU-2)
+
+Headless: 78 GameTests, three runs clean. Not seen in a client; the network part not run on two real backends.
+
+- [ ] Two backends, announcements SERVER: play on B; on A run `/rankup add <you> <enough points for the next rung>`. Within a few seconds B says "You are now ..." to you and announces it on B; a reward that needs you online (coins, items) arrives on B at once, not at your next login. Nothing is said on A.
+- [ ] The same with announcements NETWORK: A and every other server announce it too, once each.
+- [ ] Keep playing on B until your own points pass the rung A gave you: no second "You are now ...", no second rewards.
+- [ ] SIGNALS: on a ladder counting one signal, click its only tick: the bottom line says a ladder counts at least one signal, and the ladder is unchanged. The same with the x on its PROGRESS FROM chip, and on an award on GROUPS. Typing `all` in + signal still makes it count every signal (gold ticks).
+- [ ] SIGNALS with four or more ladders and awards: < > and "1 of n" sit under the matrix on the right, clear of the column names; the hint beside them is readable.
+- [ ] PREFIXES: open HOVER NOTE on one prefix, click another in the list: the box closes. Set a note on a suffix, delete the group in LuckPerms, then `/rankup prefix note suffix <group>`: the note goes.
+- [ ] PLAYERS: select an online player, then search for someone else: the pane still says "online". Open SET on a ladder with 12 rungs: three rows of rungs, "+n more: /rankup set <player> <group>" readable under them, no empty row before COUNTS.

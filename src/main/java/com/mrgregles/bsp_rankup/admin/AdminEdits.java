@@ -603,11 +603,13 @@ public final class AdminEdits {
      */
     public static Reply prefixNote(MinecraftServer server, String key, String note) {
         String k = key.trim().toLowerCase(Locale.ROOT);
-        Reply bad = checkPrefixKey(server, k);
+        String n = note.strip().replace('\n', ' ').replace('\r', ' ');
+        // a note can always be taken away, even after its rank or group is gone
+        boolean removing = n.isEmpty() && !SettingsLedger.settings(server).prefixNote(k).isEmpty();
+        Reply bad = removing ? null : checkPrefixKey(server, k);
         if (bad != null) {
             return bad;
         }
-        String n = note.strip().replace('\n', ' ').replace('\r', ' ');
         if (n.length() > NOTE_MAX) {
             return Reply.no("A note is at most " + NOTE_MAX + " characters (that one is " + n.length() + ")");
         }

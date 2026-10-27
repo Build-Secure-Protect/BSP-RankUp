@@ -64,11 +64,14 @@ public final class RankEngine {
         ProgressLedger.onChange(RankEngine::onChange);
         SettingsLedger.onChange(RankEngine::onSettingsChanged);
         com.mrgregles.bsp_rankup.storage.Storage.onPlayerRead((server, player) -> {
+            ServerPlayer online = Players.online(server, player);
             if (AWAITING_ROW.remove(player)) {
-                ServerPlayer online = Players.online(server, player);
                 if (online != null) {
                     onLogin(online);
                 }
+            } else if (online != null) {
+                // read again while they play here (another server changed their row): rewards kept for them there are given now (AU-2g)
+                Rewards.givePending(online, SettingsLedger.settings(server));
             }
         });
     }
@@ -99,11 +102,44 @@ public final class RankEngine {
     }
 
     /**
-     * Whether a rank-up or award of {@code player} is announced: only while they are online here (D86). One reached
-     * while they are away (a totem lost, an admin's points, a row read as the server starts) is still given, quietly.
+     * Whether a rank-up or award of {@code player} is announced here: only while they are online here (D86). One
+     * reached while they are away (a totem lost, an admin's points, a row read as the server starts) is still given;
+     * the server they play on, if any, tells them and announces it (AU-2g).
      */
     public static boolean announces(MinecraftServer server, Settings settings, UUID player) {
         return settings.announce() != Settings.Announce.OFF && Players.isOnline(server, player);
+    }
+
+    /**
+     * A rank-up reached on another server while the player plays here (D86, AU-2g): their message, and the
+     * announcement when announcements are on. False when they are not here either.
+     */
+    public static boolean reachedElsewhere(MinecraftServer server, UUID player, String rankName, String ladderLabel) {
+        ServerPlayer online = Players.online(server, player);
+        if (online == null) {
+            return false;
+        }
+        boolean on = !ladderLabel.isEmpty();
+        online.sendSystemMessage(on ? Component.translatable("message.bsp_rankup.reached_on", rankName, ladderLabel) : Component.translatable("message.bsp_rankup.reached", rankName));
+        if (announces(server, SettingsLedger.settings(server), player)) {
+            announce(server, on
+                    ? Component.translatable("message.bsp_rankup.announce_on", Players.name(server, player), rankName, ladderLabel)
+                    : Component.translatable("message.bsp_rankup.announce", Players.name(server, player), rankName));
+        }
+        return true;
+    }
+
+    /** An award reached on another server while the player plays here, as {@link #reachedElsewhere}. */
+    public static boolean awardReachedElsewhere(MinecraftServer server, UUID player, String awardName) {
+        ServerPlayer online = Players.online(server, player);
+        if (online == null) {
+            return false;
+        }
+        online.sendSystemMessage(Component.translatable("message.bsp_rankup.award", awardName));
+        if (announces(server, SettingsLedger.settings(server), player)) {
+            announce(server, Component.translatable("message.bsp_rankup.award_announce", Players.name(server, player), awardName));
+        }
+        return true;
     }
 
     private static void announce(MinecraftServer server, Component message) {

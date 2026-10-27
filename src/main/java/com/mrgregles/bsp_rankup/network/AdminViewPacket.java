@@ -39,16 +39,32 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
     public record PlayerRow(UUID uuid, String name, String rank, long points, boolean online) {
     }
 
-    /** The selected player's standing: counts by signal key, bonus, rank, when ranked, waiting rewards, this season's points. */
-    public record PlayerDetail(UUID uuid, String name, Map<String, Long> counts, long bonus, String rank, long rankedAt, int pending, long points, long seasonPoints) {
+    /**
+     * The selected player's standing: counts by signal key, bonus, the first ladder's rank, when ranked, waiting rewards,
+     * the first ladder's points and this season's, whether they are online here (the list may not hold them), then a
+     * line for every ladder and every award (D98).
+     */
+    public record PlayerDetail(UUID uuid, String name, Map<String, Long> counts, long bonus, String rank, long rankedAt, int pending, long points, long seasonPoints,
+                               boolean online, List<LadderLine> ladders, List<AwardLine> awards) {
         public static PlayerDetail none() {
-            return new PlayerDetail(new UUID(0, 0), "", Map.of(), 0, "", 0, 0, 0, 0);
+            return new PlayerDetail(new UUID(0, 0), "", Map.of(), 0, "", 0, 0, 0, 0, false, List.of(), List.of());
         }
 
         public boolean isEmpty() {
             return name.isEmpty();
         }
     }
+
+    /** A player on one ladder: the ladder's name, the group RankUp put them on (empty when none), points and this season's. */
+    public record LadderLine(String ladder, String rank, long points, long seasonPoints) {
+    }
+
+    /** A player and one award (D101): the group, the points that count toward it (this season's when seasonal), reached or not. */
+    public record AwardLine(String group, long points, boolean reached) {
+    }
+
+    /** The most ladders and awards one player's standing carries. */
+    public static final int MAX_LINES = 64;
 
     public static void encode(AdminViewPacket msg, FriendlyByteBuf buf) {
         buf.writeNbt(msg.settings);
@@ -62,14 +78,27 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
         });
         PlayerDetail d = msg.selected;
         buf.writeUUID(d.uuid);
-        buf.writeUtf(d.name, 48);
+        buf.writeUtf(RankSync.cut(d.name, 48), 48);
         buf.writeMap(d.counts, (b, k) -> b.writeUtf(k, 32), FriendlyByteBuf::writeVarLong);
         buf.writeVarLong(d.bonus);
-        buf.writeUtf(d.rank, 64);
+        buf.writeUtf(RankSync.cut(d.rank, 64), 64);
         buf.writeVarLong(d.rankedAt);
         buf.writeVarInt(d.pending);
         buf.writeVarLong(d.points);
         buf.writeVarLong(d.seasonPoints);
+        buf.writeBoolean(d.online);
+        // names cut to what the reader takes: settings read from a file or the shared row are not length-checked
+        buf.writeCollection(d.ladders.size() > MAX_LINES ? d.ladders.subList(0, MAX_LINES) : d.ladders, (b, l) -> {
+            b.writeUtf(RankSync.cut(l.ladder, 64), 64);
+            b.writeUtf(RankSync.cut(l.rank, 64), 64);
+            b.writeVarLong(l.points);
+            b.writeVarLong(l.seasonPoints);
+        });
+        buf.writeCollection(d.awards.size() > MAX_LINES ? d.awards.subList(0, MAX_LINES) : d.awards, (b, a) -> {
+            b.writeUtf(RankSync.cut(a.group, 64), 64);
+            b.writeVarLong(a.points);
+            b.writeBoolean(a.reached);
+        });
         buf.writeCollection(msg.info, (b, s) -> b.writeUtf(s, 512));
         buf.writeUtf(msg.resetCode, 8);
         buf.writeVarInt(msg.resetSeconds);
@@ -98,7 +127,9 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
         Map<String, Integer> holders = buf.readMap(b -> b.readUtf(64), FriendlyByteBuf::readVarInt);
         List<PlayerRow> players = buf.readList(b -> new PlayerRow(b.readUUID(), b.readUtf(48), b.readUtf(64), b.readVarLong(), b.readBoolean()));
         PlayerDetail d = new PlayerDetail(buf.readUUID(), buf.readUtf(48), buf.readMap(b -> b.readUtf(32), FriendlyByteBuf::readVarLong),
-                buf.readVarLong(), buf.readUtf(64), buf.readVarLong(), buf.readVarInt(), buf.readVarLong(), buf.readVarLong());
+                buf.readVarLong(), buf.readUtf(64), buf.readVarLong(), buf.readVarInt(), buf.readVarLong(), buf.readVarLong(), buf.readBoolean(),
+                buf.readList(b -> new LadderLine(b.readUtf(64), b.readUtf(64), b.readVarLong(), b.readVarLong())),
+                buf.readList(b -> new AwardLine(b.readUtf(64), b.readVarLong(), b.readBoolean())));
         List<String> info = buf.readList(b -> b.readUtf(512));
         String code = buf.readUtf(8);
         int seconds = buf.readVarInt();

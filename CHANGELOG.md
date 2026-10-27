@@ -4,7 +4,23 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
-Version 0.5.0 (`mod_version`). Still protocol 3: servers and players on 0.4.x connect to it; admins need 0.5.0 for the PREFIXES changes.
+Version 0.5.0 (`mod_version`). Protocol 4 (D105): the server and the modpack update together.
+
+### Fixed (2026-10-27, the audit of 0.5.0, AU-2)
+- **A rank-up or award reached on one server for a player who plays on another reaches them there** (D106): that server tells them, announces it (here, or network-wide when announcements are), gives the rewards kept for them at once instead of at their next login, and reads their row again. Before, nobody heard of it, and the server they played on kept an old copy that could rank them a second time, with the rewards again. A server that writes a rank, a reward or the bonus for a player who is not there now sends a progress notice for them.
+- **The last counted signal can't be taken off** (D107): on SIGNALS (the tick) and in PROGRESS FROM (the x) the screen refuses and says to tick another first, or type `all` in + signal. Before, it made the ladder or award count every signal, and one misclick could promote many players for good. The SIGNALS hint says "Gold ticks: every signal counts".
+- SIGNALS: with more than three ladders and awards, the pager (< > and "3 of 9") sits under the matrix, right of the hint; it was drawn over the third column's name (D108).
+- A hover note can be taken away after its rank or group is gone (before: "LuckPerms has no group ...", and the note stayed for good).
+- PREFIXES: choosing another prefix while the HOVER NOTE box is open closes it, so Enter can't save the note on the wrong prefix.
+- PLAYERS: "online"/"away" comes from the server (it said "away" when a search hid the selected player); SET's panel no longer leaves an empty row when the rungs fill three rows; "+n more: /rankup set ..." is shown whole under the rungs.
+- Chat and the tab list: when a title and a group's prefix have the same text, the one with an image is drawn (a title without an image hid the group's image); a LuckPerms group change read first by the admin screen or a command still redraws names; the lookups behind the name line are swapped whole and the split cache is kept under 1024 texts.
+- The admin screen's player details cut names to what the packet takes instead of failing on a ladder or group name longer than 64 characters read from a settings file.
+
+### Added (2026-10-27, PLAYERS for every ladder, D98 to D105)
+- PLAYERS: the selected player's pane shows every ladder in a LADDERS table: the rung (as its image when it has one) and which of how many, points, this season's points, a bar to the next rung, and **SET**, which opens that ladder's rungs under the table. Before, only the first ladder showed and could be set.
+- PLAYERS: the awards as chips: reached, or the points so far (this season's for a seasonal award) out of the points needed, with a bar.
+- PLAYERS: each count is tagged with the ladders that count it (a letter per ladder, its key beside COUNTS). ADD POINTS says it adds to every ladder and award; RESET says it forgets every ladder. The list keeps the first ladder's rank and points.
+- The player details sent to the admin screen carry a line per ladder and per award, so the protocol is 4.
 
 ### Added (2026-10-27, suffixes and the stacked name line, D87 to D97)
 - **Suffixes after the name.** RankUp draws each player's LuckPerms suffix after their name in chat and the tab list, as an image when one is set (the BSP achievement ranks: Champion, Totem Reaver and the rest).

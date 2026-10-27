@@ -78,13 +78,70 @@ public class StorageGameTests {
                 ledger.reset(player);
                 beta.drain();
                 h.assertTrue(db.loadPlayer(player) == null, "a reset deletes the row");
-                h.assertTrue(db.latestNoticeId() == 1 && db.fetchNoticesAfter(0, 10).get(0).kind().equals(Storage.KIND_PROGRESS), "and tells the other servers: " + db.fetchNoticesAfter(0, 10));
+                // alpha's notice is its write for a player not there (AU-2g); beta's is the reset
+                List<StorageBackend.Notice> fromBeta = db.fetchNoticesAfter(0, 10).stream().filter(x -> x.source().equals("beta")).toList();
+                h.assertTrue(fromBeta.size() == 1 && fromBeta.get(0).kind().equals(Storage.KIND_PROGRESS), "and tells the other servers: " + db.fetchNoticesAfter(0, 10));
             } finally {
                 beta.close();
             }
         } finally {
             alpha.close();
             ledger.reset(player);
+        }
+        h.succeed();
+    }
+
+    @GameTest(template = EMPTY, batch = "storage-away")
+    public void a_rank_up_reached_elsewhere_reaches_the_player_where_they_play(GameTestHelper h) throws Exception {
+        MinecraftServer server = h.getLevel().getServer();
+        SettingsLedger settings = SettingsLedger.get(server);
+        Settings before = settings.settings();
+        settings.set(before.toBuilder().announce(Settings.Announce.NETWORK).build());
+        MemoryBackend db = new MemoryBackend();
+        ProgressLedger ledger = ProgressLedger.get(server);
+        net.minecraft.server.level.ServerPlayer player = TestPlayers.mockServerPlayer(h);
+        UUID id = player.getUUID(), away = UUID.randomUUID();
+        String name = player.getGameProfile().getName();
+        h.getLevel().addNewPlayer(player);
+        Storage beta = Storage.startWith(server, db, "beta");
+        beta.drain();
+        List<net.minecraft.network.chat.Component> heard = new CopyOnWriteArrayList<>();
+        java.util.function.Consumer<net.minecraft.network.chat.Component> listener = c -> {
+            if (c.toString().contains(name)) {
+                heard.add(c);
+            }
+        };
+        com.mrgregles.bsp_rankup.rank.RankEngine.onAnnounce(listener);
+        long now = System.currentTimeMillis();
+        try {
+            // alpha ranked the player (and gave an award) while they play here on beta (AU-2g)
+            db.publish(new StorageBackend.Notice(0, UUID.randomUUID().toString(), now, "alpha", Storage.KIND_AWAY_RANKUP, id + "\t" + name + "\tCaptain\tPvp"));
+            db.publish(new StorageBackend.Notice(0, UUID.randomUUID().toString(), now, "alpha", Storage.KIND_AWAY_AWARD, id + "\t" + name + "\tHeadhunter"));
+            db.publish(new StorageBackend.Notice(0, UUID.randomUUID().toString(), now, "alpha", Storage.KIND_AWAY_RANKUP, away + "\tSomeone\tCaptain"));
+            beta.pollNotices();
+            beta.drain();
+            h.assertTrue(heard.size() == 2 && heard.get(0).toString().contains("Captain") && heard.get(1).toString().contains("Headhunter"),
+                    "announced here, where the player plays: " + heard);
+            List<StorageBackend.Notice> passed = db.fetchNoticesAfter(0, 50).stream().filter(n -> n.source().equals("beta")).toList();
+            h.assertTrue(passed.size() == 2 && passed.get(0).kind().equals(Storage.KIND_RANKUP) && passed.get(0).payload().equals(name + "\tCaptain\tPvp")
+                    && passed.get(1).kind().equals(Storage.KIND_AWARD) && passed.get(1).payload().equals(name + "\tHeadhunter"),
+                    "and passed on to the network (announcements network-wide), nothing for a player who is nowhere: " + passed);
+
+            // alpha wrote the row with a reward kept for them; its notice makes beta read the row again and give it now
+            db.setRank(id, "ru_st_away", now);
+            db.setPending(id, com.mrgregles.bsp_rankup.storage.PendingJson.toJson(List.of(Reward.coins(9))));
+            db.publish(new StorageBackend.Notice(0, UUID.randomUUID().toString(), now, "alpha", Storage.KIND_PROGRESS, id.toString()));
+            beta.pollNotices();
+            beta.drain();
+            Progress p = ledger.progress(id);
+            h.assertTrue("ru_st_away".equals(p.rank()), "the row read again: beta's copy has alpha's rank, so it never ranks them again from an old one: " + p);
+            h.assertTrue(p.pending().isEmpty(), "the kept reward given at once, not at the next login: " + p.pending());
+        } finally {
+            com.mrgregles.bsp_rankup.rank.RankEngine.removeAnnounceListener(listener);
+            beta.close();
+            player.discard();
+            ledger.reset(id);
+            settings.set(before);
         }
         h.succeed();
     }
@@ -121,7 +178,7 @@ public class StorageGameTests {
             StorageBackend.PlayerRow row = db.loadPlayer(player);
             h.assertTrue(db.count(player, "playtime") == 7 && row != null && row.bonus() == 2 && "ru_out".equals(row.rank()) && row.rankedAt() == 9L, "no minute, point or rank lost: " + row);
             h.assertTrue(db.count(wiped, "player_kills") == 1, "a reset in the outage deletes the old row before the newer kill: " + db.count(wiped, "player_kills"));
-            List<StorageBackend.Notice> notices = db.fetchNoticesAfter(0, 10).stream().filter(n -> n.kind().equals(Storage.KIND_PROGRESS)).toList();
+            List<StorageBackend.Notice> notices = db.fetchNoticesAfter(0, 10).stream().filter(n -> n.kind().equals(Storage.KIND_PROGRESS) && n.payload().equals(wiped.toString())).toList();
             h.assertTrue(notices.size() == 1 && notices.get(0).payload().equals(wiped.toString()), "the reset is announced once, after its delete is written: " + notices);
         } finally {
             s.close();

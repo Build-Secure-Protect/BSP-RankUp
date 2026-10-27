@@ -12,6 +12,8 @@ import com.mrgregles.bsp_rankup.progress.Progress;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
+import com.mrgregles.bsp_rankup.settings.Award;
+import com.mrgregles.bsp_rankup.settings.Ladder;
 import com.mrgregles.bsp_rankup.settings.Reward;
 import com.mrgregles.bsp_rankup.settings.Settings;
 import com.mrgregles.bsp_rankup.settings.SettingsLedger;
@@ -363,8 +365,18 @@ public final class AdminSync {
         for (Signal s : Signal.values()) {
             counts.put(s.key(), p.count(s));
         }
+        List<AdminViewPacket.LadderLine> ladders = new ArrayList<>();
+        for (Ladder l : settings.ladders()) {
+            String on = RankEngine.rankOn(settings, l, p);
+            ladders.add(new AdminViewPacket.LadderLine(l.name(), on == null ? "" : on, RankEngine.points(settings, l, p), RankEngine.seasonPoints(settings, l, p)));
+        }
+        List<AdminViewPacket.AwardLine> awards = new ArrayList<>();
+        for (Award a : settings.awards()) {
+            long have = a.seasonal() ? RankEngine.seasonPoints(settings, a, p) : RankEngine.points(settings, a, p);
+            awards.add(new AdminViewPacket.AwardLine(a.group(), have, p.hasAward(a.group())));
+        }
         return new AdminViewPacket.PlayerDetail(player, Players.name(server, player), counts, p.bonus(), p.rank() == null ? "" : p.rank(), p.rankedAtMs(),
-                p.pending().size(), RankEngine.points(settings, p), RankEngine.seasonPoints(settings, p));
+                p.pending().size(), RankEngine.points(settings, p), RankEngine.seasonPoints(settings, p), Players.isOnline(server, player), ladders, awards);
     }
 
     /**

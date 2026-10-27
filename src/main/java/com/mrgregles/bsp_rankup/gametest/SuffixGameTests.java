@@ -51,6 +51,11 @@ public class SuffixGameTests {
                 new Source("group:copy", "&8[&3Warden&8]", "copy", null, "")));
         h.assertTrue(known.size() == 4 && known.stream().filter(s -> s.text().equals("&8[&3Warden&8]")).findFirst().get().key().equals("title:warden"),
                 "one piece per text, the first listed (a title before a group): " + known);
+        List<Source> imaged = PrefixDisplay.longestFirst(List.of(
+                new Source("title:warden", "&8[&3Warden&8]", "Warden", null, ""),
+                new Source("group:warden", "&8[&3Warden&8]", "warden", ADMIN, "")));
+        h.assertTrue(imaged.size() == 1 && imaged.get(0).key().equals("group:warden"),
+                "the same text: a title without an image gives way to the group's prefix that has one (AU-2c): " + imaged);
 
         List<Piece> pieces = PrefixDisplay.split("&8[&c&lAdmin&8] &8[&c&lLegend&8] ", known);
         h.assertTrue(pieces.size() == 4 && "group:admin".equals(key(pieces.get(0))) && pieces.get(1).text().equals(" ") && key(pieces.get(1)) == null
@@ -121,6 +126,12 @@ public class SuffixGameTests {
             h.assertTrue(AdminSync.apply(admin, AdminActionPacket.of(AdminActionPacket.PREFIX_NOTE, "suffix:" + group, "From the screen")).ok()
                     && ledger.settings().prefixNote("suffix:" + group).equals("From the screen"), "the screen's note action sets it");
             admin.discard();
+
+            // the group goes; its note can still be taken away (AU-2a), though a new one is refused
+            lp.getGroupManager().deleteGroup(lp.getGroupManager().getGroup(group)).join();
+            h.assertFalse(AdminEdits.prefixNote(server, "suffix:" + group, "x").ok(), "no new note for a group that is gone");
+            h.assertTrue(AdminEdits.prefixNote(server, "suffix:" + group, "").ok() && ledger.settings().prefixNote("suffix:" + group).isEmpty(),
+                    "a note whose group is gone is taken away");
         } finally {
             ledger.set(before);
             var g = lp.getGroupManager().getGroup(group);
@@ -180,7 +191,80 @@ public class SuffixGameTests {
         h.succeed();
     }
 
+    @GameTest(template = EMPTY, batch = "suffix-cache")
+    public void the_split_cache_stays_small(GameTestHelper h) {
+        MinecraftServer server = h.getLevel().getServer();
+        for (int i = 0; i < PrefixDisplay.MAX_SPLITS + 50; i++) {
+            PrefixDisplay.pieces(server, "&7[Tag " + i + "] ", false);
+            h.assertTrue(PrefixDisplay.splitsKept() <= PrefixDisplay.MAX_SPLITS, "never more than " + PrefixDisplay.MAX_SPLITS + " splits kept (AU-2c): " + PrefixDisplay.splitsKept());
+        }
+        h.assertTrue(PrefixDisplay.pieces(server, "&7[Tag 1] ", false).get(0).text().equals("&7[Tag 1] "), "a split made again after the cache restarted");
+        h.succeed();
+    }
+
+    @GameTest(template = EMPTY, batch = "suffix-redraw", timeoutTicks = 400)
+    public void a_group_change_read_elsewhere_still_redraws_names(GameTestHelper h) {
+        if (!LuckPermsBridge.isPresent()) {
+            h.succeed();
+            return;
+        }
+        MinecraftServer server = h.getLevel().getServer();
+        SettingsLedger ledger = SettingsLedger.get(server);
+        Settings before = ledger.settings();
+        String plain = "ru_sf_rd_plain", pictured = "ru_sf_rd_pictured";
+        ServerPlayer player = TestPlayers.mockServerPlayer(h);
+        UUID id = player.getUUID();
+        net.luckperms.api.LuckPerms lp = net.luckperms.api.LuckPermsProvider.get();
+        try {
+            var a = lp.getGroupManager().createAndLoadGroup(plain).join();
+            a.data().add(net.luckperms.api.node.types.PrefixNode.builder("&7[RD]", 55).build());
+            lp.getGroupManager().saveGroup(a).join();
+            lp.getGroupManager().createAndLoadGroup(pictured).join();
+            ledger.update(b -> b.prefixImage(PrefixImage.groupKey(pictured), ADMIN));
+            h.assertTrue(LuckPermsBridge.addGroup(id, plain).join() == LuckPermsBridge.Added.ADDED, "the player joins the group without an image");
+            PrefixDisplay.forgetGroups();
+            PrefixDisplay.refresh(player);
+            h.assertTrue(!hasImage(player.getDisplayName()) && player.getDisplayName().getString().startsWith("[RD] "), "drawn as text first: " + player.getDisplayName().getString());
+
+            // the other group takes the same prefix text; the admin screen reads the groups before the name check does
+            var b = lp.getGroupManager().getGroup(pictured);
+            b.data().add(net.luckperms.api.node.types.PrefixNode.builder("&7[RD]", 55).build());
+            lp.getGroupManager().saveGroup(b).join();
+            PrefixDisplay.forgetGroups();
+            h.assertTrue(PrefixDisplay.groupPrefixes().containsKey(pictured), "the screen's read saw the new prefix");
+            PrefixDisplay.checkNames(List.of(player));
+            h.assertTrue(hasImage(player.getDisplayName()), "the name check still draws the name again, now with the image (AU-2c): " + player.getDisplayName());
+        } finally {
+            ledger.set(before);
+            PrefixDisplay.forgetGroups();
+            var user = lp.getUserManager().getUser(id);
+            if (user != null) {
+                lp.getUserManager().cleanupUser(user);
+            }
+            for (String name : List.of(plain, pictured)) {
+                var g = lp.getGroupManager().getGroup(name);
+                if (g != null) {
+                    lp.getGroupManager().deleteGroup(g).join();
+                }
+            }
+            player.discard();
+        }
+        h.succeed();
+    }
+
     // ------------------------------------------------------------------ helpers
+
+    private static boolean hasImage(Component c) {
+        if (imageKey(c) != null) {
+            return true;
+        }
+        for (Component sib : c.getSiblings()) {
+            if (hasImage(sib)) {
+                return true;
+            }
+        }
+        return c.getContents() instanceof TranslatableContents t && java.util.Arrays.stream(t.getArgs()).anyMatch(arg -> arg instanceof Component ac && hasImage(ac));
+    }
 
     private static String key(Piece p) {
         return p.source() == null ? null : p.source().key();

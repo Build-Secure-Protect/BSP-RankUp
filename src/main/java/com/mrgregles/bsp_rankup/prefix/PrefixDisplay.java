@@ -22,11 +22,11 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The prefix before a player's name and the suffix after it, in chat and the tab list (owner decisions D55 to D73,
@@ -67,17 +67,28 @@ public final class PrefixDisplay {
     public record Piece(String text, @Nullable Source source) {
     }
 
+    /** The most split texts kept between index builds; past it the cache starts again (distinct prefixes are few). */
+    public static final int MAX_SPLITS = 1024;
+
+    /**
+     * The lookups built from one settings and one read of LuckPerms' groups, swapped whole so a reader never mixes
+     * an old order with a new cache: whole prefix texts to their source, the known prefixes and suffixes the longest
+     * first (the split tries them in this order), and the splits made so far.
+     */
+    private record Index(Settings settings, int groupsVersion, Map<String, Source> byText, List<Source> prefixOrder, List<Source> suffixOrder,
+                         Map<String, List<Piece>> splits) {
+    }
+
     @Nullable
-    private static Settings indexedFor;
-    private static long groupsReadAt;
-    private static Map<String, LuckPermsBridge.Prefix> groupPrefixes = Map.of();
-    private static Map<String, LuckPermsBridge.Prefix> groupSuffixes = Map.of();
-    private static Map<String, Source> byText = Map.of();
-    /** Known prefixes and suffixes, the longest text first (the split tries them in this order). */
-    private static List<Source> prefixOrder = List.of(), suffixOrder = List.of();
-    private static final Map<String, List<Piece>> SPLITS = new HashMap<>();
+    private static volatile Index index;
+    private static volatile long groupsReadAt;
+    private static volatile Map<String, LuckPermsBridge.Prefix> groupPrefixes = Map.of();
+    private static volatile Map<String, LuckPermsBridge.Prefix> groupSuffixes = Map.of();
+    /** Counts the changes seen in LuckPerms' groups, whoever read them (the tick redraws names when it moved). */
+    private static volatile int groupsVersion;
+    private static int groupsDrawn;
     /** What each online player was last drawn with: prefix, suffix and their team, see {@link #drawnWith}. */
-    private static final Map<UUID, String> SHOWN = new HashMap<>();
+    private static final Map<UUID, String> SHOWN = new ConcurrentHashMap<>();
     private static int ticks;
 
     private PrefixDisplay() {
@@ -143,7 +154,7 @@ public final class PrefixDisplay {
         return groupSuffixes;
     }
 
-    private static void readGroups() {
+    private static synchronized void readGroups() {
         long now = System.currentTimeMillis();
         if (now - groupsReadAt >= GROUPS_EVERY_MS) {
             groupsReadAt = now;
@@ -151,41 +162,49 @@ public final class PrefixDisplay {
             if (!prefixes.equals(groupPrefixes) || !suffixes.equals(groupSuffixes)) {
                 groupPrefixes = prefixes;
                 groupSuffixes = suffixes;
-                indexedFor = null;
+                groupsVersion++;
             }
         }
     }
 
-    /** Builds the lookups again when the settings or LuckPerms' groups changed. */
-    private static void index(MinecraftServer server) {
+    /** The lookups, built again when the settings or LuckPerms' groups changed. */
+    private static Index index(MinecraftServer server) {
         readGroups();
         Settings settings = SettingsLedger.settings(server);
-        if (settings == indexedFor) {
-            return;
+        Index now = index;
+        if (now != null && now.settings() == settings && now.groupsVersion() == groupsVersion) {
+            return now;
         }
-        Map<String, Source> index = new LinkedHashMap<>();
+        int version = groupsVersion;
+        Map<String, Source> byText = new LinkedHashMap<>();
         List<Source> prefixes = new ArrayList<>(), suffixes = new ArrayList<>();
         for (Source s : sources(settings, groupPrefixes, groupSuffixes)) {
             if (s.suffix()) {
                 suffixes.add(s);
             } else {
-                index.putIfAbsent(s.text(), s);
+                byText.merge(s.text(), s, PrefixDisplay::preferred);
                 prefixes.add(s);
             }
         }
-        byText = index;
-        prefixOrder = longestFirst(prefixes);
-        suffixOrder = longestFirst(suffixes);
-        SPLITS.clear();
-        indexedFor = settings;
+        now = new Index(settings, version, byText, longestFirst(prefixes), longestFirst(suffixes), new ConcurrentHashMap<>());
+        index = now;
+        return now;
     }
 
-    /** Known pieces with text, one per text (the first listed: titles before groups), the longest first. */
+    /**
+     * Of two pieces with the same text, the one drawn: the first listed (titles before groups, D95) unless only the
+     * later one has an image, so a title without an image never hides the image its group's prefix has.
+     */
+    private static Source preferred(Source first, Source later) {
+        return first.image() == null && later.image() != null ? later : first;
+    }
+
+    /** Known pieces with text, one per text (see {@link #preferred}), the longest first. */
     public static List<Source> longestFirst(List<Source> sources) {
         Map<String, Source> unique = new LinkedHashMap<>();
         for (Source s : sources) {
             if (!Legacy.strip(s.text()).isBlank()) {
-                unique.putIfAbsent(s.text(), s);
+                unique.merge(s.text(), s, PrefixDisplay::preferred);
             }
         }
         List<Source> out = new ArrayList<>(unique.values());
@@ -196,8 +215,7 @@ public final class PrefixDisplay {
     /** The source for a whole prefix text, titles before group prefixes; null for a prefix RankUp does not list. */
     @Nullable
     public static Source sourceOf(MinecraftServer server, String text) {
-        index(server);
-        return byText.get(text);
+        return index(server).byText().get(text);
     }
 
     /**
@@ -235,8 +253,17 @@ public final class PrefixDisplay {
 
     /** The runs of a player's formatted prefix or suffix on this server, kept until the settings or groups change. */
     public static List<Piece> pieces(MinecraftServer server, String text, boolean suffix) {
-        index(server);
-        return SPLITS.computeIfAbsent((suffix ? "s" : "p") + text, k -> split(text, suffix ? suffixOrder : prefixOrder));
+        Index at = index(server);
+        if (at.splits().size() >= MAX_SPLITS) {
+            at.splits().clear();
+        }
+        return at.splits().computeIfAbsent((suffix ? "s" : "p") + text, k -> split(text, suffix ? at.suffixOrder() : at.prefixOrder()));
+    }
+
+    /** How many split texts are kept now (for tests). */
+    public static int splitsKept() {
+        Index at = index;
+        return at == null ? 0 : at.splits().size();
     }
 
     /** The image id drawn for a prefix text, or empty (the player screen's title chip, D61). */
@@ -386,11 +413,17 @@ public final class PrefixDisplay {
         if (event.phase != TickEvent.Phase.END || ++ticks % CHECK_TICKS != 0) {
             return;
         }
-        MinecraftServer server = event.getServer();
-        Map<String, LuckPermsBridge.Prefix> groupsBefore = groupPrefixes, suffixesBefore = groupSuffixes;
+        checkNames(event.getServer().getPlayerList().getPlayers());
+    }
+
+    /** The five-second look at the players' names: those whose prefix, suffix or team changed, or all when LuckPerms' groups did, are drawn again. */
+    public static void checkNames(List<ServerPlayer> players) {
         readGroups();
-        boolean changed = groupsBefore != groupPrefixes || suffixesBefore != groupSuffixes;
-        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+        // a change read anywhere (the admin screen, a command) counts, not only the one this look read
+        int version = groupsVersion;
+        boolean changed = version != groupsDrawn;
+        groupsDrawn = version;
+        for (ServerPlayer p : players) {
             String text = shownText(p), suffix = shownSuffix(p);
             String now = drawnWith(p, text, suffix);
             String was = SHOWN.get(p.getUUID());

@@ -48,6 +48,11 @@ import java.util.function.Consumer;
  */
 public final class Storage {
     public static final String KIND_SETTINGS = "settings", KIND_RANKUP = "rankup", KIND_PROGRESS = "progress", KIND_AWARD = "award";
+    /**
+     * A rank-up or award reached here for a player who is not here (AU-2g): the server they play on tells them and
+     * announces it. Payload {@code uuid name rank [ladder]} or {@code uuid name award}, tab-separated.
+     */
+    public static final String KIND_AWAY_RANKUP = "away-rankup", KIND_AWAY_AWARD = "away-award";
     private static final int NOTICE_BATCH = 100, SEEN_LIMIT = 20_000, NOTICE_OVERLAP = 20;
     private static final long FLUSH_MS = 5000;
     /** Unsent changes are written this often; after a failure the wait doubles up to {@link #BACKOFF_MAX_MS}. */
@@ -406,9 +411,17 @@ public final class Storage {
             backend.write(writes);
             backoffMs = 0;
             nextWriteMs = System.currentTimeMillis() + WRITE_EVERY_MS;
-            List<UUID> reset = writes.stream().filter(StorageBackend.PlayerWrite::delete).map(StorageBackend.PlayerWrite::player).toList();
-            if (!reset.isEmpty()) {
-                server.execute(() -> reset.forEach(player -> publish(KIND_PROGRESS, player.toString())));
+            // a reset, or a rank, reward or bonus written for a player who is not here (an admin's points, a totem of theirs
+            // lost here): the server they play on reads their row again, so it gives the waiting rewards and never ranks
+            // them a second time from an old copy (AU-2g); counts are deltas and need no notice
+            List<StorageBackend.PlayerWrite> told = writes.stream().filter(w -> w.delete() || w.rank() != null || w.pending() != null
+                    || w.rewarded() != null || w.ladders() != null || w.bonus() != 0).toList();
+            if (!told.isEmpty()) {
+                server.execute(() -> told.forEach(w -> {
+                    if (w.delete() || !Players.isOnline(server, w.player())) {
+                        publish(KIND_PROGRESS, w.player().toString());
+                    }
+                }));
             }
         } catch (Exception e) {
             synchronized (unsent) {
@@ -514,24 +527,56 @@ public final class Storage {
         });
     }
 
-    /** An award reached here is announced on the other servers too when announcements are network-wide (D53); never for a player away (D86). */
+    /**
+     * An award reached here is announced on the other servers too when announcements are network-wide (D53). One
+     * reached for a player who is not here goes to the server they play on, which tells them and announces it (D86, AU-2g).
+     */
     private void onAward(RankEngine.AwardReached reached) {
+        if (reached.server() != server) {
+            return;
+        }
         Settings settings = SettingsLedger.settings(server);
-        if (reached.server() == server && settings.announce() == Settings.Announce.NETWORK && RankEngine.announces(server, settings, reached.player())) {
-            publish(KIND_AWARD, Players.name(server, reached.player()) + "\t" + reached.award().displayName());
+        String name = Players.name(server, reached.player());
+        if (!Players.isOnline(server, reached.player())) {
+            publish(KIND_AWAY_AWARD, reached.player() + "\t" + name + "\t" + reached.award().displayName());
+        } else if (settings.announce() == Settings.Announce.NETWORK && RankEngine.announces(server, settings, reached.player())) {
+            publish(KIND_AWARD, name + "\t" + reached.award().displayName());
         }
     }
 
     private void onRankUp(RankEngine.RankUp up) {
+        if (up.server() != server || up.from() == null && up.ladder().indexOf(up.to().group()) == 0) {
+            return; // the starting rung: no fanfare
+        }
         Settings settings = SettingsLedger.settings(server);
-        if (up.server() != server || settings.announce() != Settings.Announce.NETWORK || !RankEngine.announces(server, settings, up.player())) {
+        // a third part names the ladder when there are several (D52)
+        String ladder = settings.ladders().size() > 1 ? "\t" + RankEngine.label(up.ladder()) : "";
+        String name = Players.name(server, up.player());
+        if (!Players.isOnline(server, up.player())) {
+            publish(KIND_AWAY_RANKUP, up.player() + "\t" + name + "\t" + up.to().displayName() + ladder);
+        } else if (settings.announce() == Settings.Announce.NETWORK && RankEngine.announces(server, settings, up.player())) {
+            publish(KIND_RANKUP, name + "\t" + up.to().displayName() + ladder);
+        }
+    }
+
+    /** A rank-up or award reached on another server for a player who plays here: their message and the announcement, here and, network-wide, everywhere. */
+    private void onReachedAway(StorageBackend.Notice n, boolean award) {
+        String[] parts = n.payload().split("\t", award ? 3 : 4);
+        UUID player;
+        try {
+            player = UUID.fromString(parts[0]);
+        } catch (IllegalArgumentException e) {
             return;
         }
-        boolean quiet = up.from() == null && up.ladder().indexOf(up.to().group()) == 0;
-        if (!quiet) {
-            // a third part names the ladder when there are several (D52)
-            String ladder = settings.ladders().size() > 1 ? "\t" + RankEngine.label(up.ladder()) : "";
-            publish(KIND_RANKUP, Players.name(server, up.player()) + "\t" + up.to().displayName() + ladder);
+        if (parts.length < 3) {
+            return;
+        }
+        String ladder = parts.length == 4 ? parts[3] : "";
+        boolean here = award ? RankEngine.awardReachedElsewhere(server, player, parts[2]) : RankEngine.reachedElsewhere(server, player, parts[2], ladder);
+        Settings settings = SettingsLedger.settings(server);
+        if (here && settings.announce() == Settings.Announce.NETWORK) {
+            String name = Players.name(server, player);
+            publish(award ? KIND_AWARD : KIND_RANKUP, name + "\t" + parts[2] + (ladder.isEmpty() ? "" : "\t" + ladder));
         }
     }
 
@@ -785,6 +830,8 @@ public final class Storage {
                             : Component.translatable("message.bsp_rankup.announce", parts[0], parts[1]), false);
                 }
             }
+            case KIND_AWAY_RANKUP -> onReachedAway(n, false);
+            case KIND_AWAY_AWARD -> onReachedAway(n, true);
             case KIND_PROGRESS -> {
                 try {
                     UUID player = UUID.fromString(n.payload());
