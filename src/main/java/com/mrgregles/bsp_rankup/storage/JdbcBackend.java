@@ -41,7 +41,7 @@ public final class JdbcBackend implements StorageBackend {
     private static final long TRUST_MS = 30_000L;
 
     private final String url, user, password, prefix;
-    private final String addCountSql, addBonusSql, setRankSql, setPendingSql, setSeasonSql, setRewardedSql;
+    private final String addCountSql, addBonusSql, setRankSql, setPendingSql, setSeasonSql, setRewardedSql, setLaddersSql;
     private Connection connection;
     private long lastUsedMs, failedAtMs;
 
@@ -56,6 +56,7 @@ public final class JdbcBackend implements StorageBackend {
         this.setPendingSql = "INSERT INTO " + prefix + "players (uuid, pending, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE pending = VALUES(pending), updated_at = VALUES(updated_at)";
         this.setSeasonSql = "INSERT INTO " + prefix + "players (uuid, season, season_base, score_peak, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE season = VALUES(season), season_base = VALUES(season_base), score_peak = VALUES(score_peak), updated_at = VALUES(updated_at)";
         this.setRewardedSql = "INSERT INTO " + prefix + "players (uuid, rewarded, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE rewarded = VALUES(rewarded), updated_at = VALUES(updated_at)";
+        this.setLaddersSql = "INSERT INTO " + prefix + "players (uuid, ladder_ranks, season_bases, awards, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ladder_ranks = VALUES(ladder_ranks), season_bases = VALUES(season_bases), awards = VALUES(awards), updated_at = VALUES(updated_at)";
     }
 
     /**
@@ -132,7 +133,7 @@ public final class JdbcBackend implements StorageBackend {
     public void init() throws SQLException {
         try (Statement st = conn().createStatement()) {
             st.executeUpdate("CREATE TABLE IF NOT EXISTS " + prefix + "counts (uuid CHAR(36) NOT NULL, signal_key VARCHAR(32) NOT NULL, count BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (uuid, signal_key))");
-            st.executeUpdate("CREATE TABLE IF NOT EXISTS " + prefix + "players (uuid CHAR(36) NOT NULL PRIMARY KEY, bonus BIGINT NOT NULL DEFAULT 0, rank_group VARCHAR(64) NULL, ranked_at BIGINT NOT NULL DEFAULT 0, pending MEDIUMTEXT NULL, season INT NOT NULL DEFAULT 0, season_base BIGINT NOT NULL DEFAULT 0, score_peak BIGINT NOT NULL DEFAULT 0, rewarded TEXT NULL, updated_at BIGINT NOT NULL DEFAULT 0)");
+            st.executeUpdate("CREATE TABLE IF NOT EXISTS " + prefix + "players (uuid CHAR(36) NOT NULL PRIMARY KEY, bonus BIGINT NOT NULL DEFAULT 0, rank_group VARCHAR(64) NULL, ranked_at BIGINT NOT NULL DEFAULT 0, pending MEDIUMTEXT NULL, season INT NOT NULL DEFAULT 0, season_base BIGINT NOT NULL DEFAULT 0, score_peak BIGINT NOT NULL DEFAULT 0, rewarded TEXT NULL, ladder_ranks TEXT NULL, season_bases TEXT NULL, awards TEXT NULL, updated_at BIGINT NOT NULL DEFAULT 0)");
             // tables made before the score signal (0.2.2 and older) get its column
             boolean hasPeak;
             try (ResultSet rs = st.executeQuery("SHOW COLUMNS FROM " + prefix + "players LIKE 'score_peak'")) {
@@ -140,6 +141,16 @@ public final class JdbcBackend implements StorageBackend {
             }
             if (!hasPeak) {
                 st.executeUpdate("ALTER TABLE " + prefix + "players ADD COLUMN score_peak BIGINT NOT NULL DEFAULT 0 AFTER season_base");
+            }
+            // and before several ladders (0.2.2 and older) the ladders' columns
+            for (String column : new String[]{"ladder_ranks", "season_bases", "awards"}) {
+                boolean has;
+                try (ResultSet rs = st.executeQuery("SHOW COLUMNS FROM " + prefix + "players LIKE '" + column + "'")) {
+                    has = rs.next();
+                }
+                if (!has) {
+                    st.executeUpdate("ALTER TABLE " + prefix + "players ADD COLUMN " + column + " TEXT NULL AFTER rewarded");
+                }
             }
             st.executeUpdate("CREATE TABLE IF NOT EXISTS " + prefix + "settings (id INT NOT NULL PRIMARY KEY, data MEDIUMTEXT NOT NULL, version BIGINT NOT NULL)");
             st.executeUpdate("CREATE TABLE IF NOT EXISTS " + prefix + "notices (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, uid VARCHAR(36) NOT NULL, created_at BIGINT NOT NULL, source VARCHAR(64) NOT NULL, kind VARCHAR(32) NOT NULL, payload TEXT)");
@@ -283,6 +294,16 @@ public final class JdbcBackend implements StorageBackend {
                     ps.addBatch();
                 }
             });
+            batch(c, setLaddersSql, writes, (ps, w) -> {
+                if (w.ladders() != null) {
+                    ps.setString(1, w.player().toString());
+                    ps.setString(2, w.ladders().ranks());
+                    ps.setString(3, w.ladders().bases());
+                    ps.setString(4, w.ladders().awards());
+                    ps.setLong(5, now);
+                    ps.addBatch();
+                }
+            });
             c.commit();
         } catch (SQLException | RuntimeException e) {
             try {
@@ -319,6 +340,18 @@ public final class JdbcBackend implements StorageBackend {
     }
 
     @Override
+    public void setLadders(UUID player, LadderValue value) throws SQLException {
+        try (PreparedStatement ps = conn().prepareStatement(setLaddersSql)) {
+            ps.setString(1, player.toString());
+            ps.setString(2, value.ranks());
+            ps.setString(3, value.bases());
+            ps.setString(4, value.awards());
+            ps.setLong(5, System.currentTimeMillis());
+            ps.executeUpdate();
+        }
+    }
+
+    @Override
     public void deletePlayer(UUID player) throws SQLException {
         for (String table : new String[]{"counts", "players"}) {
             try (PreparedStatement ps = conn().prepareStatement("DELETE FROM " + prefix + table + " WHERE uuid = ?")) {
@@ -340,15 +373,21 @@ public final class JdbcBackend implements StorageBackend {
                 }
             }
         }
-        try (PreparedStatement ps = conn().prepareStatement("SELECT bonus, rank_group, ranked_at, pending, season, season_base, score_peak, rewarded FROM " + prefix + "players WHERE uuid = ?")) {
+        try (PreparedStatement ps = conn().prepareStatement("SELECT bonus, rank_group, ranked_at, pending, season, season_base, score_peak, rewarded, ladder_ranks, season_bases, awards FROM " + prefix + "players WHERE uuid = ?")) {
             ps.setString(1, player.toString());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return new PlayerRow(player, counts, rs.getLong(1), rs.getString(2), rs.getLong(3), rs.getString(4), rs.getInt(5), rs.getLong(6), rs.getLong(7), rs.getString(8));
+                    return new PlayerRow(player, counts, rs.getLong(1), rs.getString(2), rs.getLong(3), rs.getString(4), rs.getInt(5), rs.getLong(6), rs.getLong(7), rs.getString(8),
+                            rs.getString(9) == null && rs.getString(10) == null && rs.getString(11) == null ? null
+                                    : new LadderValue(nz(rs.getString(9)), nz(rs.getString(10)), nz(rs.getString(11))));
                 }
             }
         }
-        return counts.isEmpty() ? null : new PlayerRow(player, counts, 0, null, 0, null, 0, 0, 0, null);
+        return counts.isEmpty() ? null : new PlayerRow(player, counts, 0, null, 0, null, 0, 0, 0, null, null);
+    }
+
+    private static String nz(@Nullable String s) {
+        return s == null ? "" : s;
     }
 
     @Override

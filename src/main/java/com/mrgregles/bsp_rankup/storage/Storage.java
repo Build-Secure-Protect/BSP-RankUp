@@ -47,7 +47,7 @@ import java.util.function.Consumer;
  * (the default) nothing here runs and the local ledgers are the truth.
  */
 public final class Storage {
-    public static final String KIND_SETTINGS = "settings", KIND_RANKUP = "rankup", KIND_PROGRESS = "progress";
+    public static final String KIND_SETTINGS = "settings", KIND_RANKUP = "rankup", KIND_PROGRESS = "progress", KIND_AWARD = "award";
     private static final int NOTICE_BATCH = 100, SEEN_LIMIT = 20_000;
     private static final long FLUSH_MS = 5000;
     /** Unsent changes are written this often; after a failure the wait doubles up to {@link #BACKOFF_MAX_MS}. */
@@ -92,6 +92,7 @@ public final class Storage {
     private final Consumer<ProgressLedger.Change> changeListener = this::onChange;
     private final Consumer<Settings> settingsListener = this::onSettingsChanged;
     private final Consumer<RankEngine.RankUp> rankUpListener = this::onRankUp;
+    private final Consumer<RankEngine.AwardReached> awardListener = this::onAward;
     private volatile int delivered;
     /** Each player's changes not yet written, merged; guarded by itself, as is {@link #reading}. */
     private final Map<UUID, Unsent> unsent = new HashMap<>();
@@ -110,6 +111,7 @@ public final class Storage {
         ProgressLedger.onChange(changeListener);
         SettingsLedger.onChange(settingsListener);
         RankEngine.onRankUp(rankUpListener);
+        RankEngine.onAward(awardListener);
         if (threaded) {
             worker = new Thread(this::loop, "bsp-rankup-storage");
             worker.setDaemon(true);
@@ -210,6 +212,7 @@ public final class Storage {
         ProgressLedger.removeListener(changeListener);
         SettingsLedger.removeListener(settingsListener);
         RankEngine.removeListener(rankUpListener);
+        RankEngine.removeAwardListener(awardListener);
         RedisLink r = redis;
         if (r != null) {
             r.close();
@@ -336,7 +339,15 @@ public final class Storage {
             }
             case RANK -> {
                 StorageBackend.RankValue rank = new StorageBackend.RankValue(c.progress().rank(), c.progress().rankedAtMs());
-                record(player, u -> u.rank = rank);
+                StorageBackend.LadderValue ladders = StorageBackend.LadderValue.of(c.progress());
+                record(player, u -> {
+                    u.rank = rank;
+                    u.ladders = ladders;
+                });
+            }
+            case AWARD -> {
+                StorageBackend.LadderValue ladders = StorageBackend.LadderValue.of(c.progress());
+                record(player, u -> u.ladders = ladders);
             }
             case PENDING -> {
                 StorageBackend.Text pending = new StorageBackend.Text(PendingJson.toJson(c.progress().pending()));
@@ -344,7 +355,11 @@ public final class Storage {
             }
             case SEASON -> {
                 StorageBackend.SeasonValue season = new StorageBackend.SeasonValue(c.progress().season(), c.progress().seasonBase(), c.progress().scorePeak());
-                record(player, u -> u.season = season);
+                StorageBackend.LadderValue ladders = StorageBackend.LadderValue.of(c.progress());
+                record(player, u -> {
+                    u.season = season;
+                    u.ladders = ladders;
+                });
             }
             case REWARDED -> {
                 StorageBackend.Text rewarded = new StorageBackend.Text(c.progress().rewarded().isEmpty() ? null : String.join(",", c.progress().rewarded()));
@@ -429,6 +444,8 @@ public final class Storage {
         StorageBackend.Text pending, rewarded;
         @Nullable
         StorageBackend.SeasonValue season;
+        @Nullable
+        StorageBackend.LadderValue ladders;
 
         /** The player was reset: everything before is dropped and the row is deleted first. */
         void reset() {
@@ -439,6 +456,7 @@ public final class Storage {
             pending = null;
             rewarded = null;
             season = null;
+            ladders = null;
         }
 
         /** Puts newer changes on top of these. */
@@ -460,6 +478,9 @@ public final class Storage {
             if (newer.rewarded != null) {
                 rewarded = newer.rewarded;
             }
+            if (newer.ladders != null) {
+                ladders = newer.ladders;
+            }
         }
 
         Unsent copy() {
@@ -475,7 +496,7 @@ public final class Storage {
                     deltas.put(key, n);
                 }
             });
-            return new StorageBackend.PlayerWrite(player, delete, deltas, bonus, rank, pending, season, rewarded);
+            return new StorageBackend.PlayerWrite(player, delete, deltas, bonus, rank, pending, season, rewarded, ladders);
         }
     }
 
@@ -490,13 +511,22 @@ public final class Storage {
         publish(KIND_SETTINGS, Long.toString(version));
     }
 
+    /** An award reached here is announced on the other servers too when announcements are network-wide (D53). */
+    private void onAward(RankEngine.AwardReached reached) {
+        if (reached.server() == server && SettingsLedger.settings(server).announce() == Settings.Announce.NETWORK) {
+            publish(KIND_AWARD, Players.name(server, reached.player()) + "\t" + reached.award().displayName());
+        }
+    }
+
     private void onRankUp(RankEngine.RankUp up) {
         if (up.server() != server || SettingsLedger.settings(server).announce() != Settings.Announce.NETWORK) {
             return;
         }
-        boolean quiet = up.from() == null && SettingsLedger.settings(server).indexOf(up.to().group()) == 0;
+        boolean quiet = up.from() == null && up.ladder().indexOf(up.to().group()) == 0;
         if (!quiet) {
-            publish(KIND_RANKUP, Players.name(server, up.player()) + "\t" + up.to().displayName());
+            // a third part names the ladder when there are several (D52)
+            String ladder = SettingsLedger.settings(server).ladders().size() > 1 ? "\t" + RankEngine.label(up.ladder()) : "";
+            publish(KIND_RANKUP, Players.name(server, up.player()) + "\t" + up.to().displayName() + ladder);
         }
     }
 
@@ -561,6 +591,7 @@ public final class Storage {
         int season = extra.season != null ? extra.season.season() : extra.delete ? 0 : row.season();
         long seasonBase = extra.season != null ? extra.season.seasonBase() : extra.delete ? 0 : row.seasonBase();
         long scorePeak = extra.season != null ? extra.season.scorePeak() : extra.delete ? 0 : row.scorePeak();
+        StorageBackend.LadderValue ladders = extra.ladders != null ? extra.ladders : extra.delete ? StorageBackend.LadderValue.NONE : row.ladders();
         String rewardedCsv = extra.rewarded != null ? extra.rewarded.text() : extra.delete ? null : row.rewarded();
         applying = true;
         try {
@@ -568,7 +599,8 @@ public final class Storage {
             if (rewardedCsv != null && !rewardedCsv.isBlank()) {
                 rewarded.addAll(List.of(rewardedCsv.split(",")));
             }
-            ProgressLedger.get(server).load(row.player(), counts, bonus, rank, rankedAt, PendingJson.fromJson(pending), season, seasonBase, scorePeak, rewarded);
+            ProgressLedger.get(server).load(row.player(), counts, bonus, rank, rankedAt, PendingJson.fromJson(pending), season, seasonBase, scorePeak, rewarded,
+                    ladders == null ? null : ladders.rankMap(), ladders == null ? null : ladders.baseMap(), ladders == null ? null : ladders.awardMap());
         } finally {
             applying = false;
         }
@@ -682,10 +714,18 @@ public final class Storage {
         delivered++;
         switch (n.kind()) {
             case KIND_SETTINGS -> loadSettingsFromShared();
-            case KIND_RANKUP -> {
+            case KIND_AWARD -> {
                 String[] parts = n.payload().split("\t", 2);
                 if (parts.length == 2 && SettingsLedger.settings(server).announce() == Settings.Announce.NETWORK) {
-                    server.getPlayerList().broadcastSystemMessage(Component.translatable("message.bsp_rankup.announce", parts[0], parts[1]), false);
+                    server.getPlayerList().broadcastSystemMessage(Component.translatable("message.bsp_rankup.award_announce", parts[0], parts[1]), false);
+                }
+            }
+            case KIND_RANKUP -> {
+                String[] parts = n.payload().split("\t", 3);
+                if (parts.length >= 2 && SettingsLedger.settings(server).announce() == Settings.Announce.NETWORK) {
+                    server.getPlayerList().broadcastSystemMessage(parts.length == 3
+                            ? Component.translatable("message.bsp_rankup.announce_on", parts[0], parts[1], parts[2])
+                            : Component.translatable("message.bsp_rankup.announce", parts[0], parts[1]), false);
                 }
             }
             case KIND_PROGRESS -> {

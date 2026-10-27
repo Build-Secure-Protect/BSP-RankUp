@@ -4,6 +4,7 @@ import com.mrgregles.bsp_rankup.BSPRankUp;
 import com.mrgregles.bsp_rankup.compat.BspCore;
 import com.mrgregles.bsp_rankup.compat.LuckPermsBridge;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
+import com.mrgregles.bsp_rankup.settings.Ladder;
 import com.mrgregles.bsp_rankup.settings.Rank;
 import com.mrgregles.bsp_rankup.settings.Reward;
 import com.mrgregles.bsp_rankup.settings.Settings;
@@ -33,17 +34,26 @@ public final class Rewards {
 
     /** Gives what can be given now, pends the rest, and tells the player what they got. Returns the rewards given now. */
     public static List<Reward> give(MinecraftServer server, UUID player, Rank rank, Settings settings) {
-        return give(server, player, rank.displayName(), rank.rewards(), settings);
+        Ladder ladder = settings.ladderOf(rank.group());
+        return give(server, player, rank.displayName(), rank.rewards(), settings, ladder == null ? settings.titlePriority() : ladder.titlePriority());
     }
 
     public static List<Reward> give(MinecraftServer server, UUID player, String forWhat, List<Reward> rewards, Settings settings) {
+        return give(server, player, forWhat, rewards, settings, settings.titlePriority());
+    }
+
+    /**
+     * Gives what can be given now, pends the rest, and tells the player what they got; a TITLE goes to LuckPerms at
+     * {@code titlePriority} (each ladder has its own, D51), and a pended TITLE keeps that priority in its amount.
+     */
+    public static List<Reward> give(MinecraftServer server, UUID player, String forWhat, List<Reward> rewards, Settings settings, int titlePriority) {
         ServerPlayer online = Players.online(server, player);
         List<Reward> given = new ArrayList<>();
         List<Reward> pending = new ArrayList<>();
         for (Reward r : rewards) {
             if (r.needsPlayerOnline() && online == null) {
-                pending.add(r);
-            } else if (apply(server, player, online, r, forWhat, settings)) {
+                pending.add(r.kind() == Reward.Kind.TITLE && r.amount() == 0 ? new Reward(Reward.Kind.TITLE, r.value(), titlePriority) : r);
+            } else if (apply(server, player, online, r, forWhat, titlePriority)) {
                 given.add(r);
             }
         }
@@ -68,7 +78,7 @@ public final class Rewards {
         return give(player.server, player.getUUID(), "earlier", pending, settings);
     }
 
-    private static boolean apply(MinecraftServer server, UUID player, @Nullable ServerPlayer online, Reward r, String forWhat, Settings settings) {
+    private static boolean apply(MinecraftServer server, UUID player, @Nullable ServerPlayer online, Reward r, String forWhat, int titlePriority) {
         try {
             switch (r.kind()) {
                 case COINS -> {
@@ -97,7 +107,7 @@ public final class Rewards {
                 }
                 case TITLE -> {
                     if (LuckPermsBridge.isPresent()) {
-                        LuckPermsBridge.setPrefix(player, settings.titlePriority(), r.value());
+                        LuckPermsBridge.setPrefix(player, r.amount() != 0 ? (int) r.amount() : titlePriority, r.value());
                     }
                 }
                 case COMMAND -> {

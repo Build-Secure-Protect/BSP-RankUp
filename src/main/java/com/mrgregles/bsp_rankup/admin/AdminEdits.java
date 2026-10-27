@@ -6,6 +6,8 @@ import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
 import com.mrgregles.bsp_rankup.rank.Rewards;
+import com.mrgregles.bsp_rankup.settings.Award;
+import com.mrgregles.bsp_rankup.settings.Ladder;
 import com.mrgregles.bsp_rankup.settings.Rank;
 import com.mrgregles.bsp_rankup.settings.Reward;
 import com.mrgregles.bsp_rankup.settings.Settings;
@@ -25,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -41,78 +44,314 @@ public final class AdminEdits {
 
     // ------------------------------------------------------------------ ladder
 
+    /** Adds a rung to the first ladder. */
     public static Reply ladderAdd(MinecraftServer server, String group, long points, @Nullable String name) {
+        return ladderAdd(server, SettingsLedger.settings(server).first().name(), group, points, name);
+    }
+
+    /** Adds a rung to the named ladder. A group is on one ladder at most, and never also an award (D51). */
+    public static Reply ladderAdd(MinecraftServer server, String ladderName, String group, long points, @Nullable String name) {
         String g = group.toLowerCase(Locale.ROOT).trim();
         if (!g.matches("[a-z0-9_-]{1,64}")) {
             return Reply.no("A group name is letters, digits, - and _");
         }
         Settings settings = SettingsLedger.settings(server);
-        if (settings.indexOf(g) >= 0) {
-            return Reply.no("The ladder already has " + g);
+        Ladder ladder = settings.ladder(ladderName);
+        if (ladder == null) {
+            return noLadder(ladderName);
+        }
+        String taken = usedBy(settings, g);
+        if (taken != null) {
+            return Reply.no(g + " is already " + taken);
         }
         String shown = name == null || name.isBlank() ? g : name.trim();
-        SettingsLedger.get(server).update(b -> b.addRank(Rank.of(g, shown, Math.max(0, points))));
-        return Reply.ok("Added rung " + shown + " (" + g + ") at " + Math.max(0, points) + " points" + (points == 0 ? "; a rung at 0 is the silent start" : ""));
+        List<Rank> ranks = new ArrayList<>(ladder.ranks());
+        ranks.add(Rank.of(g, shown, Math.max(0, points)));
+        SettingsLedger.get(server).update(b -> b.ladder(ladder.withRanks(ranks)));
+        return Reply.ok("Added rung " + shown + " (" + g + ") to " + ladder.name() + " at " + Math.max(0, points) + " points" + (points == 0 ? "; a rung at 0 is the silent start" : ""));
+    }
+
+    /** What already uses a group ("on ladder x", "an award"), or null when it is free. */
+    @Nullable
+    private static String usedBy(Settings settings, String group) {
+        Ladder on = settings.ladderOf(group);
+        if (on != null) {
+            return "a rung of ladder " + on.name();
+        }
+        return settings.award(group) != null ? "an award" : null;
     }
 
     public static Reply ladderRemove(MinecraftServer server, String group) {
-        return edit(server, group, (i, r) -> b -> b.removeRank(i), r -> "Removed rung " + r.displayName() + " (" + r.group() + "); players keep their points");
+        return edit(server, group, r -> null, r -> "Removed rung " + r.displayName() + " (" + r.group() + "); players keep their points");
     }
 
     public static Reply ladderPoints(MinecraftServer server, String group, long points) {
-        return edit(server, group, (i, r) -> b -> b.setRank(i, r.withPoints(Math.max(0, points))), r -> r.displayName() + " now needs " + Math.max(0, points) + " points");
+        return edit(server, group, r -> r.withPoints(Math.max(0, points)), r -> r.displayName() + " now needs " + Math.max(0, points) + " points");
     }
 
     public static Reply ladderName(MinecraftServer server, String group, String name) {
         if (name.isBlank()) {
             return Reply.no("A name cannot be empty");
         }
-        return edit(server, group, (i, r) -> b -> b.setRank(i, new Rank(r.group(), name.trim(), r.points(), r.seasonal(), r.rewards())), r -> r.group() + " is shown as " + name.trim());
+        return edit(server, group, r -> new Rank(r.group(), name.trim(), r.points(), r.seasonal(), r.rewards()), r -> r.group() + " is shown as " + name.trim());
     }
 
     public static Reply ladderSeasonal(MinecraftServer server, String group, boolean seasonal) {
-        return edit(server, group, (i, r) -> b -> b.setRank(i, r.withSeasonal(seasonal)), r -> r.displayName() + (seasonal ? " resets each season" : " is permanent"));
+        return edit(server, group, r -> r.withSeasonal(seasonal), r -> r.displayName() + (seasonal ? " resets each season" : " is permanent"));
     }
 
     /** Moves a rung to a 1-based position. */
     public static Reply ladderMove(MinecraftServer server, String group, int rung) {
         Settings settings = SettingsLedger.settings(server);
-        int i = settings.indexOf(group);
-        if (i < 0) {
+        Ladder ladder = settings.ladderOf(group);
+        if (ladder == null) {
             return noRung(group);
         }
+        int i = ladder.indexOf(group);
         int j = rung - 1;
-        if (j < 0 || j >= settings.ranks().size()) {
-            return Reply.no("The ladder has " + settings.ranks().size() + " rungs");
+        if (j < 0 || j >= ladder.ranks().size()) {
+            return Reply.no("Ladder " + ladder.name() + " has " + ladder.ranks().size() + " rungs");
         }
-        List<Rank> ranks = new ArrayList<>(settings.ranks());
+        List<Rank> ranks = new ArrayList<>(ladder.ranks());
         Rank r = ranks.remove(i);
         ranks.add(j, r);
-        SettingsLedger.get(server).update(b -> b.ranks(ranks));
+        SettingsLedger.get(server).update(b -> b.ladder(ladder.withRanks(ranks)));
         return Reply.ok(r.displayName() + " is now rung " + (j + 1) + " (mind the points order)");
     }
 
-    /** Makes rungs from the LuckPerms track's groups that the ladder does not have yet, at 0 points. */
+    /** Makes rungs on the first ladder from its LuckPerms track's groups that it does not have yet, at 0 points. */
     public static Reply ladderImport(MinecraftServer server) {
+        return ladderImport(server, SettingsLedger.settings(server).first().name());
+    }
+
+    /** Makes rungs on a ladder from its track's groups not used yet (by any ladder or award), at 0 points. */
+    public static Reply ladderImport(MinecraftServer server, String ladderName) {
         Settings settings = SettingsLedger.settings(server);
+        Ladder ladder = settings.ladder(ladderName);
+        if (ladder == null) {
+            return noLadder(ladderName);
+        }
         if (!LuckPermsBridge.isPresent()) {
             return Reply.no("LuckPerms is not reachable");
         }
-        List<String> groups = LuckPermsBridge.trackGroups(settings.track());
+        List<String> groups = LuckPermsBridge.trackGroups(ladder.track());
         if (groups.isEmpty()) {
-            return Reply.no("LuckPerms has no track called " + settings.track() + " (or it is empty)");
+            return Reply.no("LuckPerms has no track called " + ladder.track() + " (or it is empty)");
         }
-        List<Rank> ranks = new ArrayList<>(settings.ranks());
+        List<Rank> ranks = new ArrayList<>(ladder.ranks());
         int added = 0;
         for (String g : groups) {
-            if (settings.indexOf(g) < 0) {
+            if (usedBy(settings, g) == null) {
                 ranks.add(Rank.of(g, g.substring(0, 1).toUpperCase(Locale.ROOT) + g.substring(1), 0));
                 added++;
             }
         }
-        List<Rank> finalRanks = ranks;
-        SettingsLedger.get(server).update(b -> b.ranks(finalRanks));
-        return Reply.ok("Imported " + added + " rung" + (added == 1 ? "" : "s") + " from track " + settings.track() + " at 0 points; set their points next");
+        SettingsLedger.get(server).update(b -> b.ladder(ladder.withRanks(ranks)));
+        return Reply.ok("Imported " + added + " rung" + (added == 1 ? "" : "s") + " from track " + ladder.track() + " into " + ladder.name() + " at 0 points; set their points next");
+    }
+
+    // ------------------------------------------------------------------ ladders (D49)
+
+    /** Adds a ladder on its own LuckPerms track, counting every signal; its titles one priority below the lowest so far. */
+    public static Reply laddersAdd(MinecraftServer server, String name, String track) {
+        String n = name.toLowerCase(Locale.ROOT).trim();
+        String t = track.toLowerCase(Locale.ROOT).trim();
+        if (!n.matches(Ladder.NAME_PATTERN)) {
+            return Reply.no("A ladder name is up to 24 lower-case letters, digits and _");
+        }
+        if (!t.matches("[a-z0-9_-]{1,64}")) {
+            return Reply.no("A track name is letters, digits, - and _");
+        }
+        Settings settings = SettingsLedger.settings(server);
+        if (settings.ladder(n) != null) {
+            return Reply.no("There is a ladder called " + n + " already");
+        }
+        for (Ladder l : settings.ladders()) {
+            if (l.track().equalsIgnoreCase(t)) {
+                return Reply.no("Ladder " + l.name() + " follows track " + t + " already");
+            }
+        }
+        int priority = settings.ladders().stream().mapToInt(Ladder::titlePriority).min().orElse(Settings.DEFAULT_TITLE_PRIORITY + 1) - 1;
+        SettingsLedger.get(server).update(b -> b.addLadder(Ladder.of(n, t).withTitlePriority(priority)));
+        return Reply.ok("Added ladder " + n + " on track " + t + ", counting every signal, titles at priority " + priority + "; add rungs with /rankup ladders addrung " + n);
+    }
+
+    /** Removes a ladder other than the first (D53); players keep their points and their LuckPerms groups. */
+    public static Reply laddersRemove(MinecraftServer server, String name) {
+        Settings settings = SettingsLedger.settings(server);
+        Ladder ladder = settings.ladder(name);
+        if (ladder == null) {
+            return noLadder(name);
+        }
+        if (RankEngine.isFirst(settings, ladder)) {
+            return Reply.no("The first ladder cannot be removed: it holds the ranks from before several ladders. Rename it, or empty it");
+        }
+        SettingsLedger.get(server).update(b -> b.removeLadder(ladder.name()));
+        return Reply.ok("Removed ladder " + ladder.name() + "; players keep their points and their LuckPerms groups");
+    }
+
+    /**
+     * Renames the first ladder (D53). The later ladders keep their names: what players hold on them is stored by
+     * name, here and in the shared database, so a new name would lose it.
+     */
+    public static Reply laddersRename(MinecraftServer server, String name, String newName) {
+        Settings settings = SettingsLedger.settings(server);
+        Ladder ladder = settings.ladder(name);
+        String n = newName.toLowerCase(Locale.ROOT).trim();
+        if (ladder == null) {
+            return noLadder(name);
+        }
+        if (!RankEngine.isFirst(settings, ladder)) {
+            return Reply.no("Only the first ladder can be renamed: the others keep what players hold under their names");
+        }
+        if (!n.matches(Ladder.NAME_PATTERN)) {
+            return Reply.no("A ladder name is up to 24 lower-case letters, digits and _");
+        }
+        if (settings.ladder(n) != null) {
+            return Reply.no("There is a ladder called " + n + " already");
+        }
+        List<Ladder> ladders = new ArrayList<>(settings.ladders());
+        ladders.set(0, ladder.withName(n));
+        SettingsLedger.get(server).update(b -> b.ladders(ladders));
+        return Reply.ok("Ladder " + ladder.name() + " is now called " + n);
+    }
+
+    public static Reply laddersTrack(MinecraftServer server, String name, String track) {
+        String t = track.toLowerCase(Locale.ROOT).trim();
+        if (!t.matches("[a-z0-9_-]{1,64}")) {
+            return Reply.no("A track name is letters, digits, - and _");
+        }
+        Settings settings = SettingsLedger.settings(server);
+        Ladder ladder = settings.ladder(name);
+        if (ladder == null) {
+            return noLadder(name);
+        }
+        for (Ladder l : settings.ladders()) {
+            if (!l.name().equals(ladder.name()) && l.track().equalsIgnoreCase(t)) {
+                return Reply.no("Ladder " + l.name() + " follows track " + t + " already");
+            }
+        }
+        SettingsLedger.get(server).update(b -> b.ladder(ladder.withTrack(t)));
+        return Reply.ok("Ladder " + ladder.name() + " follows the LuckPerms track " + t);
+    }
+
+    /** Sets what a ladder counts: {@code all}, or signal keys separated by commas (D49). */
+    public static Reply laddersCounts(MinecraftServer server, String name, String signals) {
+        Settings settings = SettingsLedger.settings(server);
+        Ladder ladder = settings.ladder(name);
+        if (ladder == null) {
+            return noLadder(name);
+        }
+        Set<Signal> counts;
+        try {
+            counts = parseSignals(signals);
+        } catch (IllegalArgumentException e) {
+            return Reply.no(e.getMessage());
+        }
+        SettingsLedger.get(server).update(b -> b.ladder(ladder.withCounts(counts)));
+        return Reply.ok("Ladder " + ladder.name() + " counts " + describeCounts(counts));
+    }
+
+    public static Reply laddersTitlePriority(MinecraftServer server, String name, int priority) {
+        Settings settings = SettingsLedger.settings(server);
+        Ladder ladder = settings.ladder(name);
+        if (ladder == null) {
+            return noLadder(name);
+        }
+        SettingsLedger.get(server).update(b -> b.ladder(ladder.withTitlePriority(priority)));
+        return Reply.ok("Ladder " + ladder.name() + "'s titles are LuckPerms prefixes at priority " + priority);
+    }
+
+    // ------------------------------------------------------------------ awards (D50)
+
+    /** Makes a LuckPerms group an award, reached at {@code points} from every signal until its counts are set. */
+    public static Reply awardAdd(MinecraftServer server, String group, long points, @Nullable String name) {
+        String g = group.toLowerCase(Locale.ROOT).trim();
+        if (!g.matches("[a-z0-9_-]{1,64}")) {
+            return Reply.no("A group name is letters, digits, - and _");
+        }
+        Settings settings = SettingsLedger.settings(server);
+        String taken = usedBy(settings, g);
+        if (taken != null) {
+            return Reply.no(g + " is already " + taken);
+        }
+        String shown = name == null || name.isBlank() ? g : name.trim();
+        SettingsLedger.get(server).update(b -> b.award(Award.of(g, shown, Set.of(), Math.max(0, points))));
+        boolean inLuckPerms = !LuckPermsBridge.isPresent() || LuckPermsBridge.groupNames().stream().anyMatch(n -> n.equalsIgnoreCase(g));
+        return Reply.ok("Added award " + shown + " (" + g + ") at " + Math.max(0, points) + " points from every signal; set what it counts with /rankup award counts " + g
+                + (inLuckPerms ? "" : ". LuckPerms has no group " + g + " yet: the award waits until it exists"));
+    }
+
+    /** Stops giving an award; players who have its group keep it. */
+    public static Reply awardRemove(MinecraftServer server, String group) {
+        Award a = SettingsLedger.settings(server).award(group);
+        if (a == null) {
+            return noAward(group);
+        }
+        SettingsLedger.get(server).update(b -> b.removeAward(a.group()));
+        return Reply.ok("Stopped awarding " + a.displayName() + "; players who have " + a.group() + " keep it");
+    }
+
+    public static Reply awardPoints(MinecraftServer server, String group, long points) {
+        return editAward(server, group, a -> a.withPoints(Math.max(0, points)), a -> a.displayName() + " now needs " + Math.max(0, points) + " points");
+    }
+
+    public static Reply awardName(MinecraftServer server, String group, String name) {
+        if (name.isBlank()) {
+            return Reply.no("A name cannot be empty");
+        }
+        return editAward(server, group, a -> a.withDisplayName(name.trim()), a -> a.group() + " is shown as " + name.trim());
+    }
+
+    public static Reply awardSeasonal(MinecraftServer server, String group, boolean seasonal) {
+        return editAward(server, group, a -> a.withSeasonal(seasonal), a -> a.displayName() + (seasonal ? " is taken back at each season's end and earned again" : " is kept once reached"));
+    }
+
+    public static Reply awardCounts(MinecraftServer server, String group, String signals) {
+        Set<Signal> counts;
+        try {
+            counts = parseSignals(signals);
+        } catch (IllegalArgumentException e) {
+            return Reply.no(e.getMessage());
+        }
+        return editAward(server, group, a -> a.withCounts(counts), a -> a.displayName() + " counts " + describeCounts(counts));
+    }
+
+    private static Reply editAward(MinecraftServer server, String group, UnaryOperator<Award> change, java.util.function.Function<Award, String> reply) {
+        Award a = SettingsLedger.settings(server).award(group);
+        if (a == null) {
+            return noAward(group);
+        }
+        SettingsLedger.get(server).update(b -> b.award(change.apply(a)));
+        return Reply.ok(reply.apply(a));
+    }
+
+    private static Reply noAward(String group) {
+        return Reply.no("No award called " + group + ". The awards: see /rankup award");
+    }
+
+    /** {@code all} (or empty) for every signal, else signal keys separated by commas. */
+    public static Set<Signal> parseSignals(String text) {
+        String t = text.trim().toLowerCase(Locale.ROOT);
+        if (t.isEmpty() || t.equals("all")) {
+            return Set.of();
+        }
+        Set<Signal> out = new java.util.LinkedHashSet<>();
+        for (String key : t.split("[,\\s]+")) {
+            if (key.isEmpty()) {
+                continue;
+            }
+            Signal s = Signal.byKey(key);
+            if (s == null) {
+                throw new IllegalArgumentException("No signal called " + key + "; the signals: /rankup signal");
+            }
+            out.add(s);
+        }
+        return out;
+    }
+
+    public static String describeCounts(Set<Signal> counts) {
+        return counts.isEmpty() ? "every signal" : counts.stream().map(Signal::key).sorted().collect(java.util.stream.Collectors.joining(", "));
     }
 
     // ------------------------------------------------------------------ rewards
@@ -135,10 +374,16 @@ public final class AdminEdits {
                 return Reply.no("No kit called " + reward.value() + ". Kits are made in BSP-Core's admin panel, KITS tab");
             }
         }
-        return edit(server, group, (i, r) -> {
+        Award award = SettingsLedger.settings(server).award(group);
+        if (award != null) {
+            List<Reward> rewards = new ArrayList<>(award.rewards());
+            rewards.add(reward);
+            return editAward(server, group, a -> a.withRewards(rewards), a -> a.displayName() + " now also gives " + describe(reward));
+        }
+        return edit(server, group, r -> {
             List<Reward> rewards = new ArrayList<>(r.rewards());
             rewards.add(reward);
-            return b -> b.setRank(i, r.withRewards(rewards));
+            return r.withRewards(rewards);
         }, r -> r.displayName() + " now also gives " + describe(reward));
     }
 
@@ -151,25 +396,44 @@ public final class AdminEdits {
         return rewardAdd(admin.server, group, Reward.item(String.valueOf(ForgeRegistries.ITEMS.getKey(held.getItem())), held.getCount()));
     }
 
-    /** Removes the 1-based reward of a rung. */
+    /** Removes the 1-based reward of a rung or an award. */
     public static Reply rewardRemove(MinecraftServer server, String group, int number) {
         Settings settings = SettingsLedger.settings(server);
-        int i = settings.indexOf(group);
-        if (i < 0) {
+        Award award = settings.award(group);
+        Ladder ladder = settings.ladderOf(group);
+        if (award == null && ladder == null) {
             return noRung(group);
         }
-        Rank r = settings.ranks().get(i);
-        if (number < 1 || number > r.rewards().size()) {
-            return Reply.no(r.displayName() + " has " + r.rewards().size() + " reward" + (r.rewards().size() == 1 ? "" : "s"));
+        String shown = award != null ? award.displayName() : ladder.rank(group).displayName();
+        List<Reward> rewards = new ArrayList<>(award != null ? award.rewards() : ladder.rank(group).rewards());
+        if (number < 1 || number > rewards.size()) {
+            return Reply.no(shown + " has " + rewards.size() + " reward" + (rewards.size() == 1 ? "" : "s"));
         }
-        List<Reward> rewards = new ArrayList<>(r.rewards());
         Reward removed = rewards.remove(number - 1);
-        SettingsLedger.get(server).update(b -> b.setRank(i, r.withRewards(rewards)));
-        return Reply.ok("Removed from " + r.displayName() + ": " + describe(removed));
+        if (award != null) {
+            SettingsLedger.get(server).update(b -> b.award(award.withRewards(rewards)));
+        } else {
+            edit(server, group, r -> r.withRewards(rewards), r -> "");
+        }
+        return Reply.ok("Removed from " + shown + ": " + describe(removed));
     }
 
     public static Reply rewardClear(MinecraftServer server, String group) {
-        return edit(server, group, (i, r) -> b -> b.setRank(i, r.withRewards(List.of())), r -> "Cleared the rewards of " + r.displayName());
+        if (SettingsLedger.settings(server).award(group) != null) {
+            return editAward(server, group, a -> a.withRewards(List.of()), a -> "Cleared the rewards of " + a.displayName());
+        }
+        return edit(server, group, r -> r.withRewards(List.of()), r -> "Cleared the rewards of " + r.displayName());
+    }
+
+    /** The rewards of a rung on any ladder or of an award, with what gives them; null when the group is neither. */
+    @Nullable
+    public static java.util.Map.Entry<String, List<Reward>> rewardsOf(Settings settings, String group) {
+        Award award = settings.award(group);
+        if (award != null) {
+            return java.util.Map.entry(award.displayName(), award.rewards());
+        }
+        Ladder ladder = settings.ladderOf(group);
+        return ladder == null ? null : java.util.Map.entry(ladder.rank(group).displayName(), ladder.rank(group).rewards());
     }
 
     public static String describe(Reward r) {
@@ -251,15 +515,16 @@ public final class AdminEdits {
     /** Puts a player on a rung without rewards; the reply comes when LuckPerms has answered. */
     public static void playerSet(MinecraftServer server, UUID player, String group, Consumer<Reply> then) {
         Settings settings = SettingsLedger.settings(server);
-        Rank rank = settings.rank(group);
+        Ladder ladder = settings.ladderOf(group);
+        Rank rank = ladder == null ? null : ladder.rank(group);
         if (rank == null) {
             then.accept(noRung(group));
             return;
         }
         String name = Players.name(server, player);
         RankEngine.assign(server, player, rank).thenAccept(ok -> then.accept(ok
-                ? Reply.ok(name + " is now " + rank.displayName() + " (" + rank.group() + "), without rewards")
-                : Reply.no("LuckPerms did not put " + name + " on " + rank.group() + ". Is the group on track " + settings.track() + "?")));
+                ? Reply.ok(name + " is now " + rank.displayName() + " (" + rank.group() + ") on " + ladder.name() + ", without rewards")
+                : Reply.no("LuckPerms did not put " + name + " on " + rank.group() + ". Is the group on track " + ladder.track() + "?")));
     }
 
     public static Reply playerAdd(MinecraftServer server, UUID player, long points) {
@@ -316,23 +581,32 @@ public final class AdminEdits {
 
     // ------------------------------------------------------------------ helpers
 
-    private interface RungEdit {
-        UnaryOperator<Settings.Builder> change(int index, Rank rank);
-    }
-
-    private static Reply edit(MinecraftServer server, String group, RungEdit edit, java.util.function.Function<Rank, String> reply) {
+    /** Changes a rung on whichever ladder has it; the change gives the new rung, or null to remove it. */
+    private static Reply edit(MinecraftServer server, String group, java.util.function.Function<Rank, Rank> change, java.util.function.Function<Rank, String> reply) {
         Settings settings = SettingsLedger.settings(server);
-        int i = settings.indexOf(group);
-        if (i < 0) {
+        Ladder ladder = settings.ladderOf(group);
+        if (ladder == null) {
             return noRung(group);
         }
-        Rank r = settings.ranks().get(i);
-        SettingsLedger.get(server).update(edit.change(i, r));
+        int i = ladder.indexOf(group);
+        Rank r = ladder.ranks().get(i);
+        Rank next = change.apply(r);
+        List<Rank> ranks = new ArrayList<>(ladder.ranks());
+        if (next == null) {
+            ranks.remove(i);
+        } else {
+            ranks.set(i, next);
+        }
+        SettingsLedger.get(server).update(b -> b.ladder(ladder.withRanks(ranks)));
         return Reply.ok(reply.apply(r));
     }
 
     private static Reply noRung(String group) {
-        return Reply.no("No rung called " + group + ". The ladder's rungs: see /rankup ladder list");
+        return Reply.no("No rung or award called " + group + ". See /rankup ladders and /rankup award");
+    }
+
+    private static Reply noLadder(String name) {
+        return Reply.no("No ladder called " + name + ". See /rankup ladders");
     }
 
     /** The points a player has now, for replies and the screen. */

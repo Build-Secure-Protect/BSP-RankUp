@@ -155,11 +155,11 @@ public class CommandGameTests {
         return SettingsLedger.settings(server);
     }
 
-    private static int run(CommandSourceStack source, String command) {
+    static int run(CommandSourceStack source, String command) {
         return source.getServer().getCommands().performPrefixedCommand(source, command);
     }
 
-    private static CommandSourceStack console(GameTestHelper h, Collector out) {
+    static CommandSourceStack console(GameTestHelper h, Collector out) {
         MinecraftServer server = h.getLevel().getServer();
         return new CommandSourceStack(out, Vec3.ZERO, Vec2.ZERO, h.getLevel(), 4, "test console", Component.literal("test console"), server, null);
     }

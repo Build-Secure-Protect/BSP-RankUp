@@ -65,6 +65,19 @@ public final class RankUpClient {
         }
     }
 
+    /** The chip the rank screen showed last this game (a ladder's name, or {@link RankScreen#AWARDS}), D52. */
+    @Nullable
+    private static String rankChip;
+
+    @Nullable
+    public static String rankChip() {
+        return rankChip;
+    }
+
+    static void setRankChip(String chip) {
+        rankChip = chip;
+    }
+
     public static void clear() {
         adminView = null;
         adminSettings = null;

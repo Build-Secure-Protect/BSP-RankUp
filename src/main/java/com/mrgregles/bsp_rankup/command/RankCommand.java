@@ -7,6 +7,8 @@ import com.mrgregles.bsp_rankup.progress.Progress;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
+import com.mrgregles.bsp_rankup.settings.Award;
+import com.mrgregles.bsp_rankup.settings.Ladder;
 import com.mrgregles.bsp_rankup.settings.Rank;
 import com.mrgregles.bsp_rankup.settings.Settings;
 import com.mrgregles.bsp_rankup.settings.SettingsLedger;
@@ -65,7 +67,10 @@ public final class RankCommand {
                         })));
     }
 
-    /** The lines {@code /rank} shows: rank and points, the next rung, then every signal that counts. */
+    /**
+     * The lines {@code /rank} shows: with one ladder its rank, points and next rung; with several (D52) one line per
+     * ladder. Then every signal that counts, the awards reached, the bonus and what waits.
+     */
     public static List<Component> summary(MinecraftServer server, UUID player) {
         Settings settings = SettingsLedger.settings(server);
         Progress progress = ProgressLedger.get(server).peek(player);
@@ -73,6 +78,69 @@ public final class RankCommand {
             progress = new Progress();
         }
         String name = Players.name(server, player);
+        if (settings.ladders().size() == 1) {
+            List<Component> out = oneLadder(settings, progress, name);
+            awardsLine(settings, progress, out);
+            return out;
+        }
+        List<Component> out = new ArrayList<>();
+        out.add(Component.translatable("message.bsp_rankup.rank.title", name).withStyle(ChatFormatting.AQUA));
+        for (Ladder ladder : settings.ladders()) {
+            long points = RankEngine.points(settings, ladder, progress);
+            int current = ladder.indexOf(RankEngine.rankOn(settings, ladder, progress));
+            MutableComponent line = current < 0
+                    ? Component.translatable("message.bsp_rankup.rank.ladder_none", RankEngine.label(ladder), points)
+                    : Component.translatable("message.bsp_rankup.rank.ladder", RankEngine.label(ladder), ladder.ranks().get(current).displayName(), current + 1, ladder.ranks().size(), points);
+            if (current + 1 < ladder.ranks().size()) {
+                Rank next = ladder.ranks().get(current + 1);
+                long have = next.seasonal() ? RankEngine.seasonPoints(settings, ladder, progress) : points;
+                line.append(Component.translatable("message.bsp_rankup.rank.ladder_next", next.displayName(), next.points(), Math.max(0, next.points() - have)));
+            } else if (!ladder.ranks().isEmpty()) {
+                line.append(Component.translatable("message.bsp_rankup.rank.ladder_top"));
+            }
+            out.add(line.withStyle(ChatFormatting.AQUA));
+        }
+        signalLines(settings, progress, out);
+        awardsLine(settings, progress, out);
+        tail(progress, out);
+        return out;
+    }
+
+    /** The awards the player reached, by the names players see. */
+    private static void awardsLine(Settings settings, Progress progress, List<Component> out) {
+        List<String> names = new ArrayList<>();
+        for (String group : progress.awards().keySet()) {
+            Award a = settings.award(group);
+            names.add(a == null ? group : a.displayName());
+        }
+        if (!names.isEmpty()) {
+            out.add(Component.translatable("message.bsp_rankup.rank.awards", String.join(", ", names)).withStyle(ChatFormatting.GOLD));
+        }
+    }
+
+    private static void signalLines(Settings settings, Progress progress, List<Component> out) {
+        for (Signal s : Signal.values()) {
+            SignalSetting setting = settings.signal(s);
+            long count = progress.count(s);
+            if (!setting.on() || (count == 0 && setting.points() == 0)) {
+                continue;
+            }
+            MutableComponent line = Component.translatable("message.bsp_rankup.rank.signal", Component.translatable("signal.bsp_rankup." + s.key()), count, setting.pointsFor(count));
+            out.add(line.withStyle(ChatFormatting.GRAY));
+        }
+    }
+
+    private static void tail(Progress progress, List<Component> out) {
+        if (progress.bonus() != 0) {
+            out.add(Component.translatable("message.bsp_rankup.rank.bonus", progress.bonus()).withStyle(ChatFormatting.GRAY));
+        }
+        if (!progress.pending().isEmpty()) {
+            out.add(Component.translatable("message.bsp_rankup.rank.pending", progress.pending().size()).withStyle(ChatFormatting.YELLOW));
+        }
+    }
+
+    /** The lines as they were with one ladder. */
+    private static List<Component> oneLadder(Settings settings, Progress progress, String name) {
         long points = RankEngine.points(settings, progress);
         int current = settings.indexOf(progress.rank());
         List<Component> out = new ArrayList<>();
@@ -88,24 +156,11 @@ public final class RankCommand {
         } else if (!settings.ranks().isEmpty()) {
             out.add(Component.translatable("message.bsp_rankup.rank.top").withStyle(ChatFormatting.GOLD));
         }
-        for (Signal s : Signal.values()) {
-            SignalSetting setting = settings.signal(s);
-            long count = progress.count(s);
-            if (!setting.on() || (count == 0 && setting.points() == 0)) {
-                continue;
-            }
-            MutableComponent line = Component.translatable("message.bsp_rankup.rank.signal", Component.translatable("signal.bsp_rankup." + s.key()), count, setting.pointsFor(count));
-            out.add(line.withStyle(ChatFormatting.GRAY));
-        }
+        signalLines(settings, progress, out);
         if (settings.ranks().stream().anyMatch(Rank::seasonal) && progress.seasonBase() != 0) {
             out.add(Component.translatable("message.bsp_rankup.rank.season", RankEngine.seasonPoints(settings, progress)).withStyle(ChatFormatting.GRAY));
         }
-        if (progress.bonus() != 0) {
-            out.add(Component.translatable("message.bsp_rankup.rank.bonus", progress.bonus()).withStyle(ChatFormatting.GRAY));
-        }
-        if (!progress.pending().isEmpty()) {
-            out.add(Component.translatable("message.bsp_rankup.rank.pending", progress.pending().size()).withStyle(ChatFormatting.YELLOW));
-        }
+        tail(progress, out);
         return out;
     }
 

@@ -1,0 +1,308 @@
+<title>RankUp Player Ladders</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: per option a brief, then the player's rank screen at its real size (520 x 300 GUI units, 1.6 px a unit) in two states, then the decisions list. One dark look on purpose: a game HUD, as the admin mock-ups. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0e13;
+  --panel: #10151c;
+  --inset: #0c0e12;
+  --line: #2a2f3a;
+  --accent: #19d3b0;
+  --violet: #b58cff;
+  --gold: #ffd23a;
+  --bad: #ff6b5c;
+  --text: #e6eaf2;
+  --muted: #9aa3b5;
+  --mc: 'VT323', 'Courier New', monospace;
+  --ui: 'IBM Plex Sans', system-ui, sans-serif;
+}
+body { background: var(--bg); color: var(--text); font-family: var(--ui); padding-block: 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); line-height: 1.5; }
+.wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 44px; }
+h1 { font-family: var(--mc); font-size: 40px; font-weight: 400; letter-spacing: 1px; color: var(--accent); margin: 0; text-wrap: balance; }
+h2 { font-family: var(--mc); font-size: 32px; font-weight: 400; margin: 0; }
+h2 small { color: var(--muted); font-size: 22px; margin-left: 8px; }
+h3 { font-family: var(--mc); font-size: 22px; font-weight: 400; margin: 0; color: var(--muted); letter-spacing: 1px; }
+p { max-width: 68ch; margin: 0; }
+.lead { color: var(--muted); }
+.lead b, .example b { color: var(--text); font-weight: 600; }
+.option { display: grid; gap: 14px; }
+.brief { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 32px; }
+.brief > div { min-width: 0; }
+.brief p { font-size: 15px; }
+.brief b { color: var(--accent); font-weight: 600; }
+.brief .con b { color: var(--gold); }
+.frame { overflow-x: auto; border: 1px solid var(--line); background: #06080c; padding: 12px; }
+.screen { position: relative; width: 832px; height: 480px; font-family: var(--mc); font-size: 18px; line-height: 1; color: var(--text);
+  background: radial-gradient(ellipse at 30% 20%, #16331f 0, transparent 50%), radial-gradient(ellipse at 70% 80%, #2a2316 0, transparent 50%), #1a2230; }
+.screen * { box-sizing: border-box; }
+.a { position: absolute; }
+.panel { background: rgba(16,21,28,.95); border: 2px solid var(--accent); }
+.inset { background: var(--inset); border: 2px solid var(--line); }
+.t15 { font-size: 30px; } .t10 { font-size: 20px; } .t85 { font-size: 18px; } .t75 { font-size: 16px; } .t60 { font-size: 14px; } .t50 { font-size: 12px; }
+.mut { color: var(--muted); } .tq { color: var(--accent); } .gold { color: var(--gold); } .vio { color: var(--violet); } .dim { color: var(--line); }
+.chip { display: flex; align-items: center; justify-content: center; border: 2px solid var(--line); background: var(--inset); color: var(--muted); white-space: nowrap; overflow: hidden; }
+.chip.on { border-color: var(--accent); color: var(--accent); background: rgba(25,211,176,.13); }
+.chip.gold { border-color: var(--gold); color: var(--gold); background: rgba(255,210,58,.1); }
+.chip.vio { border-color: var(--violet); color: var(--violet); background: rgba(181,140,255,.12); }
+.chip.dim { border-color: var(--line); color: var(--muted); background: transparent; }
+.card { border: 2px solid var(--line); background: var(--inset); }
+.card.mine { border-color: var(--gold); background: rgba(255,210,58,.12); }
+.card.hot { border-color: var(--accent); background: rgba(25,211,176,.08); }
+.fill { background: rgba(25,211,211,.0); }
+.bar { border: 2px solid var(--line); background: var(--inset); }
+.bar i { display: block; height: 100%; background: rgba(25,211,176,.8); }
+.bar.gold i { background: rgba(255,210,58,.8); }
+.pick { border: 1px solid var(--line); padding: 20px 24px; display: grid; gap: 12px; }
+.pick ol { margin: 0; padding-left: 22px; font-size: 15px; display: grid; gap: 8px; }
+.pick li b { color: var(--accent); font-weight: 600; }
+.pick li .def { color: var(--gold); }
+.pick .note { color: var(--muted); font-size: 15px; }
+.example { display: grid; gap: 6px; font-size: 15px; }
+.example code { font-family: var(--mc); font-size: 18px; color: var(--gold); }
+@media (max-width: 700px) { .brief { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:10px">
+    <h1>The player's rank screen with several ladders: three options</h1>
+    <p class="lead">Decisions D49 to D51. Each option is the rank screen players open with <b>/rank</b>, the <b>U</b> key or the inventory button, at its real size (520 by 300 GUI units). The same example player is in all three:</p>
+    <div class="example">
+      <p><b>Playtime</b> ladder (counts minutes played): on <code>Sentinel</code>, rung 5 of 12, with 1 380 points; next is Warden at 2 100 (720 minutes, 12 hours, to go).</p>
+      <p><b>Raider</b> ladder (counts player kills, totems stolen and protected): on <code>Cutpurse</code>, rung 1 of 3, with 420 points; next is Raider at 750.</p>
+      <p>Awards: <code>apple_picker</code> reached (5 000 pieces earned); <code>bulwark</code> at 720 of 1 500 points (12 of 25 totems protected).</p>
+    </div>
+  </header>
+
+  <section class="option" id="a">
+    <h2>A. Ladder chips <small>like the admin screen</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> A row of chips under the title: one per ladder, then AWARDS. A ladder chip shows today's screen for that ladder: its rungs on the track at the left, the player's standing, the bar to the next rung and what counts for this ladder only. The AWARDS chip turns the screen into a list of every award, reached or not, with a bar each.</p></div>
+      <div class="con"><p><b>Trade-off.</b> Matches the admin layout you picked, and each ladder keeps the whole screen. A player sees one ladder at a time, so their place on the other ladders is one click away.</p></div>
+    </div>
+    <h3>A ladder chosen</h3>
+    <div class="frame"><div class="screen" id="a1"></div></div>
+    <h3>AWARDS chosen</h3>
+    <div class="frame"><div class="screen" id="a2"></div></div>
+  </section>
+
+  <section class="option" id="b">
+    <h2>B. Overview first <small>every ladder at a glance</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> The screen opens on an overview: one wide card per ladder (the rung held, the bar to the next, what it counts) and a row of award badges under them. Clicking a card opens today's detailed screen for that ladder, with a BACK button to the overview.</p></div>
+      <div class="con"><p><b>Trade-off.</b> The whole picture in one look, which suits players on several ladders. The ladder's full track and the table of what counts are one click deeper. With more than four ladders, the cards scroll.</p></div>
+    </div>
+    <h3>Overview</h3>
+    <div class="frame"><div class="screen" id="b1"></div></div>
+    <h3>A ladder opened</h3>
+    <div class="frame"><div class="screen" id="b2"></div></div>
+  </section>
+
+  <section class="option" id="c">
+    <h2>C. Tracks side by side <small>all ladders on the left</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> The left of the screen holds one narrow track per ladder, side by side, each with its rung names and the player's rung in gold. Clicking a track chooses it; the right shows that ladder's standing and what counts, as today. The awards sit as badges along the bottom of the right side.</p></div>
+      <div class="con"><p><b>Trade-off.</b> Every ladder and every award stay in view while reading one ladder's detail. The tracks are narrow, so rung names are cut sooner, and three ladders is about the most that fits before they scroll sideways.</p></div>
+    </div>
+    <h3>Playtime chosen</h3>
+    <div class="frame"><div class="screen" id="c1"></div></div>
+  </section>
+
+  <section class="pick">
+    <h2>Pick one, and the open questions</h2>
+    <p class="note">Each question has a default in gold; say only where you want something else.</p>
+    <ol>
+      <li><b>Layout:</b> A, B or C, or parts combined. <span class="def">Default: A, to match the admin screen.</span></li>
+      <li><b>Which ladder opens first:</b> the one the player looked at last, else the first ladder. <span class="def">Default: yes.</span></li>
+      <li><b>What counts</b> lists only the chosen ladder's signals (with their counts, worth and points toward that ladder). <span class="def">Default: yes.</span></li>
+      <li><b>Awards shown:</b> every award, reached ones marked, the rest with their bar; an award a player has no progress toward still shows, at 0. <span class="def">Default: show every award.</span></li>
+      <li><b>Title chip:</b> shows the title LuckPerms displays (the highest priority across ladders and awards). <span class="def">Default: yes.</span></li>
+      <li><b>Hovering</b> a rung or an award shows what it gives at the bottom, as today. <span class="def">Default: yes.</span></li>
+      <li><b>/rank in chat</b> (the text version for <b>/rank &lt;player&gt;</b>) lists each ladder on its own line, then awards reached. <span class="def">Default: yes.</span></li>
+      <li><b>Rank-up message</b> names the ladder when there is more than one ("You are now Warden on Playtime!"). <span class="def">Default: yes.</span></li>
+    </ol>
+  </section>
+</div>
+
+<script>
+// Every screen is drawn from these helpers in GUI units (1.6 px a unit), matching the rank screen's layout constants.
+const U = 1.6;
+const pos = (x, y, w, h) => `left:${x * U}px;top:${y * U}px;` + (w != null ? `width:${w * U}px;` : '') + (h != null ? `height:${h * U}px;` : '');
+const el = (x, y, w, h, cls, html = '', extra = '') => `<div class="a ${cls}" style="${pos(x, y, w, h)}${extra}">${html}</div>`;
+const txt = (x, y, s, cls = 't75') => el(x, y, null, null, cls, s, 'white-space:nowrap;');
+const right = (x, y, w, s, cls = 't60 mut') => el(x, y, w, 8, cls, s, 'text-align:right;white-space:nowrap;');
+const chip = (x, y, w, h, s, cls = '', size = 't60') => el(x, y, w, h, `chip ${cls} ${size}`, s);
+const bar = (x, y, w, h, f, cls = '') => el(x, y, w, h, 'bar ' + cls, `<i style="width:${Math.round(f * 100)}%"></i>`);
+
+const PLAY = [['Wanderer', 0], ['Settler', 120], ['Recruit', 300], ['Scout', 600], ['Sentinel', 1200], ['Warden', 2100], ['Vanguard', 3600], ['Captain', 5400], ['Commander', 7800], ['Marshal', 10800], ['Warlord', 15000], ['Legend', 21000]];
+const RAID = [['Cutpurse', 150], ['Raider', 750], ['Reaver', 3000]];
+
+function frame(head) {
+  let h = el(0, 0, 520, 300, 'panel');
+  h += txt(10, 8, 'YOUR RANK', 't10 tq');
+  h += right(200, 10, 310, head || 'ExamplePlayer - bsp-survival-1 - season 4');
+  return h;
+}
+
+// today's ladder card: rungs top-down from the highest shown, the player's rung in gold
+function ladder(x, y, w, h, list, mine, top) {
+  let s = el(x, y, w, h, 'inset');
+  const step = 30, rows = Math.floor((h - 12) / step);
+  const trackX = x + 16;
+  s += el(trackX - 1, y + 6 + step / 2, 2, (rows - 1) * step, '', '', 'background:var(--line);');
+  for (let r = 0; r < rows; r++) {
+    const i = top - r;
+    if (i < 0) break;
+    const [n, p] = list[i];
+    const cy = y + 6 + r * step;
+    const isMine = i === mine, below = i < mine;
+    s += el(trackX - 3, cy + step / 2 - 3, 6, 6, '', '', `background:${isMine ? 'var(--gold)' : below ? 'var(--accent)' : 'var(--line)'};`);
+    s += el(trackX + 10, cy, w - 34, step - 6, 'card' + (isMine ? ' mine' : ''));
+    s += txt(trackX + 14, cy + 3, n, 't85 ' + (isMine ? 'gold' : below ? '' : 'mut'));
+    s += right(trackX + 10, cy + 4, w - 38, String(p), 't75 gold');
+    const line = isMine ? 'you, since 3 days' : i === mine + 1 ? `next: ${p - (list === PLAY ? 1380 : 420)} points to go` : `${[31, 22, 17, 12, 9, 6, 4, 3, 2, 1, 1, 0][i] || 0} players hold it`;
+    s += txt(trackX + 14, cy + 14, line, 't60 ' + (isMine ? 'gold' : 'mut'));
+  }
+  return s;
+}
+
+function standing(px, py, w, name, ri, pts, next, nextPts, have, counts, title) {
+  let s = txt(px, py, name, 't15');
+  const nameW = name.length * 6 * 1.5 + 6;
+  s += txt(px + nameW, py + 6, ri, 't60 mut');
+  if (title) s += el(px + nameW + 50, py + 3, title.length * 3.6 + 6, 11, 'chip vio t60', title);
+  s += txt(px, py + 18, pts, 't75 gold');
+  s += txt(px, py + 34, `NEXT: ${next} AT ${nextPts} POINTS`, 't60 tq');
+  s += bar(px, py + 43, w, 12, have / nextPts);
+  s += el(px, py + 46, w, 8, 't75', `${have} / ${nextPts}`, 'text-align:center;');
+  s += txt(px, py + 58, next.charAt(0) + next.slice(1).toLowerCase() + ' gives coins worth 256 Copper - the kit Warden Kit', 't60');
+  s += txt(px, py + 80, 'WHAT COUNTS ON THIS LADDER', 't60 tq');
+  const ly = py + 88;
+  s += el(px, ly, w, 284 - ly, 'inset');
+  s += txt(px + 6, ly + 3, 'SIGNAL', 't50 mut');
+  s += right(px, ly + 3, 150 - 0, 'count', 't50 mut');
+  s += right(px, ly + 3, 214, 'worth', 't50 mut');
+  s += right(px, ly + 3, w - 6, 'points', 't50 mut');
+  counts.forEach(([n, c, wth, p], i) => {
+    const ry = ly + 12 + i * 10;
+    s += txt(px + 6, ry, n, 't60');
+    s += right(px, ry, 150, String(c), 't60 mut');
+    s += right(px, ry, 214, wth, 't60 mut');
+    s += bar(px + 222, ry + 1, w - 262, 5, Math.min(1, p / have));
+    s += right(px, ry, w - 6, String(p), 't60 gold');
+  });
+  s += el(px + 1, 262, w - 2, 1, '', '', 'background:var(--line);');
+  s += txt(px + 6, 272, 'total', 't60 tq');
+  s += right(px, 272, w - 6, String(have), 't60 gold');
+  return s;
+}
+
+// ---------------------------------------------------------------- A
+(function () {
+  let h = frame();
+  h += chip(8, 22, 60, 11, 'PLAYTIME', 'on', 't75');
+  h += chip(71, 22, 52, 11, 'RAIDER', '', 't75');
+  h += chip(126, 22, 56, 11, 'AWARDS', 'gold', 't75');
+  h += ladder(8, 36, 172, 248, PLAY, 4, 7);
+  h += standing(190, 38, 322, 'SENTINEL', 'rank 5 of 12', '1380 points - 680 this season', 'WARDEN', 2100, 1380, [['minutes played', 1380, '1 / 1', 1380]], '[Sentinel]');
+  h += txt(10, 290, 'Hover a rung for what it gives. Esc closes.', 't60 mut');
+  document.getElementById('a1').innerHTML = h;
+
+  let g = frame();
+  g += chip(8, 22, 60, 11, 'PLAYTIME', '', 't75');
+  g += chip(71, 22, 52, 11, 'RAIDER', '', 't75');
+  g += chip(126, 22, 56, 11, 'AWARDS', 'gold on', 't75');
+  g += el(8, 36, 504, 248, 'inset');
+  const aw = [['apple_picker', 'Apple Picker', 'pieces earned', 5000, 5000, true, 'gives 16 x Golden Apple - the title [Apple Picker]'], ['bulwark', 'Bulwark', 'totems protected', 720, 1500, false, 'gives the title [Bulwark]'], ['monster_hunter', 'Monster Hunter', 'mob kills', 310, 2000, false, 'gives coins worth 512 Copper'], ['land_baron', 'Land Baron', 'claims bought', 0, 10, false, 'gives the kit Builder Kit']];
+  aw.forEach(([id, n, c, have, need, done, gives], i) => {
+    const y = 42 + i * 46;
+    g += el(14, y, 492, 40, 'card' + (done ? ' mine' : ''));
+    g += txt(20, y + 5, n, 't85 ' + (done ? 'gold' : ''));
+    g += txt(20 + n.length * 6 * 0.85 + 8, y + 7, done ? 'reached, 2 weeks ago' : 'counts ' + c, 't60 mut');
+    g += right(14, y + 6, 486, done ? 'REACHED' : `${have} / ${need} points`, 't60 ' + (done ? 'gold' : 'mut'));
+    g += bar(20, y + 18, 480, 8, have / need, done ? 'gold' : '');
+    g += txt(20, y + 30, gives, 't60 mut');
+  });
+  g += txt(10, 290, '1 award reached, 3 to go. Esc closes.', 't60 mut');
+  document.getElementById('a2').innerHTML = g;
+})();
+
+// ---------------------------------------------------------------- B
+(function () {
+  let h = frame();
+  const cards = [['PLAYTIME', 'counts minutes played', 'SENTINEL', 'rank 5 of 12', 1380, 'Warden', 2100], ['RAIDER', 'counts player kills, totems stolen, totems protected', 'CUTPURSE', 'rank 1 of 3', 420, 'Raider', 750]];
+  cards.forEach(([lad, counts, rung, ri, have, next, need], i) => {
+    const y = 26 + i * 70;
+    h += el(8, y, 504, 64, 'card' + (i === 0 ? ' hot' : ''));
+    h += txt(16, y + 6, lad, 't60 tq');
+    h += txt(16 + lad.length * 3.6 + 8, y + 6, counts, 't60 mut');
+    h += right(8, y + 6, 496, 'OPEN >', 't60 tq');
+    h += txt(16, y + 17, rung, 't15');
+    h += txt(16 + rung.length * 9 + 8, y + 24, ri, 't60 mut');
+    h += right(8, y + 22, 496, `next: ${next} at ${need}`, 't60 mut');
+    h += bar(16, y + 40, 488, 10, have / need);
+    h += el(16, y + 42, 488, 8, 't75', `${have} / ${need}`, 'text-align:center;');
+    h += txt(16, y + 53, `${need - have} points to go`, 't50 mut');
+  });
+  h += txt(10, 170, 'AWARDS', 't60 gold');
+  h += txt(48, 170, '1 of 4 reached', 't60 mut');
+  const badges = [['Apple Picker', 1, 'reached'], ['Bulwark', 0.48, '720 / 1500'], ['Monster Hunter', 0.155, '310 / 2000'], ['Land Baron', 0, '0 / 10']];
+  badges.forEach(([n, f, t], i) => {
+    const x = 8 + i * 127;
+    h += el(x, 180, 122, 44, 'card' + (f >= 1 ? ' mine' : ''));
+    h += txt(x + 6, 185, n, 't85 ' + (f >= 1 ? 'gold' : ''));
+    h += bar(x + 6, 199, 110, 7, f, f >= 1 ? 'gold' : '');
+    h += txt(x + 6, 211, t, 't60 mut');
+  });
+  h += el(8, 232, 504, 46, 'inset');
+  h += txt(14, 238, 'TOTAL POINTS', 't50 mut');
+  h += txt(14, 248, '1380 on Playtime - 420 on Raider - 50 bonus from admins', 't75');
+  h += txt(14, 262, '3 rewards wait for your next login', 't60 gold');
+  h += txt(10, 290, 'Click a ladder for its rungs and what counts. Esc closes.', 't60 mut');
+  document.getElementById('b1').innerHTML = h;
+
+  let g = frame();
+  g += chip(8, 22, 50, 11, '< BACK', 'dim', 't75');
+  g += txt(64, 24, 'PLAYTIME - counts minutes played', 't60 tq');
+  g += ladder(8, 36, 172, 248, PLAY, 4, 7);
+  g += standing(190, 38, 322, 'SENTINEL', 'rank 5 of 12', '1380 points - 680 this season', 'WARDEN', 2100, 1380, [['minutes played', 1380, '1 / 1', 1380]], '[Sentinel]');
+  g += txt(10, 290, 'Hover a rung for what it gives. Esc goes back.', 't60 mut');
+  document.getElementById('b2').innerHTML = g;
+})();
+
+// ---------------------------------------------------------------- C
+(function () {
+  let h = frame();
+  // two narrow tracks
+  const tracks = [['PLAYTIME', PLAY, 4, 8, true], ['RAIDER', RAID, 0, 2, false]];
+  tracks.forEach(([n, list, mine, top, sel], t) => {
+    const x = 8 + t * 88, w = 84;
+    h += el(x, 24, w, 260, 'inset', '', sel ? 'border-color:var(--accent);' : '');
+    h += txt(x + 6, 28, n, 't60 ' + (sel ? 'tq' : 'mut'));
+    const step = 26;
+    for (let r = 0; r < 9; r++) {
+      const i = top - r;
+      if (i < 0) break;
+      const cy = 40 + r * step;
+      const isMine = i === mine, below = i < mine;
+      h += el(x + 8, cy + 9, 5, 5, '', '', `background:${isMine ? 'var(--gold)' : below ? 'var(--accent)' : 'var(--line)'};`);
+      h += el(x + 16, cy, w - 22, step - 4, 'card' + (isMine ? ' mine' : ''));
+      h += txt(x + 19, cy + 3, list[i][0], 't75 ' + (isMine ? 'gold' : below ? '' : 'mut'));
+      h += txt(x + 19, cy + 13, String(list[i][1]), 't50 gold');
+    }
+  });
+  const px = 190, w = 322;
+  h += standing(px, 38, w, 'SENTINEL', 'rank 5 of 12', '1380 points - 680 this season', 'WARDEN', 2100, 1380, [['minutes played', 1380, '1 / 1', 1380]], '[Sentinel]');
+  // awards strip over the bottom of the counts box
+  h += el(px, 222, w, 36, 'inset', '', 'border-color:var(--gold);');
+  h += txt(px + 6, 226, 'AWARDS', 't50 gold');
+  [['Apple Picker', 1], ['Bulwark', 0.48], ['Monster Hunter', 0.155], ['Land Baron', 0]].forEach(([n, f], i) => {
+    const x = px + 6 + i * 78;
+    h += chip(x, 235, 74, 11, n, f >= 1 ? 'gold' : 'dim', 't50');
+    h += bar(x, 248, 74, 5, f, f >= 1 ? 'gold' : '');
+  });
+  h += txt(10, 290, 'Click a track to choose it. Hover a rung or an award for what it gives.', 't60 mut');
+  document.getElementById('c1').innerHTML = h;
+})();
+</script>

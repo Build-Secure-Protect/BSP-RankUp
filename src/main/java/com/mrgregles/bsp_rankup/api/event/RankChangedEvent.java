@@ -17,15 +17,17 @@ public class RankChangedEvent extends Event {
 
     private final MinecraftServer server;
     private final UUID player;
+    private final String ladder;
     @Nullable
     private final RankInfo from;
     @Nullable
     private final RankInfo to;
     private final Cause cause;
 
-    public RankChangedEvent(MinecraftServer server, UUID player, @Nullable RankInfo from, @Nullable RankInfo to, Cause cause) {
+    public RankChangedEvent(MinecraftServer server, UUID player, String ladder, @Nullable RankInfo from, @Nullable RankInfo to, Cause cause) {
         this.server = server;
         this.player = player;
+        this.ladder = ladder;
         this.from = from;
         this.to = to;
         this.cause = cause;
@@ -37,6 +39,11 @@ public class RankChangedEvent extends Event {
 
     public UUID getPlayer() {
         return player;
+    }
+
+    /** The name of the ladder the rank changed on (D49); {@code getFrom} and {@code getTo} are rungs of that ladder. */
+    public String getLadder() {
+        return ladder;
     }
 
     /** The rung left; null when the player held none. */

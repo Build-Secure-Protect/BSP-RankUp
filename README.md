@@ -20,7 +20,7 @@ Requires [BSP Core](https://github.com/Build-Secure-Protect/BSP-Core) 1.1.0 or n
 
 ## Commands
 
-`/rank` (your screen), `/rank text` (the same as chat lines), `/rank <player>` (admins). `/rankup admin|info|reload`, `set|add|reset <player> ...`, `ladder add|remove|list|points|name|seasonal|move|import`, `reward add|list|remove|clear`, `signal ...`, `option track|announce|cooldown|titlepriority|rewardsagain`, `export|import <name>` (files in `config/bsp_rankup/`).
+`/rank` (your screen), `/rank text` (the same as chat lines), `/rank <player>` (admins). `/rankup admin|info|reload`, `set|add|reset <player> ...`, `ladder add|remove|list|points|name|seasonal|move|import` (rungs; add, list and import on the first ladder), `ladders` and `ladders add|remove|rename|track|counts|titlepriority|rungs|addrung|import <ladder>` (several ladders, each on its own track counting its own signals), `award` and `award add|remove|points|name|counts|seasonal` (LuckPerms groups on no ladder, given when their points are reached), `reward add|list|remove|clear` (of any rung or award), `signal ...`, `option track|announce|cooldown|titlepriority|rewardsagain`, `export|import <name>` (files in `config/bsp_rankup/`).
 
 ## For other mods
 

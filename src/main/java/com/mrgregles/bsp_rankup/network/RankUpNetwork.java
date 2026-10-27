@@ -10,7 +10,8 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 /** The mod's channel: {@code bsp_rankup:main}. The server decides, the client displays. */
 public final class RankUpNetwork {
-    private static final String PROTOCOL = "1";
+    /** 2: several ladders and awards (D49 to D52); a server and its players must be on the same RankUp. */
+    private static final String PROTOCOL = "2";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath(BSPRankUp.MODID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 

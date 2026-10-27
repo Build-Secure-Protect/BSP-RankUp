@@ -16,6 +16,7 @@ public final class MemoryBackend implements StorageBackend {
     private final Map<UUID, String> pending = new HashMap<>();
     private final Map<UUID, long[]> seasons = new HashMap<>();
     private final Map<UUID, String> rewarded = new HashMap<>();
+    private final Map<UUID, LadderValue> ladders = new HashMap<>();
     @Nullable
     private SettingsRow settings;
     private final List<Notice> notices = new ArrayList<>();
@@ -109,8 +110,15 @@ public final class MemoryBackend implements StorageBackend {
     }
 
     @Override
+    public synchronized void setLadders(UUID player, LadderValue value) throws Exception {
+        check();
+        ladders.put(player, value);
+    }
+
+    @Override
     public synchronized void deletePlayer(UUID player) throws Exception {
         check();
+        ladders.remove(player);
         counts.remove(player);
         bonusAndRankedAt.remove(player);
         ranks.remove(player);
@@ -123,12 +131,13 @@ public final class MemoryBackend implements StorageBackend {
     @Nullable
     public synchronized PlayerRow loadPlayer(UUID player) throws Exception {
         check();
-        if (!counts.containsKey(player) && !bonusAndRankedAt.containsKey(player) && !ranks.containsKey(player) && !pending.containsKey(player) && !seasons.containsKey(player)) {
+        if (!counts.containsKey(player) && !bonusAndRankedAt.containsKey(player) && !ranks.containsKey(player) && !pending.containsKey(player) && !seasons.containsKey(player)
+                && !ladders.containsKey(player)) {
             return null;
         }
         long[] br = bonusAndRankedAt.getOrDefault(player, new long[2]);
         long[] se = seasons.getOrDefault(player, new long[3]);
-        return new PlayerRow(player, Map.copyOf(counts.getOrDefault(player, Map.of())), br[0], ranks.get(player), br[1], pending.get(player), (int) se[0], se[1], se[2], rewarded.get(player));
+        return new PlayerRow(player, Map.copyOf(counts.getOrDefault(player, Map.of())), br[0], ranks.get(player), br[1], pending.get(player), (int) se[0], se[1], se[2], rewarded.get(player), ladders.get(player));
     }
 
     /** A count as stored, for tests. */

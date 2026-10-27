@@ -50,7 +50,7 @@ public class ApiGameTests {
         RankEngine.onLogin(player);
         ProgressLedger ledger = ProgressLedger.get(server);
 
-        h.assertTrue(RankUpApi.apiVersion() == RankUpApi.API_VERSION && RankUpApi.API_VERSION == 1, "api version 1");
+        h.assertTrue(RankUpApi.apiVersion() == RankUpApi.API_VERSION && RankUpApi.API_VERSION == 2, "api version 2");
         h.assertTrue(RankUpApi.track(server).equals("ru_ladder_track"), "the track: " + RankUpApi.track(server));
         h.assertTrue(RankUpApi.ladder(server).size() == 3 && RankUpApi.ladder(server).get(2).seasonal() && RankUpApi.ladder(server).get(1).points() == 50, "three rungs with their flags: " + RankUpApi.ladder(server));
         h.assertTrue(RankUpApi.rank(server, "ru_l_b").isPresent() && RankUpApi.rank(server, "ru_l_b").get().index() == 1 && RankUpApi.rank(server, "nope").isEmpty(), "a rung by group");

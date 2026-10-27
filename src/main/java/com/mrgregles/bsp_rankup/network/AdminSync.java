@@ -107,6 +107,50 @@ public final class AdminSync {
                 case AdminActionPacket.LADDER_IMPORT -> {
                     return AdminEdits.ladderImport(server);
                 }
+                case AdminActionPacket.LADDERS_ADD -> {
+                    return AdminEdits.laddersAdd(server, a, b);
+                }
+                case AdminActionPacket.LADDERS_REMOVE -> {
+                    return AdminEdits.laddersRemove(server, a);
+                }
+                case AdminActionPacket.LADDERS_RENAME -> {
+                    return AdminEdits.laddersRename(server, a, b);
+                }
+                case AdminActionPacket.LADDERS_TRACK -> {
+                    return AdminEdits.laddersTrack(server, a, b);
+                }
+                case AdminActionPacket.LADDERS_COUNTS -> {
+                    return AdminEdits.laddersCounts(server, a, b);
+                }
+                case AdminActionPacket.LADDERS_PRIORITY -> {
+                    return AdminEdits.laddersTitlePriority(server, a, Integer.parseInt(b.trim()));
+                }
+                case AdminActionPacket.LADDERS_IMPORT -> {
+                    return AdminEdits.ladderImport(server, a);
+                }
+                case AdminActionPacket.RUNG_ADD -> {
+                    // c is "points name...": the screen's input line
+                    String[] parts = c.trim().split("\\s+", 2);
+                    return AdminEdits.ladderAdd(server, a, b, Long.parseLong(parts[0].isBlank() ? "0" : parts[0]), parts.length > 1 ? parts[1] : null);
+                }
+                case AdminActionPacket.AWARD_ADD -> {
+                    return AdminEdits.awardAdd(server, a, Long.parseLong(b.isBlank() ? "0" : b.trim()), c);
+                }
+                case AdminActionPacket.AWARD_REMOVE -> {
+                    return AdminEdits.awardRemove(server, a);
+                }
+                case AdminActionPacket.AWARD_POINTS -> {
+                    return AdminEdits.awardPoints(server, a, Long.parseLong(b.trim()));
+                }
+                case AdminActionPacket.AWARD_NAME -> {
+                    return AdminEdits.awardName(server, a, b);
+                }
+                case AdminActionPacket.AWARD_COUNTS -> {
+                    return AdminEdits.awardCounts(server, a, b);
+                }
+                case AdminActionPacket.AWARD_SEASONAL -> {
+                    return AdminEdits.awardSeasonal(server, a, Boolean.parseBoolean(b));
+                }
                 case AdminActionPacket.REWARD_ADD -> {
                     return AdminEdits.rewardAdd(server, a, reward(b, c));
                 }
@@ -216,14 +260,22 @@ public final class AdminSync {
         MinecraftServer server = admin.server;
         Settings settings = SettingsLedger.settings(server);
         ProgressLedger ledger = ProgressLedger.get(server);
+        // how many hold each rung of every ladder, and each award (groups are on one ladder or one award)
         Map<String, Integer> holders = new LinkedHashMap<>();
-        for (var r : settings.ranks()) {
-            holders.put(r.group(), 0);
+        for (var l : settings.ladders()) {
+            for (var r : l.ranks()) {
+                holders.put(r.group(), 0);
+            }
+        }
+        for (var aw : settings.awards()) {
+            holders.put(aw.group(), 0);
         }
         ledger.forEach((id, p) -> {
             if (p.rank() != null) {
                 holders.merge(p.rank(), 1, Integer::sum);
             }
+            p.otherRanks().values().forEach(held -> holders.merge(held.group(), 1, Integer::sum));
+            p.awards().keySet().forEach(g -> holders.merge(g, 1, Integer::sum));
         });
         List<AdminViewPacket.PlayerRow> rows = search(server, SEARCH.getOrDefault(admin.getUUID(), ""));
         UUID sel = SELECTED.get(admin.getUUID());
@@ -242,8 +294,15 @@ public final class AdminSync {
         }
         // the packet carries at most 512 characters a line: a storage error with a long host name can pass that
         info.replaceAll(line -> RankSync.cut(line.replace('\n', ' ').replace('\r', ' '), 500));
+        // LuckPerms' groups for the GROUPS tab (D50): read each time, so REFRESH is a plain refresh
+        List<String> groups = new ArrayList<>();
+        for (String g : LuckPermsBridge.groupNames()) {
+            if (groups.size() < AdminViewPacket.MAX_GROUPS) {
+                groups.add(RankSync.cut(g, 64));
+            }
+        }
         return new AdminViewPacket(settings.save(), holders, rows, detail, info, ResetAll.pending(admin.getUUID()), ResetAll.secondsLeft(admin.getUUID()),
-                RankSync.cut(message.replace('\n', ' '), 500), ok, open, kits);
+                RankSync.cut(message.replace('\n', ' '), 500), ok, open, kits, groups);
     }
 
     /** Players online here plus every player with progress whose name matches; online first, then by points. */

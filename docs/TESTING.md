@@ -181,3 +181,63 @@ Headless: three GameTests (`ScoreGameTests`: only points past the season's peak 
 - [ ] End a season in BSP-Core: the count stays, and the new season's points count again from 0.
 - [ ] Network: with players moving between two backends, the score is not counted twice (the peak travels in `score_peak` of `bsp_ru_players`).
 
+## Several ladders: settings (2026-10-27, RU-14a)
+
+Headless: three GameTests (`LaddersGameTests`: settings from before load as one ladder, ladders and awards survive saving and the JSON files, the single-ladder edits change only the first ladder), 45 in all. Nothing new to see in game yet; this only checks that updating changes nothing.
+
+- [ ] Update a server that has a ladder set up: `/rankup info` and the admin screen show the same track, rungs and title priority as before, and `/rank` the same rank.
+- [ ] `/rankup export test` then `/rankup import test`: the ladder comes back unchanged (the file now also has a `Ladders` list).
+
+## Several ladders: the engine (2026-10-27, RU-14b)
+
+Headless: three GameTests against the real LuckPerms (`MultiLadderGameTests`: each ladder counts its own signals and moves along its own track with its own title priority; an award adds its group once reached and a group already held gives no rewards; a season's end works per ladder and takes seasonal awards back), 48 in all. Ladders and awards can only be set by a settings file until the commands and screens (RU-14d to RU-16), so in game:
+
+- [ ] `/rankup export two`, add a second ladder and an award to `config/bsp_rankup/two.json` (copy the `Ladders` entry, give it a new `Name` and `Track`, `Counts: ["player_kills"]`; an `Awards` entry with `Group`, `Name`, `Counts`, `Points`), make the track and group in LuckPerms, `/rankup import two`.
+- [ ] Earn points on each: each ladder moves on its own track (`/lp user <you> info`), the chat says "You are now ... on ...".
+- [ ] Reach the award: "You earned ...", the group is on you in LuckPerms, its rewards arrive once.
+- [ ] Give yourself an award's group by hand first, then reach it: no rewards.
+
+## Several ladders: shared storage (2026-10-27, RU-14c)
+
+Headless: three GameTests (`LadderStorageGameTests`: later ladders, bases and awards travel to another server; a row from before several ladders keeps the server's copy; an award reached is announced to the other servers), and the multi-ladder tests now pass six runs in a row with LuckPerms edits queued per player; 51 in all. Network run, two backends sharing MySQL, a second ladder and an award set up (see the engine section):
+
+- [ ] On start, `bsp_ru_players` has the columns `ladder_ranks`, `season_bases`, `awards` (`SHOW COLUMNS FROM bsp_ru_players`).
+- [ ] Climb the second ladder and reach the award on backend A, move to backend B: `/rank` there shows the same rung on both ladders; nothing is given twice.
+- [ ] With announcements on `network`, reaching an award on A shows "... earned ..." on B as well.
+- [ ] End a season on A while you are on A: on B afterwards the second ladder's seasonal rung and any seasonal award are gone there too.
+
+## Several ladders: commands, /rank and the api (2026-10-27, RU-14d)
+
+Headless: two GameTests (`LadderCommandGameTests`: ladders and awards made and changed by command; `/rank` gives a line per ladder and the awards, and the api lists them), 53 in all. In game, as a BSP Core admin:
+
+- [ ] `/rankup ladders add raider raider`, then make the track in LuckPerms (`/lp createtrack raider`, groups appended), `/rankup ladders import raider`, `/rankup ladders counts raider player_kills,totems_stolen`, set points with `/rankup ladder points <group> <n>`.
+- [ ] `/rankup ladders` shows both ladders with their tracks, counts and title priorities; `/rankup ladders rungs raider` the rungs.
+- [ ] `/rankup award add apple_picker 5000 Apple Picker`, `/rankup award counts apple_picker coins_earned`, `/rankup reward add apple_picker item minecraft:golden_apple 16`, then `/rankup award`.
+- [ ] `/rankup ladders remove <first ladder>` is refused; `/rankup ladders rename raider x` is refused; renaming the first ladder works.
+- [ ] `/rank text` shows a line per ladder ("Playtime: ... - next ...") and "awards: ..." once one is reached.
+
+## Several ladders: the admin screen (2026-10-27, RU-15)
+
+Headless: two GameTests (`AdminLaddersGameTests`: every ladder and award action the screen sends is applied; the view carries LuckPerms' groups and every ladder's and award's holders through the packet), 55 in all, and the layout measured with the font widths (every string fits). The screen itself has not been seen. Server and client must both be this build (protocol 2). In game, `/rankup admin`:
+
+- [ ] Tabs read LADDER, GROUPS, SIGNALS, PLAYERS, OPTIONS; each opens with one click.
+- [ ] LADDER: a chip per ladder above the rungs; clicking one shows its rungs and its strip (TRACK, COUNTS chips, "titles at", RENAME on the first, REMOVE on the others). `+ LADDER`, type `raider raider`, Enter: a RAIDER chip appears.
+- [ ] On RAIDER: `+ signal`, type `player_kills,totems_stolen`, Enter: two chips; click one: it goes; when none is left the strip says "every signal".
+- [ ] On RAIDER: `+ ADD RANK`, type `cutpurse 150 Cutpurse`, Enter: the rung is on RAIDER, not on the first ladder. IMPORT reads RAIDER's own track.
+- [ ] REMOVE on RAIDER asks CLICK AGAIN and then removes it; the first ladder shows RENAME instead and no REMOVE.
+- [ ] GROUPS: LuckPerms' groups listed under ON A LADDER, AWARDS and NOT RANKUP'S; typing in the search box filters; REFRESH after `/lp creategroup apple_picker` shows it.
+- [ ] Click a ladder group: its rung and points, OPEN ON LADDER jumps to it on LADDER.
+- [ ] Click `apple_picker`: MAKE AWARD, type `5000`, Enter: it moves to AWARDS; set NEEDS, COUNTS (`coins_earned`), SEASON, add a reward with + ITEM (the browser) and + KIT; STOP AWARDING asks CLICK AGAIN.
+- [ ] An award whose group is deleted in LuckPerms shows "missing" and the red line in its pane.
+- [ ] Nothing overlaps at GUI scale Auto on 1920 x 1080 (the screen shrinks to fit).
+
+## Several ladders: the rank screen (2026-10-27, RU-16)
+
+Headless: one GameTest (`RankViewLaddersGameTests`: a standing per ladder with its own points and fastest ways, every award reached or with its points, holders on every ladder and award, through the packet), 56 in all; the layout measured. The screen itself has not been seen. Server and client both this build (protocol 2). With two ladders and two awards set up, `/rank` (or U):
+
+- [ ] Under YOUR RANK, a chip per ladder and AWARDS; the screen opens on the first ladder the first time.
+- [ ] Click the second ladder's chip: its rungs on the track, your rung there in gold, its points and next rung, WHAT COUNTS lists only its signals; close and open again: it opens on that chip.
+- [ ] AWARDS: a card per award; one you reached in gold with "reached, ... ago", the others with "x / y points" and a bar; a seasonal one says "this season"; scroll with five or more.
+- [ ] The title chip shows the title LuckPerms shows in chat (a ladder's title over an award's).
+- [ ] With one ladder and no awards: one chip and the screen as before.
+

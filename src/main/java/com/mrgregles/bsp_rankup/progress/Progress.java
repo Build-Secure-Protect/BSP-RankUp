@@ -8,14 +8,20 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * One player's counters: a raw count per {@link Signal}, bonus points an admin added, the rank group last given
- * by RankUp and when. Mutable; the ledger owns it and marks itself dirty when it changes.
+ * One player's counters: a raw count per {@link Signal}, bonus points an admin added, the rung RankUp last gave them
+ * on each ladder and when, the awards they reached (D50) and the season bases. Mutable; the ledger owns it and marks
+ * itself dirty when it changes.
+ *
+ * <p>The first ladder's rung and season base live in {@link #rank()}, {@link #rankedAtMs()} and {@link #seasonBase()},
+ * as they did when RankUp had one ladder (and as the shared storage holds them); every other ladder's are kept by
+ * the ladder's name. So the first ladder is a fixed role: it can be renamed but not removed or moved.
  */
 public final class Progress {
     private final EnumMap<Signal, Long> counts = new EnumMap<>(Signal.class);
@@ -29,6 +35,21 @@ public final class Progress {
     /** The highest BSP-Core points seen this season (owner decision D48); the score signal counts what passes it. */
     private long scorePeak;
     private final Set<String> rewarded = new LinkedHashSet<>();
+    /** The rung held on each ladder after the first, by ladder name. */
+    private final Map<String, Held> otherRanks = new LinkedHashMap<>();
+    /** Season bases of the ladders after the first and of seasonal awards ({@code award:<group>}), by that key. */
+    private final Map<String, Long> otherBases = new LinkedHashMap<>();
+    /** Awards reached (D50): the group and when. */
+    private final Map<String, Long> awards = new LinkedHashMap<>();
+
+    /** A rung held: the LuckPerms group and when RankUp gave it. */
+    public record Held(String group, long atMs) {
+    }
+
+    /** The key a seasonal award's base is kept under. */
+    public static String awardKey(String group) {
+        return "award:" + group;
+    }
 
     public long count(Signal signal) {
         return counts.getOrDefault(signal, 0L);
@@ -76,6 +97,60 @@ public final class Progress {
     void setRank(@Nullable String rank, long atMs) {
         this.rank = rank;
         this.rankedAtMs = atMs;
+    }
+
+    /** The rung held on a ladder after the first, by its name; null when none. */
+    @Nullable
+    public Held otherRank(String ladder) {
+        return otherRanks.get(ladder);
+    }
+
+    public Map<String, Held> otherRanks() {
+        return Map.copyOf(otherRanks);
+    }
+
+    void setOtherRank(String ladder, @Nullable String group, long atMs) {
+        if (group == null) {
+            otherRanks.remove(ladder);
+        } else {
+            otherRanks.put(ladder, new Held(group, atMs));
+        }
+    }
+
+    /** The season base kept under a key (a later ladder's name, or {@link #awardKey}); 0 when none. */
+    public long otherBase(String key) {
+        return otherBases.getOrDefault(key, 0L);
+    }
+
+    public Map<String, Long> otherBases() {
+        return Map.copyOf(otherBases);
+    }
+
+    void setOtherBases(Map<String, Long> bases) {
+        otherBases.clear();
+        bases.forEach((k, v) -> {
+            if (v != 0) {
+                otherBases.put(k, v);
+            }
+        });
+    }
+
+    /** True when the player reached this award (D50). */
+    public boolean hasAward(String group) {
+        return awards.containsKey(group);
+    }
+
+    /** Awards reached: group and when. */
+    public Map<String, Long> awards() {
+        return Map.copyOf(awards);
+    }
+
+    void setAward(String group, boolean reached, long atMs) {
+        if (reached) {
+            awards.put(group, atMs);
+        } else {
+            awards.remove(group);
+        }
     }
 
     /** Rewards earned while the player was away, handed over on their next login here. */
@@ -128,7 +203,8 @@ public final class Progress {
     }
 
     public boolean isEmpty() {
-        return counts.isEmpty() && bonus == 0 && rank == null && pending.isEmpty() && season == 0 && scorePeak == 0 && rewarded.isEmpty();
+        return counts.isEmpty() && bonus == 0 && rank == null && pending.isEmpty() && season == 0 && scorePeak == 0 && rewarded.isEmpty()
+                && otherRanks.isEmpty() && otherBases.isEmpty() && awards.isEmpty();
     }
 
     public CompoundTag save() {
@@ -164,6 +240,26 @@ public final class Progress {
             }
             tag.put("Rewarded", list);
         }
+        if (!otherRanks.isEmpty()) {
+            CompoundTag r = new CompoundTag();
+            otherRanks.forEach((ladder, held) -> {
+                CompoundTag e = new CompoundTag();
+                e.putString("Group", held.group());
+                e.putLong("At", held.atMs());
+                r.put(ladder, e);
+            });
+            tag.put("LadderRanks", r);
+        }
+        if (!otherBases.isEmpty()) {
+            CompoundTag b = new CompoundTag();
+            otherBases.forEach(b::putLong);
+            tag.put("SeasonBases", b);
+        }
+        if (!awards.isEmpty()) {
+            CompoundTag a = new CompoundTag();
+            awards.forEach(a::putLong);
+            tag.put("Awards", a);
+        }
         return tag;
     }
 
@@ -192,11 +288,25 @@ public final class Progress {
         for (int i = 0; i < rewarded.size(); i++) {
             p.rewarded.add(rewarded.getString(i));
         }
+        CompoundTag r = tag.getCompound("LadderRanks");
+        for (String ladder : r.getAllKeys()) {
+            CompoundTag e = r.getCompound(ladder);
+            p.otherRanks.put(ladder, new Held(e.getString("Group"), e.getLong("At")));
+        }
+        CompoundTag b = tag.getCompound("SeasonBases");
+        for (String key : b.getAllKeys()) {
+            p.otherBases.put(key, b.getLong(key));
+        }
+        CompoundTag a = tag.getCompound("Awards");
+        for (String group : a.getAllKeys()) {
+            p.awards.put(group, a.getLong(group));
+        }
         return p;
     }
 
     @Override
     public String toString() {
-        return "Progress" + counts + (bonus != 0 ? " bonus " + bonus : "") + (rank != null ? " rank " + rank : "") + (pending.isEmpty() ? "" : " pending " + pending.size()) + (season == 0 ? "" : " season " + season + " base " + seasonBase) + (scorePeak == 0 ? "" : " score peak " + scorePeak);
+        return "Progress" + counts + (bonus != 0 ? " bonus " + bonus : "") + (rank != null ? " rank " + rank : "") + (pending.isEmpty() ? "" : " pending " + pending.size()) + (season == 0 ? "" : " season " + season + " base " + seasonBase) + (scorePeak == 0 ? "" : " score peak " + scorePeak)
+                + (otherRanks.isEmpty() ? "" : " ladders " + otherRanks) + (otherBases.isEmpty() ? "" : " bases " + otherBases) + (awards.isEmpty() ? "" : " awards " + awards.keySet());
     }
 }

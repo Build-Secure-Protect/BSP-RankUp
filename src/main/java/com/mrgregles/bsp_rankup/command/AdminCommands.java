@@ -16,6 +16,8 @@ import com.mrgregles.bsp_rankup.network.AdminSync;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
+import com.mrgregles.bsp_rankup.settings.Award;
+import com.mrgregles.bsp_rankup.settings.Ladder;
 import com.mrgregles.bsp_rankup.settings.Rank;
 import com.mrgregles.bsp_rankup.settings.Reward;
 import com.mrgregles.bsp_rankup.settings.Settings;
@@ -38,14 +40,38 @@ import java.util.UUID;
 
 /**
  * {@code /rankup}: the admin commands. Every edit goes through {@link AdminEdits}, which the admin screen uses too.
- * Players: {@code set, add, reset}. The ladder: {@code ladder add|remove|list|points|name|seasonal|move <rung>|import}.
- * Rewards: {@code reward add|list|remove|clear}. Signals: {@code signal <signal> on|off|points <n> per <n>}.
+ * Players: {@code set, add, reset}. Rungs: {@code ladder add|list|import} (the first ladder) and
+ * {@code ladder remove|points|name|seasonal|move} (any ladder's rung). Ladders (D49): {@code ladders} and
+ * {@code ladders add|remove|rename|track|counts|titlepriority|rungs|addrung|import}. Awards (D50): {@code award} and
+ * {@code award add|remove|points|name|counts|seasonal}. Rewards of any rung or award: {@code reward add|list|remove|clear}. Signals: {@code signal <signal> on|off|points <n> per <n>}.
  * Options: {@code option track|announce|cooldown|titlepriority|rewardsagain}. Files: {@code export, import}.
  * {@code admin} opens the screen; {@code info}, {@code reload}. Replies are plain English (server text is not translated, as in Region Guard).
  */
 public final class AdminCommands {
-    private static final SuggestionProvider<CommandSourceStack> GROUPS = (ctx, b) ->
-            SharedSuggestionProvider.suggest(SettingsLedger.settings(ctx.getSource().getServer()).ranks().stream().map(Rank::group), b);
+    /** Every ladder's rungs and every award: what reward and rung commands take. */
+    private static final SuggestionProvider<CommandSourceStack> GROUPS = (ctx, b) -> {
+        Settings settings = SettingsLedger.settings(ctx.getSource().getServer());
+        List<String> groups = new java.util.ArrayList<>();
+        settings.ladders().forEach(l -> l.ranks().forEach(r -> groups.add(r.group())));
+        settings.awards().forEach(a -> groups.add(a.group()));
+        return SharedSuggestionProvider.suggest(groups, b);
+    };
+    private static final SuggestionProvider<CommandSourceStack> RUNGS = (ctx, b) -> {
+        List<String> groups = new java.util.ArrayList<>();
+        SettingsLedger.settings(ctx.getSource().getServer()).ladders().forEach(l -> l.ranks().forEach(r -> groups.add(r.group())));
+        return SharedSuggestionProvider.suggest(groups, b);
+    };
+    private static final SuggestionProvider<CommandSourceStack> LADDERS = (ctx, b) ->
+            SharedSuggestionProvider.suggest(SettingsLedger.settings(ctx.getSource().getServer()).ladders().stream().map(Ladder::name), b);
+    private static final SuggestionProvider<CommandSourceStack> AWARDS = (ctx, b) ->
+            SharedSuggestionProvider.suggest(SettingsLedger.settings(ctx.getSource().getServer()).awards().stream().map(Award::group), b);
+    private static final SuggestionProvider<CommandSourceStack> COUNTS = (ctx, b) -> {
+        List<String> options = new java.util.ArrayList<>(List.of("all"));
+        for (Signal sig : Signal.values()) {
+            options.add(sig.key());
+        }
+        return SharedSuggestionProvider.suggest(options, b);
+    };
     private static final SuggestionProvider<CommandSourceStack> SIGNALS = (ctx, b) ->
             SharedSuggestionProvider.suggest(java.util.Arrays.stream(Signal.values()).map(Signal::key), b);
     private static final SuggestionProvider<CommandSourceStack> ITEMS = (ctx, b) ->
@@ -77,7 +103,7 @@ public final class AdminCommands {
         // players
         root.then(Commands.literal("set")
                 .then(Commands.argument("player", StringArgumentType.word()).suggests(PLAYERS)
-                        .then(Commands.argument("group", StringArgumentType.word()).suggests(GROUPS)
+                        .then(Commands.argument("group", StringArgumentType.word()).suggests(RUNGS)
                                 .executes(ctx -> set(ctx.getSource(), StringArgumentType.getString(ctx, "player"), StringArgumentType.getString(ctx, "group"))))));
         root.then(Commands.literal("add")
                 .then(Commands.argument("player", StringArgumentType.word()).suggests(PLAYERS)
@@ -107,6 +133,47 @@ public final class AdminCommands {
                 .executes(ctx -> reply(ctx, AdminEdits.ladderMove(server(ctx), group(ctx), IntegerArgumentType.getInteger(ctx, "rung")))))));
         ladder.then(Commands.literal("import").executes(ctx -> reply(ctx, AdminEdits.ladderImport(server(ctx)))));
         root.then(ladder);
+
+        // ladders (D49)
+        LiteralArgumentBuilder<CommandSourceStack> ladders = Commands.literal("ladders").executes(ctx -> laddersList(ctx.getSource()));
+        ladders.then(Commands.literal("add").then(Commands.argument("newladder", StringArgumentType.word())
+                .then(Commands.argument("track", StringArgumentType.word())
+                        .executes(ctx -> reply(ctx, AdminEdits.laddersAdd(server(ctx), StringArgumentType.getString(ctx, "newladder"), StringArgumentType.getString(ctx, "track")))))));
+        ladders.then(Commands.literal("remove").then(ladderArg().executes(ctx -> reply(ctx, AdminEdits.laddersRemove(server(ctx), ladderName(ctx))))));
+        ladders.then(Commands.literal("rename").then(ladderArg().then(Commands.argument("newname", StringArgumentType.word())
+                .executes(ctx -> reply(ctx, AdminEdits.laddersRename(server(ctx), ladderName(ctx), StringArgumentType.getString(ctx, "newname")))))));
+        ladders.then(Commands.literal("track").then(ladderArg().then(Commands.argument("track", StringArgumentType.word())
+                .executes(ctx -> reply(ctx, AdminEdits.laddersTrack(server(ctx), ladderName(ctx), StringArgumentType.getString(ctx, "track")))))));
+        ladders.then(Commands.literal("counts").then(ladderArg().then(Commands.argument("signals", StringArgumentType.greedyString()).suggests(COUNTS)
+                .executes(ctx -> reply(ctx, AdminEdits.laddersCounts(server(ctx), ladderName(ctx), StringArgumentType.getString(ctx, "signals")))))));
+        ladders.then(Commands.literal("titlepriority").then(ladderArg().then(Commands.argument("priority", IntegerArgumentType.integer())
+                .executes(ctx -> reply(ctx, AdminEdits.laddersTitlePriority(server(ctx), ladderName(ctx), IntegerArgumentType.getInteger(ctx, "priority")))))));
+        ladders.then(Commands.literal("rungs").then(ladderArg().executes(ctx -> rungList(ctx.getSource(), ladderName(ctx)))));
+        ladders.then(Commands.literal("addrung").then(ladderArg().then(Commands.argument("newgroup", StringArgumentType.word())
+                .then(Commands.argument("points", LongArgumentType.longArg(0))
+                        .executes(ctx -> reply(ctx, AdminEdits.ladderAdd(server(ctx), ladderName(ctx), StringArgumentType.getString(ctx, "newgroup"), LongArgumentType.getLong(ctx, "points"), null)))
+                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                .executes(ctx -> reply(ctx, AdminEdits.ladderAdd(server(ctx), ladderName(ctx), StringArgumentType.getString(ctx, "newgroup"), LongArgumentType.getLong(ctx, "points"), StringArgumentType.getString(ctx, "name")))))))));
+        ladders.then(Commands.literal("import").then(ladderArg().executes(ctx -> reply(ctx, AdminEdits.ladderImport(server(ctx), ladderName(ctx))))));
+        root.then(ladders);
+
+        // awards (D50)
+        LiteralArgumentBuilder<CommandSourceStack> award = Commands.literal("award").executes(ctx -> awardList(ctx.getSource()));
+        award.then(Commands.literal("add").then(Commands.argument("newgroup", StringArgumentType.word())
+                .then(Commands.argument("points", LongArgumentType.longArg(0))
+                        .executes(ctx -> reply(ctx, AdminEdits.awardAdd(server(ctx), StringArgumentType.getString(ctx, "newgroup"), LongArgumentType.getLong(ctx, "points"), null)))
+                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                .executes(ctx -> reply(ctx, AdminEdits.awardAdd(server(ctx), StringArgumentType.getString(ctx, "newgroup"), LongArgumentType.getLong(ctx, "points"), StringArgumentType.getString(ctx, "name"))))))));
+        award.then(Commands.literal("remove").then(awardArg().executes(ctx -> reply(ctx, AdminEdits.awardRemove(server(ctx), awardGroup(ctx))))));
+        award.then(Commands.literal("points").then(awardArg().then(Commands.argument("points", LongArgumentType.longArg(0))
+                .executes(ctx -> reply(ctx, AdminEdits.awardPoints(server(ctx), awardGroup(ctx), LongArgumentType.getLong(ctx, "points")))))));
+        award.then(Commands.literal("name").then(awardArg().then(Commands.argument("name", StringArgumentType.greedyString())
+                .executes(ctx -> reply(ctx, AdminEdits.awardName(server(ctx), awardGroup(ctx), StringArgumentType.getString(ctx, "name")))))));
+        award.then(Commands.literal("counts").then(awardArg().then(Commands.argument("signals", StringArgumentType.greedyString()).suggests(COUNTS)
+                .executes(ctx -> reply(ctx, AdminEdits.awardCounts(server(ctx), awardGroup(ctx), StringArgumentType.getString(ctx, "signals")))))));
+        award.then(Commands.literal("seasonal").then(awardArg().then(Commands.argument("seasonal", BoolArgumentType.bool())
+                .executes(ctx -> reply(ctx, AdminEdits.awardSeasonal(server(ctx), awardGroup(ctx), BoolArgumentType.getBool(ctx, "seasonal")))))));
+        root.then(award);
 
         // rewards
         LiteralArgumentBuilder<CommandSourceStack> reward = Commands.literal("reward");
@@ -179,8 +246,8 @@ public final class AdminCommands {
         if (player.isEmpty()) {
             return 0;
         }
-        if (SettingsLedger.settings(source.getServer()).rank(group) == null) {
-            source.sendFailure(Component.literal("No rung called " + group + ". /rankup ladder list shows them."));
+        if (SettingsLedger.settings(source.getServer()).ladderOf(group) == null) {
+            source.sendFailure(Component.literal("No rung called " + group + ". /rankup ladders shows the ladders."));
             return 0;
         }
         AdminEdits.playerSet(source.getServer(), player.get(), group, reply -> {
@@ -225,21 +292,69 @@ public final class AdminCommands {
 
     private static int rewardList(CommandContext<CommandSourceStack> ctx) {
         Settings settings = SettingsLedger.settings(server(ctx));
-        Rank r = settings.rank(group(ctx));
-        if (r == null) {
-            ctx.getSource().sendFailure(Component.literal("No rung called " + group(ctx) + ". /rankup ladder list shows them."));
+        var entry = AdminEdits.rewardsOf(settings, group(ctx));
+        if (entry == null) {
+            ctx.getSource().sendFailure(Component.literal("No rung or award called " + group(ctx) + ". /rankup ladders and /rankup award show them."));
             return 0;
         }
-        if (r.rewards().isEmpty()) {
-            ctx.getSource().sendSuccess(() -> Component.literal(r.displayName() + " gives nothing. /rankup reward add " + r.group() + " coins|pieces|item|title|command|kit ..."), false);
+        String shown = entry.getKey();
+        List<Reward> rewards = entry.getValue();
+        if (rewards.isEmpty()) {
+            ctx.getSource().sendSuccess(() -> Component.literal(shown + " gives nothing. /rankup reward add " + group(ctx) + " coins|pieces|item|title|command|kit ..."), false);
             return 1;
         }
-        ctx.getSource().sendSuccess(() -> Component.literal(r.displayName() + " gives:"), false);
-        for (int i = 0; i < r.rewards().size(); i++) {
-            String line = (i + 1) + ". " + AdminEdits.describe(r.rewards().get(i));
+        ctx.getSource().sendSuccess(() -> Component.literal(shown + " gives:"), false);
+        for (int i = 0; i < rewards.size(); i++) {
+            String line = (i + 1) + ". " + AdminEdits.describe(rewards.get(i));
             ctx.getSource().sendSuccess(() -> Component.literal(line), false);
         }
-        return r.rewards().size();
+        return rewards.size();
+    }
+
+    private static int laddersList(CommandSourceStack source) {
+        Settings settings = SettingsLedger.settings(source.getServer());
+        source.sendSuccess(() -> Component.literal(settings.ladders().size() + " ladder" + (settings.ladders().size() == 1 ? "" : "s") + ":"), false);
+        for (int i = 0; i < settings.ladders().size(); i++) {
+            Ladder l = settings.ladders().get(i);
+            String line = (i + 1) + ". " + l.name() + (i == 0 ? " (first)" : "") + " on track " + l.track() + ", " + l.ranks().size() + " rung" + (l.ranks().size() == 1 ? "" : "s")
+                    + ", counts " + AdminEdits.describeCounts(l.counts()) + ", titles at priority " + l.titlePriority();
+            source.sendSuccess(() -> Component.literal(line), false);
+        }
+        return settings.ladders().size();
+    }
+
+    private static int rungList(CommandSourceStack source, String ladderName) {
+        Ladder l = SettingsLedger.settings(source.getServer()).ladder(ladderName);
+        if (l == null) {
+            source.sendFailure(Component.literal("No ladder called " + ladderName + ". /rankup ladders shows them."));
+            return 0;
+        }
+        if (l.ranks().isEmpty()) {
+            source.sendSuccess(() -> Component.literal("Ladder " + l.name() + " is empty. /rankup ladders addrung " + l.name() + " <group> <points> [name], or /rankup ladders import " + l.name()), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal("Ladder " + l.name() + " on track " + l.track() + ", " + l.ranks().size() + " rungs:"), false);
+        for (int i = 0; i < l.ranks().size(); i++) {
+            Rank r = l.ranks().get(i);
+            String line = (i + 1) + ". " + r.displayName() + " (" + r.group() + ") at " + r.points() + " points, " + r.rewards().size() + " reward" + (r.rewards().size() == 1 ? "" : "s") + (r.seasonal() ? ", seasonal" : "");
+            source.sendSuccess(() -> Component.literal(line), false);
+        }
+        return l.ranks().size();
+    }
+
+    private static int awardList(CommandSourceStack source) {
+        Settings settings = SettingsLedger.settings(source.getServer());
+        if (settings.awards().isEmpty()) {
+            source.sendSuccess(() -> Component.literal("No awards. /rankup award add <group> <points> [name] makes a LuckPerms group on no ladder an award."), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal(settings.awards().size() + " award" + (settings.awards().size() == 1 ? "" : "s") + ":"), false);
+        for (Award a : settings.awards()) {
+            String line = a.displayName() + " (" + a.group() + ") at " + a.points() + " points from " + AdminEdits.describeCounts(a.counts()) + ", " + a.rewards().size() + " reward" + (a.rewards().size() == 1 ? "" : "s")
+                    + (a.seasonal() ? ", taken back each season" : "");
+            source.sendSuccess(() -> Component.literal(line), false);
+        }
+        return settings.awards().size();
     }
 
     private static int signalList(CommandSourceStack source) {
@@ -256,7 +371,7 @@ public final class AdminCommands {
         Settings settings = SettingsLedger.settings(server);
         ProgressLedger ledger = ProgressLedger.get(server);
         List<String> lines = List.of(
-                "BSP RankUp: track " + settings.track() + ", " + settings.ranks().size() + " rungs, " + settings.signals().values().stream().filter(SignalSetting::on).count() + " of " + Signal.values().length + " signals on",
+                "BSP RankUp: " + settings.ladders().size() + " ladder" + (settings.ladders().size() == 1 ? "" : "s") + " (first: track " + settings.track() + ", " + settings.ranks().size() + " rungs), " + settings.awards().size() + " award" + (settings.awards().size() == 1 ? "" : "s") + ", " + settings.signals().values().stream().filter(SignalSetting::on).count() + " of " + Signal.values().length + " signals on",
                 "LuckPerms: " + switch (LuckPermsBridge.route()) { case FORGE -> "Forge edition"; case BUKKIT -> "Bukkit plugin"; default -> "not reachable (ranks are recorded here only)"; }
                         + (LuckPermsBridge.isPresent() ? ", track " + settings.track() + (LuckPermsBridge.trackGroups(settings.track()).isEmpty() ? " missing or empty" : ": " + String.join(" > ", LuckPermsBridge.trackGroups(settings.track()))) : ""),
                 "Players with progress on this server: " + ledger.all().size() + "; announcements: " + settings.announce().name().toLowerCase(Locale.ROOT) + "; kill cooldown " + settings.killCooldownMinutes() + " min; titles at priority " + settings.titlePriority(),
@@ -282,6 +397,22 @@ public final class AdminCommands {
 
     private static String group(CommandContext<CommandSourceStack> ctx) {
         return StringArgumentType.getString(ctx, "group").toLowerCase(Locale.ROOT);
+    }
+
+    private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> ladderArg() {
+        return Commands.argument("ladder", StringArgumentType.word()).suggests(LADDERS);
+    }
+
+    private static String ladderName(CommandContext<CommandSourceStack> ctx) {
+        return StringArgumentType.getString(ctx, "ladder").toLowerCase(Locale.ROOT);
+    }
+
+    private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> awardArg() {
+        return Commands.argument("award", StringArgumentType.word()).suggests(AWARDS);
+    }
+
+    private static String awardGroup(CommandContext<CommandSourceStack> ctx) {
+        return StringArgumentType.getString(ctx, "award").toLowerCase(Locale.ROOT);
     }
 
     private static String signal(CommandContext<CommandSourceStack> ctx) {

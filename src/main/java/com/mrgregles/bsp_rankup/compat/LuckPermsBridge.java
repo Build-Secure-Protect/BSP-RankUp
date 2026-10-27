@@ -382,6 +382,69 @@ public final class LuckPermsBridge {
         }
     }
 
+    /** What {@link #addGroup} did. */
+    public enum Added { ADDED, ALREADY, FAILED }
+
+    /**
+     * Adds a group to the player outright, on no track (an award, D50), and says whether the player had it already
+     * (given by hand or by another server), decided inside the same edit so no cached copy is trusted. FAILED when
+     * LuckPerms is absent, the group does not exist in LuckPerms, or the edit failed. Runs on a LuckPerms thread.
+     */
+    public static CompletableFuture<Added> addGroup(UUID player, String group) {
+        if (!isPresent()) {
+            return CompletableFuture.completedFuture(Added.FAILED);
+        }
+        try {
+            Object groupManager = call(api, "getGroupManager");
+            if (call(groupManager, "getGroup", group) == null) {
+                BSPRankUp.LOGGER.warn("LuckPerms has no group '{}': the award waits until it exists", group);
+                return CompletableFuture.completedFuture(Added.FAILED);
+            }
+            AtomicReference<Added> result = new AtomicReference<>(Added.FAILED);
+            Consumer<Object> edit = user -> {
+                try {
+                    for (Object n : nodesOf(user)) {
+                        if (("group." + group).equals(call(n, "getKey"))) {
+                            result.set(Added.ALREADY);
+                            return;
+                        }
+                    }
+                    Object node = call(callStatic(INHERITANCE_NODE, "builder", group), "build");
+                    call(call(user, "data"), "add", node);
+                    result.set(Added.ADDED);
+                } catch (ReflectiveOperationException | RuntimeException e) {
+                    warn("add group", e);
+                }
+            };
+            return modifyUser(player, edit).thenApply(v -> result.get());
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            warn("add group", e);
+            return CompletableFuture.completedFuture(Added.FAILED);
+        }
+    }
+
+    /** Takes one group off the player (a seasonal award at a season's end). Runs on a LuckPerms thread. */
+    public static CompletableFuture<Boolean> removeGroup(UUID player, String group) {
+        if (!isPresent()) {
+            return CompletableFuture.completedFuture(false);
+        }
+        AtomicBoolean ok = new AtomicBoolean(false);
+        Consumer<Object> edit = user -> {
+            try {
+                Object data = call(user, "data");
+                for (Object n : new ArrayList<>(nodesOf(user))) {
+                    if (("group." + group).equals(call(n, "getKey"))) {
+                        call(data, "remove", n);
+                    }
+                }
+                ok.set(true);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                warn("remove group", e);
+            }
+        };
+        return modifyUser(player, edit).thenApply(v -> ok.get());
+    }
+
     /** Takes the player off every group of the track (a season's end below the first permanent rung). */
     public static CompletableFuture<Boolean> clearTrack(UUID player, String track) {
         if (!isPresent()) {
@@ -527,6 +590,26 @@ public final class LuckPermsBridge {
     /** Loads the user, applies the edit on a LuckPerms thread and saves. A reflective failure is logged and the future completes without the edit. */
     @SuppressWarnings("unchecked")
     private static CompletableFuture<Void> modifyUser(UUID player, Consumer<Object> edit) {
+        // one edit at a time per player: LuckPerms loads, edits and saves the whole user, so two edits at once (two
+        // ladders' rank-ups, a rank-up and an award) could each save over the other's change
+        synchronized (EDITS) {
+            CompletableFuture<Void> previous = EDITS.getOrDefault(player, CompletableFuture.completedFuture(null));
+            CompletableFuture<Void> next = previous.handle((v, err) -> null).thenCompose(v -> startEdit(player, edit));
+            EDITS.put(player, next);
+            next.whenComplete((v, err) -> {
+                synchronized (EDITS) {
+                    EDITS.remove(player, next);
+                }
+            });
+            return next;
+        }
+    }
+
+    /** The edits under way or queued, by player: each starts when the one before it has been saved. */
+    private static final Map<UUID, CompletableFuture<Void>> EDITS = new java.util.HashMap<>();
+
+    @SuppressWarnings("unchecked")
+    private static CompletableFuture<Void> startEdit(UUID player, Consumer<Object> edit) {
         try {
             Object userManager = call(api, "getUserManager");
             return (CompletableFuture<Void>) call(userManager, "modifyUser", player, edit);

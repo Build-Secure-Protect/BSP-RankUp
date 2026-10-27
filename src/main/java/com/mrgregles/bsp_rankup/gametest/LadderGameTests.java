@@ -148,7 +148,11 @@ public class LadderGameTests {
         MinecraftServer server = level.getServer();
         ServerPlayer player = TestPlayers.mockServerPlayer(h);
         List<RankEngine.RankUp> ups = new ArrayList<>();
-        java.util.function.Consumer<RankEngine.RankUp> listener = u -> ups.add(u);
+        java.util.function.Consumer<RankEngine.RankUp> listener = u -> {
+            if (u.player().equals(player.getUUID())) { // another test's rank-ups may still be arriving
+                ups.add(u);
+            }
+        };
         RankEngine.onRankUp(listener);
         install(server);
         level.addNewPlayer(player);

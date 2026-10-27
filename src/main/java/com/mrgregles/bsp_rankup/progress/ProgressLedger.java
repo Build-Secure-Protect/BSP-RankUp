@@ -30,7 +30,7 @@ public final class ProgressLedger extends SavedData {
     public static final String NAME = "bsp_rankup_progress";
 
     /** What kind of change happened. */
-    public enum Kind { COUNT, BONUS, RANK, PENDING, SEASON, REWARDED, RESET, LOAD }
+    public enum Kind { COUNT, BONUS, RANK, PENDING, SEASON, REWARDED, AWARD, RESET, LOAD }
 
     /**
      * What changed: the server (null for a ledger loaded outside a server, as in tests), the player, the kind, the
@@ -137,7 +137,8 @@ public final class ProgressLedger extends SavedData {
      * Replaces everything known about a player with what the shared storage holds (read on login). One LOAD change
      * tells the listeners; the storage itself ignores it.
      */
-    public void load(UUID player, Map<Signal, Long> counts, long bonus, @Nullable String rank, long rankedAtMs, List<Reward> pending, int season, long seasonBase, long scorePeak, java.util.Set<String> rewarded) {
+    public void load(UUID player, Map<Signal, Long> counts, long bonus, @Nullable String rank, long rankedAtMs, List<Reward> pending, int season, long seasonBase, long scorePeak, java.util.Set<String> rewarded,
+                     @Nullable Map<String, Progress.Held> otherRanks, @Nullable Map<String, Long> otherBases, @Nullable Map<String, Long> awards) {
         Progress p = new Progress();
         counts.forEach(p::set);
         p.setBonus(bonus);
@@ -146,6 +147,17 @@ public final class ProgressLedger extends SavedData {
         p.setSeason(season, seasonBase);
         p.setScorePeak(scorePeak);
         p.setRewarded(rewarded);
+        Progress local = players.get(player);
+        if (otherRanks != null && otherBases != null && awards != null) {
+            otherRanks.forEach((ladder, held) -> p.setOtherRank(ladder, held.group(), held.atMs()));
+            p.setOtherBases(otherBases);
+            awards.forEach((group, at) -> p.setAward(group, true, at));
+        } else if (local != null) {
+            // a row written before several ladders (RankUp 0.2) has none of them: this server's copy stays
+            local.otherRanks().forEach((ladder, held) -> p.setOtherRank(ladder, held.group(), held.atMs()));
+            p.setOtherBases(local.otherBases());
+            local.awards().forEach((group, at) -> p.setAward(group, true, at));
+        }
         if (p.isEmpty()) {
             players.remove(player);
         } else {
@@ -165,6 +177,38 @@ public final class ProgressLedger extends SavedData {
         p.setScorePeak(0);
         setDirty();
         notify(new Change(server, player, Kind.SEASON, null, 0, p));
+    }
+
+    /** The rung RankUp put the player on, on a ladder after the first (the first ladder's is {@link #setRank}). */
+    public void setOtherRank(UUID player, String ladder, @Nullable String group, long atMs) {
+        Progress p = progress(player);
+        p.setOtherRank(ladder, group, atMs);
+        setDirty();
+        notify(new Change(server, player, Kind.RANK, null, 0, p));
+    }
+
+    /**
+     * Records a season's end applied to the player with every base at once: the first ladder's in {@code base}, the
+     * later ladders' and seasonal awards' in {@code others} (by ladder name or {@link Progress#awardKey}).
+     */
+    public void setSeason(UUID player, int season, long base, Map<String, Long> others) {
+        Progress p = progress(player);
+        p.setSeason(season, base);
+        p.setOtherBases(others);
+        p.setScorePeak(0);
+        setDirty();
+        notify(new Change(server, player, Kind.SEASON, null, 0, p));
+    }
+
+    /** Records an award reached, or taken back (a seasonal award at a season's end). */
+    public void setAward(UUID player, String group, boolean reached, long atMs) {
+        Progress p = progress(player);
+        if (p.hasAward(group) == reached) {
+            return;
+        }
+        p.setAward(group, reached, atMs);
+        setDirty();
+        notify(new Change(server, player, Kind.AWARD, null, 0, p));
     }
 
     /** Records the player's highest BSP-Core points this season (D48); shared with the season values. */

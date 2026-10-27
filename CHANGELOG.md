@@ -4,6 +4,46 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-27
+
+### Added (2026-10-27, the rank screen for several ladders and awards, RU-16)
+- The player's rank screen (mock-up A, D52) has a chip per ladder under the title, and AWARDS when there are awards. A ladder chip shows that ladder: its rungs on the track, the player's rung, points and next rung there, its fastest ways, and under WHAT COUNTS only the signals that ladder counts. AWARDS lists every award as a card: reached (and when) in gold, or the points toward it with a bar, and what it gives. The screen opens on the chip looked at last this game, else the first ladder.
+- The title chip shows the RankUp title LuckPerms displays: the prefix at the highest of the ladders' and the awards' priorities.
+- The rank view (protocol 2) carries each ladder's standing (rung, when, points, this season's points, fastest ways among its own signals) and each award's (reached and when, or the points toward it), and counts holders on every ladder and award.
+
+### Added (2026-10-27, the admin screen for several ladders and awards, RU-15)
+- LADDER (mock-up A, D51): a row of ladder chips at the top chooses the ladder, `+ LADDER` adds one ("name track"). Under the chips, the chosen ladder's strip: its TRACK, what it COUNTS as chips (a click takes a signal off, `+ signal` sets the list, "every signal" when none is chosen), its title priority, and RENAME (the first ladder) or REMOVE (the others, a second click). The rung list, `+ ADD RANK` and IMPORT work on the chosen ladder.
+- GROUPS, a new second tab (D50, D51): every LuckPerms group, read from LuckPerms each time the view comes, in three parts: on a ladder (with the ladder and rung), awards (with what they count, or "missing" when LuckPerms has no such group), and not RankUp's. A search box filters the list; REFRESH reads LuckPerms again. A ladder group shows its rule and OPEN ON LADDER; an unused group has MAKE AWARD; an award has its name, points, counts, season, rewards (the same reward editor as a rung, with the item browser and kit picker) and STOP AWARDING.
+- Protocol 2: the admin view carries LuckPerms' groups and the holders of every ladder's rungs and every award, so the server and the players' modpack must update together.
+
+### Added (2026-10-27, several ladders: commands, /rank, api, RU-14d)
+- `/rankup ladders` lists the ladders; `/rankup ladders add <name> <track>` adds one (counting every signal, its titles one priority below the lowest so far), and `remove`, `rename`, `track`, `counts <ladder> all|<signal,signal>`, `titlepriority`, `rungs`, `addrung <ladder> <group> <points> [name]` and `import <ladder>` look after them. The first ladder cannot be removed, and only it can be renamed (what players hold on the others is kept under their names).
+- `/rankup award` lists the awards; `award add <group> <points> [name]`, `remove`, `points`, `name`, `counts`, `seasonal` look after them. A group is a rung on one ladder at most, or an award, never both.
+- The rung commands (`ladder remove|points|name|seasonal|move`), `rankup set` and the reward commands now reach a rung on any ladder, and the reward commands an award's rewards too.
+- `/rank` with several ladders shows one line per ladder (its rung, points and next rung), then the signals, the awards reached, the bonus and what waits. With one ladder it reads as before, plus the awards reached.
+- API version 2: `ladders(server)` (`LadderInfo`), `ladderNamed`, `rank`, `rankOf`, `hasRank`, `progressOf` with a ladder name, `awards(server)` (`AwardInfo`), `hasAward`, `awardsOf`. The calls without a ladder name answer for the first ladder, so `ladder(server)` (read by BSP-Core's kit rank rules) is unchanged. `docs/API.md` updated.
+
+### Added (2026-10-27, several ladders: shared storage, RU-14c)
+- The shared MySQL storage carries every ladder: each later ladder's rung, the season bases of the later ladders and the seasonal awards, and the awards reached, in three new columns of the players table (`ladder_ranks`, `season_bases`, `awards`, added to an existing table on start), set together with the latest winning. A row written by RankUp 0.2 (no such columns) leaves the server's own copy alone; a row that has them is the truth, even when empty.
+- Awards are announced on the other servers too when announcements are network-wide (D53).
+
+### Fixed (2026-10-27, LuckPerms edits)
+- RankUp's LuckPerms edits for one player now run one at a time. LuckPerms loads, edits and saves the whole user, so two edits at once (rank-ups on two ladders, a rank-up and an award, a title and a rung) could each save over the other's change.
+- Adding an award's group decides "the player already had it" inside the same LuckPerms edit, instead of from LuckPerms' cached copy, which could be out of date or unloaded.
+
+### Added (2026-10-27, several ladders: the engine, RU-14b)
+- The ladder engine works on every ladder: each ladder's points are the signals it counts plus the admin bonus, and a player climbs each ladder on its own LuckPerms track, holding one rung on each. A later ladder's TITLE rewards go to that ladder's title priority. When there is more than one ladder, the rank-up message and the announcement name the ladder ("You are now Warden on Playtime!").
+- Awards: once a player's points from an award's signals (plus the bonus) reach its points, RankUp adds its group in LuckPerms, gives its rewards once and tells the player ("You earned Apple Picker!"). A player who already has the group (by hand, or from another server) is recorded as having it, with no rewards. A group on a ladder is never an award. Award titles go one priority below the lowest ladder's.
+- A season's end works per ladder: each ladder's seasonal rung falls back on its own track, each ladder's and each seasonal award's points become that season's base, and seasonal awards are taken back (their group removed) to be earned again.
+- `RankChangedEvent` names the ladder (`getLadder()`).
+-
+
+### Added (2026-10-27, several ladders: settings, RU-14a)
+- The settings hold several ladders (each with a name, its LuckPerms track, the signals it counts, its rungs and its title priority) and awards (LuckPerms groups on no ladder, each with the signals it counts, the points it needs, a season flag and rewards), owner decisions D49 to D51. Settings from before load as one ladder named after its track, counting every signal, so nothing changes. Saved settings still carry the first ladder in the old form, so a backend that has not updated reads it. Not used by the ladder engine, commands or screens yet (RU-14b to RU-16).
+
+### Changed (2026-10-27, sibling versions)
+- Compiled against BSP Region Guard 0.6.0 (its request RG-R6; the 0.5.0 jar is gone). Still accepts `[0.1.0,)`.
+
 ## [0.2.2] - 2026-10-23
 
 ### Added (2026-10-23, score signal)

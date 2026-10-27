@@ -5,6 +5,8 @@ import com.mrgregles.bsp_rankup.progress.Progress;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
+import com.mrgregles.bsp_rankup.settings.Award;
+import com.mrgregles.bsp_rankup.settings.Ladder;
 import com.mrgregles.bsp_rankup.settings.Rank;
 import com.mrgregles.bsp_rankup.settings.Settings;
 import com.mrgregles.bsp_rankup.settings.SettingsLedger;
@@ -68,14 +70,22 @@ public final class RankSync {
         if (p == null) {
             p = new Progress();
         }
+        // how many hold each rung of every ladder, and each award (groups are on one ladder or one award)
         Map<String, Integer> holders = new LinkedHashMap<>();
-        for (Rank r : settings.ranks()) {
-            holders.put(r.group(), 0);
+        for (Ladder l : settings.ladders()) {
+            for (Rank r : l.ranks()) {
+                holders.put(r.group(), 0);
+            }
+        }
+        for (Award a : settings.awards()) {
+            holders.put(a.group(), 0);
         }
         ledger.forEach((id, other) -> {
             if (other.rank() != null) {
                 holders.merge(other.rank(), 1, Integer::sum);
             }
+            other.otherRanks().values().forEach(held -> holders.merge(held.group(), 1, Integer::sum));
+            other.awards().keySet().forEach(g -> holders.merge(g, 1, Integer::sum));
         });
         Map<String, Long> counts = new LinkedHashMap<>();
         for (Signal s : Signal.values()) {
@@ -90,15 +100,58 @@ public final class RankSync {
             long toGo = next.points() - (next.seasonal() ? seasonPoints : points);
             fastest = fastest(settings, Math.max(0, toGo));
         }
+        List<RankViewPacket.LadderView> ladders = new ArrayList<>();
+        for (Ladder l : settings.ladders()) {
+            long lp = RankEngine.points(settings, l, p), ls = RankEngine.seasonPoints(settings, l, p);
+            int at = l.indexOf(RankEngine.rankOn(settings, l, p));
+            List<RankViewPacket.Fastest> ways = List.of();
+            if (at + 1 < l.ranks().size()) {
+                Rank next = l.ranks().get(at + 1);
+                ways = fastest(settings, l, Math.max(0, next.points() - (next.seasonal() ? ls : lp)));
+            }
+            String held = at < 0 ? "" : l.ranks().get(at).group();
+            ladders.add(new RankViewPacket.LadderView(cut(l.name(), 32), held, RankEngine.rankedAtOn(settings, l, p), lp, ls, ways));
+        }
+        List<RankViewPacket.AwardView> awards = new ArrayList<>();
+        for (Award a : settings.awards()) {
+            Long reachedAt = p.awards().get(a.group());
+            long have = a.seasonal() ? RankEngine.seasonPoints(settings, a, p) : RankEngine.points(settings, a, p);
+            awards.add(new RankViewPacket.AwardView(a.group(), reachedAt != null, reachedAt == null ? 0 : reachedAt, have));
+        }
         // the packet carries at most 64 characters of each (a colour-coded title passes that quickly)
-        String title = cut(LuckPermsBridge.isPresent() ? LuckPermsBridge.prefixOf(player, settings.titlePriority()).orElse("") : "", 64);
+        String title = cut(shownTitle(settings, player), 64);
         String serverId = cut(Storage.active() == null ? "" : Storage.active().serverId(), 64);
         Map<String, String> kits = new LinkedHashMap<>();
         for (com.mrgregles.bsp_rankup.compat.BspCore.KitInfo k : com.mrgregles.bsp_rankup.compat.BspCore.kitsForViews(server)) {
             kits.put(cut(k.id(), 64), cut(k.name(), 64));
         }
         return new RankViewPacket(settings.save(), holders, counts, p.bonus(), points, seasonPoints, p.seasonBase() != 0 || p.season() != 0,
-                p.rank() == null ? "" : p.rank(), p.rankedAtMs(), title, p.pending().size(), fastest, serverId, ledger.lastEndedSeason() + 1, open, kits);
+                p.rank() == null ? "" : p.rank(), p.rankedAtMs(), title, p.pending().size(), fastest, serverId, ledger.lastEndedSeason() + 1, open, kits,
+                ladders, awards);
+    }
+
+    /**
+     * The RankUp title LuckPerms shows for the player (D52): the prefix at the highest of RankUp's priorities (every
+     * ladder's, and the awards') that has one. Empty without LuckPerms or a title.
+     */
+    static String shownTitle(Settings settings, UUID player) {
+        if (!LuckPermsBridge.isPresent()) {
+            return "";
+        }
+        java.util.TreeSet<Integer> priorities = new java.util.TreeSet<>(java.util.Comparator.reverseOrder());
+        for (Ladder l : settings.ladders()) {
+            priorities.add(l.titlePriority());
+        }
+        if (!settings.awards().isEmpty()) {
+            priorities.add(RankEngine.awardTitlePriority(settings));
+        }
+        for (int priority : priorities) {
+            java.util.Optional<String> t = LuckPermsBridge.prefixOf(player, priority);
+            if (t.isPresent()) {
+                return t.get();
+            }
+        }
+        return "";
     }
 
     /** {@code s} cut to {@code max} characters, for a packet field of that size. */
@@ -111,6 +164,11 @@ public final class RankSync {
      * alone (owner decision D43). Empty when nothing is needed.
      */
     public static List<RankViewPacket.Fastest> fastest(Settings settings, long toGo) {
+        return fastest(settings, null, toGo);
+    }
+
+    /** As {@link #fastest(Settings, long)} among the signals a ladder counts (every signal for null). */
+    public static List<RankViewPacket.Fastest> fastest(Settings settings, @org.jetbrains.annotations.Nullable Ladder ladder, long toGo) {
         List<RankViewPacket.Fastest> out = new ArrayList<>();
         if (toGo <= 0) {
             return out;
@@ -118,7 +176,7 @@ public final class RankSync {
         List<Signal> on = new ArrayList<>();
         for (Signal s : Signal.values()) {
             SignalSetting v = settings.signal(s);
-            if (v.on() && v.points() > 0 && v.per() > 0) {
+            if (v.on() && v.points() > 0 && v.per() > 0 && (ladder == null || ladder.counts(s))) {
                 on.add(s);
             }
         }

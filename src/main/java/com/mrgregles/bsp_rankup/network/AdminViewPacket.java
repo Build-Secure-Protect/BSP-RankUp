@@ -15,10 +15,15 @@ import java.util.function.Supplier;
  * Server to client: everything the admin screen shows. The settings as their NBT, how many players hold each rung,
  * the players matching the last search, the selected player's standing, the lines of the OPTIONS tab's info, the
  * reset-everyone code waiting (empty when none) and its seconds, the server's last answer, whether to open the screen,
- * and BSP-Core's kits (id to name) for the reward editor.
+ * BSP-Core's kits (id to name) for the reward editor, and LuckPerms' groups for the GROUPS tab (D50). The holders
+ * count every ladder's rungs and every award.
  */
 public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders, List<PlayerRow> players, PlayerDetail selected,
-                              List<String> info, String resetCode, int resetSeconds, String message, boolean ok, boolean open, Map<String, String> kits) {
+                              List<String> info, String resetCode, int resetSeconds, String message, boolean ok, boolean open, Map<String, String> kits,
+                              List<String> groups) {
+    /** The most LuckPerms groups one view carries. */
+    public static final int MAX_GROUPS = 500;
+
     /** One row of the PLAYERS tab. */
     public record PlayerRow(UUID uuid, String name, String rank, long points, boolean online) {
     }
@@ -61,6 +66,7 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
         buf.writeBoolean(msg.ok);
         buf.writeBoolean(msg.open);
         buf.writeMap(msg.kits, (b, k) -> b.writeUtf(k, 64), (b, v) -> b.writeUtf(v, 64));
+        buf.writeCollection(msg.groups.size() > MAX_GROUPS ? msg.groups.subList(0, MAX_GROUPS) : msg.groups, (b, g) -> b.writeUtf(g, 64));
     }
 
     public static AdminViewPacket decode(FriendlyByteBuf buf) {
@@ -75,7 +81,8 @@ public record AdminViewPacket(CompoundTag settings, Map<String, Integer> holders
         String message = buf.readUtf(512);
         boolean ok = buf.readBoolean(), open = buf.readBoolean();
         Map<String, String> kits = buf.readMap(b -> b.readUtf(64), b -> b.readUtf(64));
-        return new AdminViewPacket(settings == null ? new CompoundTag() : settings, holders, players, d, info, code, seconds, message, ok, open, kits);
+        List<String> groups = buf.readList(b -> b.readUtf(64));
+        return new AdminViewPacket(settings == null ? new CompoundTag() : settings, holders, players, d, info, code, seconds, message, ok, open, kits, groups);
     }
 
     public static void handle(AdminViewPacket msg, Supplier<NetworkEvent.Context> ctx) {
