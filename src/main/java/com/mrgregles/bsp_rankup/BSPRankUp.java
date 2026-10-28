@@ -38,6 +38,9 @@ public class BSPRankUp {
 
     public BSPRankUp(FMLJavaModLoadingContext context) {
         context.registerConfig(ModConfig.Type.SERVER, RankUpConfig.SPEC);
+        // the database and Redis connection: a COMMON config, never sent to players (D123); older settings move there once
+        context.registerConfig(ModConfig.Type.COMMON, RankUpNetworkConfig.SPEC, RankUpNetworkConfig.FILE);
+        MinecraftForge.EVENT_BUS.addListener((net.minecraftforge.event.server.ServerAboutToStartEvent e) -> RankUpNetworkConfig.onServerAboutToStart());
         context.registerConfig(ModConfig.Type.CLIENT, RankUpClientConfig.SPEC);
         RankUpNetwork.register();
         // Signals: what players do, counted into the progress ledger.

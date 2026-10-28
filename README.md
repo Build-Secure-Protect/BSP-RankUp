@@ -17,7 +17,7 @@ Requires [BSP Core](https://github.com/Build-Secure-Protect/BSP-Core) 1.4.5 or n
 1. In LuckPerms, make a track and its groups (`/lp createtrack rankup`, `/lp creategroup warden`, `/lp track rankup append warden` ...), or let RankUp make them from its ladder (OPTIONS, MAKE TRACK IN LUCKPERMS). Give the groups rising weights so LuckPerms reports the highest as the primary group.
 2. As a BSP Core admin, `/rankup admin` opens the admin screen: add rungs on LADDER (or IMPORT from the track), set each rung's points and rewards, switch signals and their worth on SIGNALS, pick announcements and the rest on OPTIONS. Everything saves at once. The same can be done with `/rankup` commands.
 3. Players open their rank screen with `/rank`, the U key, or the R button in their inventory.
-4. For several servers, set `storage` (MySQL) and `storage.redis` in `serverconfig/bsp_rankup-server.toml` on each backend. Nothing else lives in that file.
+4. For several servers, on each backend: set `storage.mode = "mysql"` (and `storage.redis.enabled = true` with Redis) in `serverconfig/bsp_rankup-server.toml`, and the database and Redis hosts, users and passwords in `config/bsp_rankup-network.toml`. The passwords never go in the server config: Forge sends that file to every player who joins. A value left there by an older RankUp is moved to the network file at the next start. Never ship `config/bsp_rankup-network.toml` in a client pack.
 
 ## Commands
 

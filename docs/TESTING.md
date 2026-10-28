@@ -54,7 +54,7 @@ Headless: two GameTests run every `/rankup` subcommand and `/rank` through the d
 
 Headless: three GameTests on an in-memory backend and a fake Redis (write-through as deltas, a row read on login, shared settings and their notice, notices through Redis and through the table during an outage). The MySQL and Redis connections themselves need the network: two backends, the shared database, Redis on the main machine (Region Guard's `docs/NETWORK.md` describes the layout).
 
-- [ ] With `storage.mode = "mysql"` in `serverconfig/bsp_rankup-server.toml` on each backend (and `redis.enabled = true` if Redis runs), the start log shows `RankUp storage connected: mysql ... (this server is '<name>')` and, with Redis, `Redis connected`. `/rankup info` shows the same.
+- [ ] With `storage.mode = "mysql"` in `serverconfig/bsp_rankup-server.toml` and the connection in `config/bsp_rankup-network.toml` on each backend (and `redis.enabled = true` if Redis runs), the start log shows `RankUp storage connected: mysql ... (this server is '<name>')` and, with Redis, `Redis connected`. `/rankup info` shows the same.
 - [ ] Play 2 minutes on server A and 1 minute on server B: `/rank` on either shows 3 minutes.
 - [ ] Set a rung's points on server A with `/rankup ladder points ...`: within a few seconds `/rankup ladder list` on server B shows it (at once with Redis, within `pollSeconds` without).
 - [ ] With `/rankup option announce network`, a rank-up on server A is announced on server B too.
@@ -346,4 +346,14 @@ Headless: 81 GameTests, three runs clean (`AwardGameTests` 2, `ChipRowsGameTests
 - [ ] Log out. From the console, `/rankup add <you> <enough for the next rung>`. Log in: after any "Rewards you earned while away:" lines, "While you were away you reached ...". Log out and in again: not said twice.
 - [ ] Two backends: the same while you play on B: you are told live on B ("You are now ...") and nothing more at your next login.
 - [ ] With 12 or more ladders (a test settings file): the rank screen's chips go onto a second row with AWARDS last and the ladder card starts lower; the admin LADDER tab the same with + LADDER last, its rung list and rewards list a little shorter. With 30 or more, a "+n" chip; on the admin tab a click lists every ladder in chat.
+
+## Passwords out of the synced config (2026-10-28, D123 to D128)
+
+Headless: `NetworkConfigGameTests` (the move, a value already in the network file winning, the old keys reset but kept, no value in the log line), 82/82 on two runs. Also run by hand on the dev server: values put in the old keys of `run/world/serverconfig/bsp_rankup-server.toml` were moved at start, the old keys reset, one log warning naming the keys, no value in the log.
+
+- [ ] Update one backend that has its connection in `serverconfig/bsp_rankup-server.toml`. Start it: the log has one warning, "RankUp moved its database and Redis settings ... copied storage.host, storage.password, ...", with no password in it. `config/bsp_rankup-network.toml` now holds them; the server config's keys say "Moved to config/bsp_rankup-network.toml" and are empty or default.
+- [ ] `/rankup info` shows the storage connected as before (MySQL and, with it on, Redis).
+- [ ] Restart: no second warning.
+- [ ] Join as a player: the server config your client receives has no password (optionally check a client debug log of the config sync).
+- [ ] Every backend done: change the MySQL and Redis passwords, put the new ones in each `config/bsp_rankup-network.toml`, and clear the passwords from every `defaultconfigs/bsp_rankup-server.toml`.
 

@@ -39,6 +39,9 @@ For Minecraft 1.20.1 (Forge 47.4.10; Mohist works too), made for the Build Secur
 ### The rank screen with many ladders
 - Ladder chips that don't fit on one row go onto a second and third row, with AWARDS always last. Before, past about 11 ladders the rest were cut off, AWARDS included. The admin LADDER tab does the same.
 
+### Security: passwords out of the synced config
+- **The database and Redis passwords no longer reach players.** Forge sends every server config to each player who joins, so the passwords in `serverconfig/bsp_rankup-server.toml` could be read by anyone on the server. They now live, with the hosts and users, in `config/bsp_rankup-network.toml`, which is never sent. At the first start RankUp moves them there by itself and logs which settings moved (never their values). **Then change your database and Redis passwords**, and clear them from any `defaultconfigs/` copy. Don't ship `config/bsp_rankup-network.toml` in a client pack.
+
 ### Fixes
 - A title and a group's prefix with the same text show the group's picture when only the group has one.
 - Name lines are redrawn when a LuckPerms group's prefix changes, however the change was noticed.

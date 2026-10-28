@@ -2,6 +2,7 @@ package com.mrgregles.bsp_rankup.storage;
 
 import com.mrgregles.bsp_rankup.BSPRankUp;
 import com.mrgregles.bsp_rankup.RankUpConfig;
+import com.mrgregles.bsp_rankup.RankUpNetworkConfig;
 import com.mrgregles.bsp_rankup.compat.RegionGuard;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
@@ -138,12 +139,12 @@ public final class Storage {
             return;
         }
         StorageBackend backend = new JdbcBackend(
-                RankUpConfig.getOr(RankUpConfig.STORAGE_HOST, "localhost"),
-                RankUpConfig.getOr(RankUpConfig.STORAGE_PORT, 3306),
-                RankUpConfig.getOr(RankUpConfig.STORAGE_DATABASE, "bsp"),
-                RankUpConfig.getOr(RankUpConfig.STORAGE_USER, "bsp"),
-                RankUpConfig.getOr(RankUpConfig.STORAGE_PASSWORD, ""),
-                RankUpConfig.getOr(RankUpConfig.STORAGE_TABLE_PREFIX, "bsp_ru_"));
+                RankUpConfig.getOr(RankUpNetworkConfig.STORAGE_HOST, "localhost"),
+                RankUpConfig.getOr(RankUpNetworkConfig.STORAGE_PORT, 3306),
+                RankUpConfig.getOr(RankUpNetworkConfig.STORAGE_DATABASE, "bsp"),
+                RankUpConfig.getOr(RankUpNetworkConfig.STORAGE_USER, "bsp"),
+                RankUpConfig.getOr(RankUpNetworkConfig.STORAGE_PASSWORD, ""),
+                RankUpConfig.getOr(RankUpNetworkConfig.STORAGE_TABLE_PREFIX, "bsp_ru_"));
         String id = RankUpConfig.getOr(RankUpConfig.STORAGE_SERVER_ID, "");
         if (id.isBlank()) {
             String rg = RegionGuard.serverId();
@@ -160,10 +161,10 @@ public final class Storage {
         if (RankUpConfig.getOr(RankUpConfig.REDIS_ENABLED, false)) {
             s.safetyPollSeconds = RankUpConfig.getOr(RankUpConfig.REDIS_SAFETY_POLL_SECONDS, 30);
             s.connectRedis(new RedisLink.Settings(
-                    RankUpConfig.getOr(RankUpConfig.REDIS_HOST, "localhost"),
-                    RankUpConfig.getOr(RankUpConfig.REDIS_PORT, 6379),
-                    RankUpConfig.getOr(RankUpConfig.REDIS_USERNAME, ""),
-                    RankUpConfig.getOr(RankUpConfig.REDIS_PASSWORD, ""),
+                    RankUpConfig.getOr(RankUpNetworkConfig.REDIS_HOST, "localhost"),
+                    RankUpConfig.getOr(RankUpNetworkConfig.REDIS_PORT, 6379),
+                    RankUpConfig.getOr(RankUpNetworkConfig.REDIS_USERNAME, ""),
+                    RankUpConfig.getOr(RankUpNetworkConfig.REDIS_PASSWORD, ""),
                     RankUpConfig.getOr(RankUpConfig.REDIS_CHANNEL, "messages")));
         }
     }
