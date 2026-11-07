@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * The only class that touches LuckPerms. Reads a player's groups and writes rank changes along a LuckPerms track.
@@ -699,6 +700,19 @@ public final class LuckPermsBridge {
         return (Collection<?>) call(call(user, "data"), "toCollection");
     }
 
+    /**
+     * What an edit can change, to compare before and after: the user's own nodes and the stored primary group (which
+     * {@link #setGroup} sets and is no node). Null when they can't be read; then a change is assumed.
+     */
+    @Nullable
+    private static List<Object> snapshot(Object user) {
+        try {
+            return java.util.Arrays.asList(new java.util.HashSet<>(nodesOf(user)), call(user, "getPrimaryGroup"));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static List<String> groupsOfTrack(Object track) throws ReflectiveOperationException {
         return List.copyOf((List<String>) call(track, "getGroups"));
@@ -737,10 +751,111 @@ public final class LuckPermsBridge {
     private static CompletableFuture<Void> startEdit(UUID player, Consumer<Object> edit) {
         try {
             Object userManager = call(api, "getUserManager");
-            return (CompletableFuture<Void>) call(userManager, "modifyUser", player, edit);
+            // keep the user LuckPerms hands the edit, to push it once the save is done (D130); an edit that changed
+            // nothing (an award already held, the same title again) is not pushed, since every push makes the proxy
+            // and each backend reload the user from the database
+            AtomicReference<Object> edited = new AtomicReference<>();
+            Consumer<Object> keeping = user -> {
+                List<Object> before = snapshot(user);
+                edit.accept(user);
+                if (before == null || !before.equals(snapshot(user))) {
+                    edited.set(user);
+                }
+            };
+            CompletableFuture<Void> saved = (CompletableFuture<Void>) call(userManager, "modifyUser", player, keeping);
+            return saved.thenApply(v -> {
+                push(edited.get());
+                return v;
+            });
         } catch (ReflectiveOperationException | RuntimeException e) {
             warn("user edit", e);
             return CompletableFuture.completedFuture(null);
+        }
+    }
+
+    // ------------------------------------------------------------------ telling the network (D129 to D132, VA-RU1)
+
+    /*
+     * LuckPerms' UserManager.modifyUser saves to storage but, unlike an /lp command, sends no update over the
+     * messaging service, so the proxy's LuckPerms and the other backends keep the user as loaded at login. After each
+     * saved edit RankUp pushes the user itself.
+     */
+
+    /** The OPTIONS switch (D129), mirrored from the settings by {@code SettingsLedger}. */
+    private static volatile boolean tellOtherServers = true;
+    /** Set by a failed push and cleared by one that works, so a run of failures is logged once (D132). */
+    private static final AtomicBoolean PUSH_FAILING = new AtomicBoolean();
+    /** A stand-in messaging service for GameTests; null asks LuckPerms. */
+    @Nullable
+    private static volatile Supplier<Optional<?>> testMessaging;
+
+    public static void setTellOtherServers(boolean tell) {
+        tellOtherServers = tell;
+    }
+
+    public static boolean tellsOtherServers() {
+        return tellOtherServers;
+    }
+
+    /** GameTests only: a messaging service in place of LuckPerms' own, or null for LuckPerms' again. */
+    public static void useMessagingForTests(@Nullable Supplier<Optional<?>> messaging) {
+        testMessaging = messaging;
+        PUSH_FAILING.set(false);
+    }
+
+    /** Whether the last push failed (a run of failures is logged once). */
+    public static boolean pushFailing() {
+        return PUSH_FAILING.get();
+    }
+
+    /** The name of LuckPerms' messaging service (for example "redis"), or empty when it has none. */
+    public static Optional<String> messagingName() {
+        try {
+            Object messaging = messaging();
+            return messaging == null ? Optional.empty() : Optional.of(String.valueOf(call(messaging, "getName")));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    @Nullable
+    private static Object messaging() throws ReflectiveOperationException {
+        Supplier<Optional<?>> stand = testMessaging;
+        if (stand != null) {
+            return stand.get().orElse(null);
+        }
+        if (!isPresent() || api == null) {
+            return null;
+        }
+        return ((Optional<?>) call(api, "getMessagingService")).orElse(null);
+    }
+
+    /**
+     * After a saved edit: asks the proxy and the other servers to reload this user, offline or not (D131). Nothing
+     * when the switch is off or LuckPerms has no messaging service. Never throws: a failure is logged once until a
+     * push works again, and the edit stands (D132).
+     *
+     * @return whether a push was sent
+     */
+    static boolean push(@Nullable Object user) {
+        if (!tellOtherServers || user == null) {
+            return false;
+        }
+        try {
+            Object messaging = messaging();
+            if (messaging == null) {
+                return false;
+            }
+            call(messaging, "pushUserUpdate", user);
+            PUSH_FAILING.set(false);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            if (PUSH_FAILING.compareAndSet(false, true)) {
+                Throwable cause = e instanceof InvocationTargetException ite && ite.getCause() != null ? ite.getCause() : e;
+                BSPRankUp.LOGGER.warn("LuckPerms could not tell the other servers about a rank change: {}. They see it at the player's next login. "
+                        + "Further failures are not logged until a push works again.", cause.toString());
+            }
+            return false;
         }
     }
 

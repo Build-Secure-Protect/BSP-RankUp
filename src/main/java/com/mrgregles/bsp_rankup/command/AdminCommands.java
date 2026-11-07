@@ -238,6 +238,8 @@ public final class AdminCommands {
                 .executes(ctx -> reply(ctx, AdminEdits.optionRewardsAgain(server(ctx), BoolArgumentType.getBool(ctx, "again"))))));
         option.then(Commands.literal("showprefixes").then(Commands.argument("show", BoolArgumentType.bool())
                 .executes(ctx -> reply(ctx, AdminEdits.optionShowPrefixes(server(ctx), BoolArgumentType.getBool(ctx, "show"))))));
+        option.then(Commands.literal("tellservers").then(Commands.argument("tell", BoolArgumentType.bool())
+                .executes(ctx -> reply(ctx, AdminEdits.optionTellOtherServers(server(ctx), BoolArgumentType.getBool(ctx, "tell"))))));
         root.then(option);
 
         // prefix images (D55 to D74): "title <group>" (a rung's or an award's title), "group <group>" (a LuckPerms
@@ -462,6 +464,7 @@ public final class AdminCommands {
                 "BSP RankUp: " + settings.ladders().size() + " ladder" + (settings.ladders().size() == 1 ? "" : "s") + " (first: track " + settings.track() + ", " + settings.ranks().size() + " rungs), " + settings.awards().size() + " award" + (settings.awards().size() == 1 ? "" : "s") + ", " + settings.signals().values().stream().filter(SignalSetting::on).count() + " of " + Signal.values().length + " signals on",
                 "LuckPerms: " + switch (LuckPermsBridge.route()) { case FORGE -> "Forge edition"; case BUKKIT -> "Bukkit plugin"; default -> "not reachable (ranks are recorded here only)"; }
                         + (LuckPermsBridge.isPresent() ? ", track " + settings.track() + (LuckPermsBridge.trackGroups(settings.track()).isEmpty() ? " missing or empty" : ": " + String.join(" > ", LuckPermsBridge.trackGroups(settings.track()))) : ""),
+                LuckPermsBridge.isPresent() ? AdminSync.messagingLine(LuckPermsBridge.messagingName(), settings.tellOtherServers()) : "LuckPerms messaging: not reachable",
                 "Players with progress on this server: " + ledger.all().size() + "; announcements: " + settings.announce().name().toLowerCase(Locale.ROOT) + "; kill cooldown " + settings.killCooldownMinutes() + " min; titles at priority " + settings.titlePriority(),
                 "Storage: " + (Storage.active() == null ? "this server only (storage.mode is none)" : Storage.active().status()));
         for (String line : lines) {

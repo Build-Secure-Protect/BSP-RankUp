@@ -1,0 +1,168 @@
+<title>RankUp Network Switch</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: per option a brief, then the admin screen at its real size (520 x 300 GUI units, 1.6 px a unit) on the
+   tabs it changes, then the decisions list. One dark look on purpose: the mod's own Holo HUD panels. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0e13;
+  --inset: #0c0e12;
+  --line: #2a2f3a;
+  --accent: #19d3b0;
+  --violet: #b58cff;
+  --gold: #ffd23a;
+  --bad: #ff6b5c;
+  --text: #e6eaf2;
+  --muted: #9aa3b5;
+  --mc: 'VT323', 'Courier New', monospace;
+  --ui: 'IBM Plex Sans', system-ui, sans-serif;
+}
+body { background: var(--bg); color: var(--text); font-family: var(--ui); padding-block: 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); line-height: 1.5; }
+.wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 44px; }
+h1 { font-family: var(--mc); font-size: 40px; font-weight: 400; color: var(--accent); margin: 0; text-wrap: balance; }
+h2 { font-family: var(--mc); font-size: 32px; font-weight: 400; margin: 0; text-wrap: balance; }
+h2 small { color: var(--muted); font-size: 22px; margin-left: 8px; }
+h3 { font-family: var(--mc); font-size: 22px; font-weight: 400; margin: 0; color: var(--muted); }
+p { max-width: 68ch; margin: 0; }
+.lead { color: var(--muted); }
+.lead b { color: var(--text); font-weight: 600; }
+.option { display: grid; gap: 14px; }
+.brief { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 32px; }
+.brief > div { min-width: 0; }
+.brief p { font-size: 15px; }
+.brief b { color: var(--accent); font-weight: 600; }
+.brief .con b { color: var(--gold); }
+.frame { overflow-x: auto; border: 1px solid var(--line); background: #06080c; padding: 12px; }
+.screen { position: relative; width: 832px; height: 480px; font-family: var(--mc); font-size: 18px; line-height: 1; color: var(--text);
+  background: radial-gradient(ellipse at 30% 20%, #16331f 0, transparent 50%), radial-gradient(ellipse at 70% 80%, #2a2316 0, transparent 50%), #1a2230; }
+.screen * { box-sizing: border-box; }
+.a { position: absolute; }
+.panel { background: rgba(16,21,28,.95); border: 2px solid var(--accent); }
+.inset { background: var(--inset); border: 2px solid var(--line); }
+.t10 { font-size: 20px; } .t85 { font-size: 18px; } .t75 { font-size: 16px; } .t60 { font-size: 14px; } .t50 { font-size: 12px; }
+.mut { color: var(--muted); } .tq { color: var(--accent); } .gold { color: var(--gold); } .vio { color: var(--violet); } .bad { color: var(--bad); }
+.chip { display: flex; align-items: center; justify-content: center; border: 2px solid var(--line); background: var(--inset); color: var(--muted); white-space: nowrap; overflow: hidden; }
+.chip.on { border-color: var(--accent); color: var(--accent); background: rgba(25,211,176,.13); }
+.chip.gold { border-color: var(--gold); color: var(--gold); background: rgba(255,210,58,.1); }
+.chip.vio { border-color: var(--violet); color: var(--violet); background: rgba(181,140,255,.13); }
+.chip.bad { border-color: var(--bad); color: var(--bad); background: rgba(255,107,92,.1); }
+.chip.dim { border-color: var(--line); color: var(--muted); background: transparent; }
+.chip.two { flex-direction: column; gap: 2px; }
+.row { display: flex; align-items: center; gap: 8px; padding: 0 8px; white-space: nowrap; overflow: hidden; }
+.row.sel { background: rgba(25,211,176,.14); box-shadow: inset 4px 0 0 var(--accent); }
+.row .r { margin-left: auto; }
+.lbl { font-size: 14px; color: var(--muted); letter-spacing: 1px; }
+.box { background: var(--inset); border: 2px solid var(--line); display: flex; align-items: center; padding: 0 6px; white-space: nowrap; overflow: hidden; }
+.pick { border: 1px solid var(--line); padding: 20px 24px; display: grid; gap: 12px; }
+.pick ol { margin: 0; padding-left: 22px; font-size: 15px; display: grid; gap: 8px; }
+.pick li b { color: var(--accent); font-weight: 600; }
+.pick li .def { color: var(--gold); }
+.pick .note { color: var(--muted); font-size: 15px; }
+@media (max-width: 700px) { .brief { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+</style>
+<div class="wrap">
+  <header style="display:grid;gap:10px">
+    <h1>Telling other servers about rank changes: three options</h1>
+    <p class="lead">A new switch on <b>OPTIONS</b> (D129): after RankUp changes a player in LuckPerms, it tells the proxy and the other servers through LuckPerms' messaging service, so the network tab list and <b>/players</b> show the new rank within about a second instead of at the next login. It is one shared setting for every server, <b>on</b> by default. The three options differ only in where the switch sits. All three also add a line to the info box saying whether LuckPerms has a messaging service, because without one the push reaches nobody.</p>
+  </header>
+
+  <section class="option" id="a">
+    <h2>A. Beside ANNOUNCE RANK-UPS <small>top row</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> The empty right half of the top row gets <b>TELL OTHER SERVERS</b> with on / off chips, like the other switches. Nothing else on the tab moves.</p></div>
+      <div class="con"><p><b>Trade-off.</b> The smallest change, and it sits next to the other "what the network hears" setting. The label is short, so what it does is only in the info line and the docs.</p></div>
+    </div>
+    <div class="frame"><div class="screen" id="sa"></div></div>
+  </section>
+
+  <section class="option" id="b">
+    <h2>B. A line of its own <small>under the switches</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> A new line under the second row: <b>TELL OTHER SERVERS ABOUT RANK CHANGES</b>, on / off, and a short hint after it saying what it does. MAKE TRACK, EXPORT / IMPORT and the info box move down 22 units (there is room above the bottom line).</p></div>
+      <div class="con"><p><b>Trade-off.</b> Says what it does on the screen itself. The tab's lower half moves, so it looks slightly different from 0.5.0.</p></div>
+    </div>
+    <div class="frame"><div class="screen" id="sb"></div></div>
+  </section>
+
+  <section class="option" id="c">
+    <h2>C. With the LuckPerms button <small>one toggle chip</small></h2>
+    <div class="brief">
+      <div><p><b>How it works.</b> On the MAKE TRACK IN LUCKPERMS row, the hint text gives way to one toggle chip, <b>TELL OTHER SERVERS: ON</b> (a click switches it to OFF, red). Everything that talks to LuckPerms sits on one row.</p></div>
+      <div class="con"><p><b>Trade-off.</b> Groups the LuckPerms things together, but a single toggle chip works differently from the on / off pairs everywhere else on the tab, and the MAKE TRACK hint is lost.</p></div>
+    </div>
+    <div class="frame"><div class="screen" id="sc"></div></div>
+  </section>
+
+  <section class="pick">
+    <h2>Decisions</h2>
+    <ol>
+      <li><b>Which option.</b> <span class="def">Default: A</span>, beside ANNOUNCE RANK-UPS: nothing else moves and it matches the other switches.</li>
+      <li><b>The label.</b> <span class="def">Default: "TELL OTHER SERVERS"</span> (A and C) or "TELL OTHER SERVERS ABOUT RANK CHANGES" (B). Another wording is fine, such as "PUSH TO NETWORK".</li>
+      <li><b>The info line.</b> <span class="def">Default: yes</span>: "LuckPerms messaging: redis (rank changes reach other servers at once)", or "LuckPerms messaging: none (other servers see rank changes at a player's next login)". With the switch off: "LuckPerms messaging: redis, but TELL OTHER SERVERS is off".</li>
+    </ol>
+    <p class="note">The switch is on by default everywhere (D129); a server with no proxy and no messaging service loses nothing either way.</p>
+  </section>
+</div>
+
+<script>
+const U = 1.6;
+const pos = (x, y, w, h) => `left:${x * U}px;top:${y * U}px;` + (w != null ? `width:${w * U}px;` : '') + (h != null ? `height:${h * U}px;` : '');
+const el = (x, y, w, h, cls, html = '', extra = '') => `<div class="a ${cls}" style="${pos(x, y, w, h)}${extra}">${html}</div>`;
+const txt = (x, y, s, cls = 't75') => el(x, y, null, null, cls, s, 'white-space:nowrap;');
+const chip = (x, y, w, h, s, cls = '', size = 't60') => el(x, y, w, h, `chip ${cls} ${size}`, s);
+const TABS = ['LADDER', 'GROUPS', 'SIGNALS', 'PLAYERS', 'PREFIXES', 'OPTIONS'];
+
+function frame(on, status) {
+  let h = el(0, 0, 520, 300, 'panel');
+  h += txt(10, 8, 'RANKUP ADMIN', 't10 tq');
+  h += el(210, 10, 300, 8, 't60 mut', status, 'text-align:right;white-space:nowrap;');
+  TABS.forEach((t, i) => { h += chip(8 + i * 57, 22, 54, 12, t, i === on ? 'on' : '', 't75'); });
+  h += txt(10, 288, 'Changes save at once and reach every server. Esc closes.', 't60 mut');
+  return h;
+}
+function field(x, y, w, label, value) {
+  return txt(x, y, label, 't60 mut') + el(x, y + 7, w, 13, 'box t85', value);
+}
+function pair(x, y, label, on, w1 = 30, w2 = 30) {
+  return txt(x, y, label, 't60 mut') + chip(x, y + 7, w1, 13, 'on', on ? 'on' : '') + chip(x + w1 + 3, y + 7, w2, 13, 'off', on ? '' : 'on');
+}
+function upper() {
+  const px = 8, py = 40;
+  let h = field(px, py, 150, 'LUCKPERMS TRACK', 'rankup');
+  h += txt(px + 160, py, 'ANNOUNCE RANK-UPS', 't60 mut');
+  ['off', 'server', 'network'].forEach((a, i) => { h += chip(px + 160 + i * 53, py + 7, 50, 13, a, a === 'network' ? 'vio' : ''); });
+  h += field(px, py + 28, 150, 'KILL COOLDOWN (MIN)', '10');
+  h += field(px + 160, py + 28, 100, 'TITLE PRIORITY', '1000');
+  h += txt(px + 270, py + 28, 'SEASONAL REWARDS', 't60 mut') + chip(px + 270, py + 35, 60, 13, 'each season', '') + chip(px + 333, py + 35, 40, 13, 'once', 'on');
+  h += pair(px + 384, py + 28, 'PREFIXES AND SUFFIXES', true);
+  return h;
+}
+function lower(by, hint = true) {
+  const px = 8;
+  let h = chip(px, by, 150, 13, 'MAKE TRACK IN LUCKPERMS', 'bad', 't60');
+  if (hint) h += txt(px + 156, by + 3, 'makes the track and any missing groups from this ladder', 't60 mut');
+  h += chip(px, by + 18, 72, 13, 'EXPORT', 'on') + chip(px + 76, by + 18, 72, 13, 'IMPORT', 'on');
+  h += txt(px + 156, by + 21, 'files live in config/bsp_rankup/', 't60 mut');
+  const iy = by + 42;
+  h += el(px, iy, 504, 60, 'inset');
+  const lines = [
+    ['LuckPerms: Forge edition', 'mut'],
+    ['Track rankup: wanderer > settler > recruit > scout > sentinel > warden > vanguard > captain > commander > marshal > warlord > legend', 'mut'],
+    ['LuckPerms messaging: redis (rank changes reach other servers at once)', 'tq'],
+    ['Storage: mysql, redis connected (this server is BSP-Spawn)', 'mut'],
+    ['Players with progress here: 214', 'mut'],
+  ];
+  lines.forEach(([l, c], i) => { h += el(px + 6, iy + 4 + i * 9, 492, 8, 't60 ' + c, l, 'white-space:nowrap;overflow:hidden;'); });
+  return h;
+}
+const STATUS = 'BSP-Spawn \u00b7 storage mysql \u00b7 LuckPerms Forge';
+document.getElementById('sa').innerHTML = frame(5, STATUS) + upper() + pair(338, 40, 'TELL OTHER SERVERS', true) + lower(100);
+document.getElementById('sb').innerHTML = frame(5, STATUS) + upper()
+  + pair(8, 96, 'TELL OTHER SERVERS ABOUT RANK CHANGES', true)
+  + txt(74, 106, 'the proxy\u2019s tab list and the other servers see a new rank at once', 't60 mut')
+  + lower(122);
+document.getElementById('sc').innerHTML = frame(5, STATUS) + upper() + lower(100, false)
+  + chip(164, 100, 120, 13, 'TELL OTHER SERVERS: ON', 'on', 't60')
+  + txt(290, 103, 'click to switch', 't60 mut');
+</script>

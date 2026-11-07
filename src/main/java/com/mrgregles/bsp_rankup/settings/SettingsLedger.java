@@ -1,5 +1,6 @@
 package com.mrgregles.bsp_rankup.settings;
 
+import com.mrgregles.bsp_rankup.compat.LuckPermsBridge;
 import com.mrgregles.bsp_rankup.signal.KillCooldowns;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -34,6 +35,7 @@ public final class SettingsLedger extends SavedData {
         }
         SettingsLedger ledger = overworld.getDataStorage().computeIfAbsent(SettingsLedger::load, SettingsLedger::new, NAME);
         KillCooldowns.setCooldownMs(ledger.settings.killCooldownMinutes() * 60_000L);
+        LuckPermsBridge.setTellOtherServers(ledger.settings.tellOtherServers());
         return ledger;
     }
 
@@ -53,6 +55,7 @@ public final class SettingsLedger extends SavedData {
     public void set(Settings next) {
         settings = next;
         KillCooldowns.setCooldownMs(next.killCooldownMinutes() * 60_000L);
+        LuckPermsBridge.setTellOtherServers(next.tellOtherServers());
         setDirty();
         for (Consumer<Settings> l : LISTENERS) {
             l.accept(next);

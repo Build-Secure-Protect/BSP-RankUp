@@ -689,6 +689,13 @@ public final class AdminEdits {
         return Reply.ok(show ? "Prefixes and suffixes show around names in chat and the tab list" : "RankUp leaves names alone; prefixes and suffixes are not shown by RankUp");
     }
 
+    /** The D129 switch: push each LuckPerms edit to the proxy and the other servers, or leave them to see it at the next login. */
+    public static Reply optionTellOtherServers(MinecraftServer server, boolean tell) {
+        SettingsLedger.get(server).update(b -> b.tellOtherServers(tell));
+        return Reply.ok(tell ? "Rank changes are pushed to the proxy and the other servers through LuckPerms' messaging service"
+                : "Rank changes are not pushed: the proxy and the other servers see them at the player's next login");
+    }
+
     // ------------------------------------------------------------------ LuckPerms, files
 
     /** The D2 option: makes the track and any missing groups in LuckPerms from the ladder. */

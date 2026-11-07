@@ -325,6 +325,7 @@
   "gui.bsp_rankup.pick_a_file": "Pick a file, then USE IMAGE.",
   "gui.bsp_rankup.image_slot": "image",
   "gui.bsp_rankup.prefixes_in_chat": "PREFIXES AND SUFFIXES",
+  "gui.bsp_rankup.tell_other_servers": "TELL OTHER SERVERS",
   "gui.bsp_rankup.progress_from": "PROGRESS FROM",
   "gui.bsp_rankup.worth_per_one": "%s pt / %s",
   "gui.bsp_rankup.worth_per_many": "%s pt / %s %s",

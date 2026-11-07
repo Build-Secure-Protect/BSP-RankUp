@@ -92,7 +92,7 @@ public class CommandGameTests {
             h.assertTrue(run(console, "rankup export bad/name") == 0, "a bad file name is refused");
             out.lines.clear();
             run(console, "rankup info");
-            h.assertTrue(out.lines.size() == 4 && out.lines.get(0).contains("2 rungs"), "info: " + out);
+            h.assertTrue(out.lines.size() == 5 && out.lines.get(0).contains("2 rungs") && out.lines.get(2).startsWith("LuckPerms messaging: "), "info, with the messaging line (D134): " + out);
         } finally {
             SettingsLedger.get(server).set(Settings.defaults());
             Files.deleteIfExists(SettingsFiles.file("cmdtest"));

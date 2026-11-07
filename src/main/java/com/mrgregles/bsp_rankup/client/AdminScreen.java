@@ -1841,6 +1841,10 @@ public class AdminScreen extends HoloScreen {
             chip(g, ax, py + 7, 50, 13, Tr.t("announce." + name), s.announce() == a, a == Settings.Announce.NETWORK ? VIO : TQ, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.OPTION, "announce", name)));
             ax += 53;
         }
+        // beside the announcements, the other thing the network hears (D129, option A)
+        text(g, Tr.t("tell_other_servers"), px + 330, py, MUTED, 0.6f);
+        chip(g, px + 330, py + 7, 30, 13, Tr.t("on"), s.tellOtherServers(), TQ, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.OPTION, "tellservers", "true")));
+        chip(g, px + 363, py + 7, 30, 13, Tr.t("off"), !s.tellOtherServers(), TQ, 0.6f, () -> send(AdminActionPacket.of(AdminActionPacket.OPTION, "tellservers", "false")));
         field(g, px, py + 28, 150, Tr.t("kill_cooldown_minutes"), String.valueOf(s.killCooldownMinutes()), () -> {
             inputTarget = "cooldown";
             openInput(Input.OPTION, String.valueOf(s.killCooldownMinutes()), Tr.t("minutes_before_the_same_victim_counts_again"));

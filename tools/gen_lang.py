@@ -342,6 +342,8 @@ GUI = {
     "pick_a_file": "Pick a file, then USE IMAGE.",
     "image_slot": "image",
     "prefixes_in_chat": "PREFIXES AND SUFFIXES",
+    # pushing LuckPerms edits to the proxy and the other servers (D129, VA-RU1)
+    "tell_other_servers": "TELL OTHER SERVERS",
     # which signals a ladder or award counts (D81 to D84)
     "progress_from": "PROGRESS FROM",
     "worth_per_one": "%s pt / %s",

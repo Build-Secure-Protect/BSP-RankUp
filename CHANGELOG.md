@@ -4,6 +4,12 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+To be 0.6.0 (D133). The network protocol stays 4 (the settings reach the admin screen as NBT), so 0.5.0 clients still join; an admin needs 0.6.0 in their pack to see the new switch.
+
+### Added (2026-11-07, D129 to D133, request VA-RU1 from BSP-Velocity Additions)
+- **Rank changes reach the proxy and the other servers at once.** LuckPerms' API saves a user without telling anyone (only `/lp` commands send an update), so the proxy's tab list and `/players`, and the other backends, kept a player's old rank until they logged in again. After every LuckPerms edit RankUp makes (rank-ups, demotions, SET RANK, awards given and taken, season fallbacks, titles, track clears), once it is saved, RankUp now pushes the user through LuckPerms' messaging service, for offline players too. An edit that changed nothing (an award already held, the same title again) is not pushed, since every push makes the proxy and each backend reload the user. A failed push never fails the edit; one warning is logged until a push works again. Without a messaging service nothing is sent.
+- **TELL OTHER SERVERS** on OPTIONS, beside ANNOUNCE RANK-UPS (D134): on by default, one shared setting for every server. The info box gains a line saying whether LuckPerms has a messaging service and whether the switch is on ("LuckPerms messaging: redis (rank changes reach other servers at once)"); `/rankup info` shows the same line, and `/rankup option tellservers true|false` switches it from the console. The push only reaches servers whose LuckPerms uses the same messaging service: `messaging-service = "redis"` (or `"auto"` with `redis.enabled = true`) with the proxy's Redis in each backend's `config/luckperms/luckperms.conf`.
+
 ## [0.5.0] - 2026-10-27
 
 Protocol 4 (D105): the server and every player's modpack update together; 0.4.x clients cannot join. Requires BSP-Core 1.4.5 or newer. On a network, update every backend together: an older RankUp misreads the new awards and login lines in the shared rows, and editing settings on one drops suffix images and hover notes.

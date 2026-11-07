@@ -357,3 +357,19 @@ Headless: `NetworkConfigGameTests` (the move, a value already in the network fil
 - [ ] Join as a player: the server config your client receives has no password (optionally check a client debug log of the config sync).
 - [ ] Every backend done: change the MySQL and Redis passwords, put the new ones in each `config/bsp_rankup-network.toml`, and clear the passwords from every `defaultconfigs/bsp_rankup-server.toml`.
 
+## Telling other servers about rank changes (2026-11-07, D129 to D133, VA-RU1)
+
+Headless: `LuckPermsPushGameTests` (2): on by default and kept (older settings read as on), the OPTIONS action and the bridge agree; against the dev LuckPerms with a stand-in messaging service, each saved edit pushes that user once, an offline player too, nothing when switched off or without a messaging service, and a failed push leaves the edit standing with one warning until a push works again. The OPTIONS switch (D134, mock-up A) and its info line: `messagingLine` checked. Audit the same day: an edit that changes nothing (nodes and primary group the same) is not pushed (checked with an award already held), `/rankup option tellservers`, the line in `/rankup info`, a plainer warning. 84/84 on six runs. Not seen in a client or on the network.
+
+Set up first: every backend's `config/luckperms/luckperms.conf` has `messaging-service = "redis"` (or `"auto"` with `redis.enabled = true`) and the same Redis as the proxy's LuckPerms. Check the backend's log at start for LuckPerms' "Loading messaging service... [REDIS]".
+
+- [ ] Rank someone up while a player on another server watches the tab list: the new prefix shows within about a second.
+- [ ] The same on the proxy: `/players` (Velocity Additions) shows the new rank at once, not after 30 seconds.
+- [ ] GIVE IT and TAKE IT on an award, and SET RANK on PLAYERS: the other server's tab list follows within about a second.
+- [ ] Stop Redis briefly and rank someone up: the rank-up still happens here; the log has one "LuckPerms could not tell the other servers about a rank change ..." line, however many edits follow. Start Redis: the next edit pushes again with no line.
+- [ ] A server with no messaging service (single server, no proxy): rank-ups work as before, nothing in the log.
+- [ ] OPTIONS: TELL OTHER SERVERS sits right of ANNOUNCE RANK-UPS with on / off, "on" lit. The info box has "LuckPerms messaging: redis (rank changes reach other servers at once)" (or "none (...)" on a server without one).
+- [ ] Click off: the info line says "..., but TELL OTHER SERVERS is off" and a rank-up no longer shows on the other server until the player relogs (or Velocity Additions' 30 s reload). The other backends' OPTIONS show it off too. Click on again.
+- [ ] A 0.5.0 client still joins a 0.6.0 server (protocol 4); its OPTIONS tab simply has no switch.
+- [ ] From the console: `/rankup info` has the "LuckPerms messaging: ..." line; `/rankup option tellservers false` turns it off (OPTIONS shows off), `true` back on.
+

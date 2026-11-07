@@ -269,6 +269,15 @@ public final class AdminSync {
         };
     }
 
+    /** The OPTIONS info line on LuckPerms' messaging service (D129): without one, a push reaches nobody. */
+    public static String messagingLine(Optional<String> service, boolean tell) {
+        if (service.isEmpty()) {
+            return "LuckPerms messaging: none (other servers see rank changes at a player's next login)";
+        }
+        String name = service.get().toLowerCase(Locale.ROOT);
+        return tell ? "LuckPerms messaging: " + name + " (rank changes reach other servers at once)" : "LuckPerms messaging: " + name + ", but TELL OTHER SERVERS is off";
+    }
+
     private static Reply option(MinecraftServer server, String name, String value) {
         return switch (name) {
             case "track" -> AdminEdits.optionTrack(server, value);
@@ -277,6 +286,7 @@ public final class AdminSync {
             case "titlepriority" -> AdminEdits.optionTitlePriority(server, Integer.parseInt(value.trim()));
             case "rewardsagain" -> AdminEdits.optionRewardsAgain(server, Boolean.parseBoolean(value));
             case "showprefixes" -> AdminEdits.optionShowPrefixes(server, Boolean.parseBoolean(value));
+            case "tellservers" -> AdminEdits.optionTellOtherServers(server, Boolean.parseBoolean(value));
             default -> Reply.no("No option called " + name);
         };
     }
@@ -302,6 +312,7 @@ public final class AdminSync {
         if (LuckPermsBridge.isPresent()) {
             List<String> groups = LuckPermsBridge.trackGroups(settings.track());
             info.add("Track " + settings.track() + (groups.isEmpty() ? ": missing or empty in LuckPerms" : ": " + String.join(" > ", groups)));
+            info.add(messagingLine(LuckPermsBridge.messagingName(), settings.tellOtherServers()));
         }
         info.add("Storage: " + (Storage.active() == null ? "this server only" : Storage.active().status()));
         info.add("Players with progress here: " + ledger.size());

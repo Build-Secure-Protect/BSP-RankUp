@@ -42,6 +42,7 @@ public final class Settings {
     /** Hover notes by the same keys (D94): how a rank is earned, shown when its prefix or suffix is hovered in chat. */
     private final Map<String, String> prefixNotes;
     private final boolean showPrefixes;
+    private final boolean tellOtherServers;
 
     private Settings(Builder b) {
         this.ladders = b.ladders.isEmpty() ? List.of(Ladder.of(DEFAULT_TRACK, DEFAULT_TRACK)) : List.copyOf(b.ladders);
@@ -53,6 +54,7 @@ public final class Settings {
         this.prefixImages = java.util.Collections.unmodifiableMap(new java.util.TreeMap<>(b.prefixImages));
         this.prefixNotes = java.util.Collections.unmodifiableMap(new java.util.TreeMap<>(b.prefixNotes));
         this.showPrefixes = b.showPrefixes;
+        this.tellOtherServers = b.tellOtherServers;
     }
 
     /** The defaults: one ladder {@code rankup} on track {@code rankup} counting every signal, no ranks, no awards. */
@@ -186,6 +188,14 @@ public final class Settings {
         return showPrefixes;
     }
 
+    /**
+     * Whether each LuckPerms edit RankUp makes is pushed to the proxy and the other servers through LuckPerms'
+     * messaging service (D129 to D132, VA-RU1); without it they see the change at the player's next login.
+     */
+    public boolean tellOtherServers() {
+        return tellOtherServers;
+    }
+
     public Builder toBuilder() {
         Builder b = new Builder();
         b.ladders = new ArrayList<>(ladders);
@@ -197,6 +207,7 @@ public final class Settings {
         b.prefixImages = new java.util.TreeMap<>(prefixImages);
         b.prefixNotes = new java.util.TreeMap<>(prefixNotes);
         b.showPrefixes = showPrefixes;
+        b.tellOtherServers = tellOtherServers;
         return b;
     }
 
@@ -238,6 +249,7 @@ public final class Settings {
         });
         tag.put("PrefixNotes", notes);
         tag.putBoolean("ShowPrefixes", showPrefixes);
+        tag.putBoolean("TellOtherServers", tellOtherServers);
         return tag;
     }
 
@@ -293,6 +305,9 @@ public final class Settings {
         if (tag.contains("ShowPrefixes")) {
             b.showPrefixes = tag.getBoolean("ShowPrefixes");
         }
+        if (tag.contains("TellOtherServers")) {
+            b.tellOtherServers = tag.getBoolean("TellOtherServers");
+        }
         return b.build();
     }
 
@@ -306,6 +321,7 @@ public final class Settings {
         private Map<String, PrefixImage> prefixImages = new java.util.TreeMap<>();
         private Map<String, String> prefixNotes = new java.util.TreeMap<>();
         private boolean showPrefixes = true;
+        private boolean tellOtherServers = true;
 
         public Builder() {
             for (Signal s : Signal.values()) {
@@ -462,6 +478,11 @@ public final class Settings {
 
         public Builder showPrefixes(boolean show) {
             this.showPrefixes = show;
+            return this;
+        }
+
+        public Builder tellOtherServers(boolean tell) {
+            this.tellOtherServers = tell;
             return this;
         }
 
