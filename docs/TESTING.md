@@ -373,3 +373,11 @@ Set up first: every backend's `config/luckperms/luckperms.conf` has `messaging-s
 - [ ] A 0.5.0 client still joins a 0.6.0 server (protocol 4); its OPTIONS tab simply has no switch.
 - [ ] From the console: `/rankup info` has the "LuckPerms messaging: ..." line; `/rankup option tellservers false` turns it off (OPTIONS shows off), `true` back on.
 
+
+## Tab names across servers (2026-11-07, RU-R3 built by BSP-Velocity Additions, its D35)
+
+Nothing changed in RankUp. Velocity Additions now leaves the tab-list name a backend gives alone and shows a player on another server with the name their own backend gives them. That relies on every client holding every prefix image (D59, D62: the images in the shared settings go to each player at login and on change) and on RankUp redrawing tab names every 5 s. Needs Velocity Additions with D35 on the proxy, RankUp 0.6.0 on every backend, prefix display on.
+
+- [ ] With a player on another server watching the tab list, rank someone up: their new prefix image and suffix show there within about 8 s.
+- [ ] That watching player sees the other server's players with their prefix images and suffix icons, not text prefixes from the proxy.
+- [ ] Switch OPTIONS "PREFIXES AND SUFFIXES" off: the proxy's text format fills those names in instead; switch it on again: RankUp's images come back.
