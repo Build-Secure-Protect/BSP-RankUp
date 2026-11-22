@@ -35,3 +35,14 @@ rankup prefix note suffix headhunter Most player kills in a season
 rankup prefix note suffix bulwark Your totem survives 25 steal attempts
 rankup prefix note suffix founder Playing in the first season
 rankup prefix note suffix sanctuary Earning a plot on the Sanctuary server
+
+# Supporter ranks (PA-4), given by hand or by the store: VIP before the name, the bug hunter's ladybird after it.
+# Their LuckPerms groups and texts come first (BSP-Luckperms bsp-ranks, request RU-R7):
+#   lp creategroup vip
+#   lp creategroup bug_hunter
+#   lp group vip meta setprefix 150 "&8[&6&lVIP&8]"
+#   lp group bug_hunter meta setsuffix 10 "&c✦ Bug Hunter"
+rankup prefix image group vip vip.png
+rankup prefix image suffix bug_hunter bug_hunter.png
+rankup prefix note group vip Supports the BSP server
+rankup prefix note suffix bug_hunter Paid to help fix a bug

@@ -408,6 +408,9 @@ def write_style(style, out_dir):
     out_dir.mkdir(parents=True, exist_ok=True)
     for group, img in render(style).items():
         (out_dir / f"{group}.png").write_bytes(img.png())
+    import gen_supporter_art  # the supporter ranks, VIP and the bug hunter (PA-4); imports this file, so not at the top
+    for group, img in gen_supporter_art.chosen().items():
+        (out_dir / f"{group}.png").write_bytes(img.png())
     lines = ["# Copy the PNGs into config/bsp_rankup/prefix_images/ on one server, run /rankup prefix files to check",
              "# them, then paste these lines into that server's console (or pick each image on the PREFIXES tab).",
              "# Made by tools/prefix_art/gen_prefix_art.py; run it again after changing the art.", ""]
@@ -416,6 +419,13 @@ def write_style(style, out_dir):
     lines += [f"rankup prefix image suffix {g} {g}.png" for g, *_ in ACHIEVEMENTS]
     lines += ["", "# What hovering each icon in chat shows."]
     lines += [f"rankup prefix note suffix {g} {how}" for g, _, _, _, how in ACHIEVEMENTS]
+    lines += ["", "# Supporter ranks (PA-4), given by hand or by the store: VIP before the name, the bug hunter's ladybird after it.",
+              "# Their LuckPerms groups and texts come first (BSP-Luckperms bsp-ranks, request RU-R7):"]
+    lines += [f"#   lp creategroup {g}" for g, *_ in gen_supporter_art.SUPPORTERS]
+    lines += [f"#   lp group {g} meta set{'prefix' if kind == 'group' else 'suffix'} {150 if kind == 'group' else 10} \"{text}\""
+              for g, kind, text, _ in gen_supporter_art.SUPPORTERS]
+    lines += [f"rankup prefix image {kind} {g} {g}.png" for g, kind, _, _ in gen_supporter_art.SUPPORTERS]
+    lines += [f"rankup prefix note {kind} {g} {how}" for g, kind, _, how in gen_supporter_art.SUPPORTERS]
     (out_dir / "commands.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
