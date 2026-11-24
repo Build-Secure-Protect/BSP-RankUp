@@ -17,6 +17,7 @@ public final class MemoryBackend implements StorageBackend {
     private final Map<UUID, long[]> seasons = new HashMap<>();
     private final Map<UUID, String> rewarded = new HashMap<>();
     private final Map<UUID, LadderValue> ladders = new HashMap<>();
+    private final Map<UUID, Integer> resets = new HashMap<>();
     @Nullable
     private SettingsRow settings;
     private final List<Notice> notices = new ArrayList<>();
@@ -44,11 +45,18 @@ public final class MemoryBackend implements StorageBackend {
 
     /** All or none, as one transaction: the outage check comes before anything is written. */
     @Override
-    public synchronized void write(List<PlayerWrite> batch) throws Exception {
+    public synchronized List<UUID> write(List<PlayerWrite> batch) throws Exception {
         check();
-        StorageBackend.super.write(batch);
+        List<UUID> written = StorageBackend.super.write(batch);
         writes++;
         lastWrite = List.copyOf(batch);
+        return written;
+    }
+
+    @Override
+    public synchronized void markReset(UUID player, int season) throws Exception {
+        check();
+        resets.merge(player, season, Math::max);
     }
 
     /** How many batch writes arrived (tests). */
@@ -126,6 +134,7 @@ public final class MemoryBackend implements StorageBackend {
         pending.remove(player);
         seasons.remove(player);
         rewarded.remove(player);
+        resets.remove(player);
     }
 
     @Override
@@ -133,12 +142,35 @@ public final class MemoryBackend implements StorageBackend {
     public synchronized PlayerRow loadPlayer(UUID player) throws Exception {
         check();
         if (!counts.containsKey(player) && !bonusAndRankedAt.containsKey(player) && !ranks.containsKey(player) && !pending.containsKey(player) && !seasons.containsKey(player)
-                && !ladders.containsKey(player)) {
+                && !ladders.containsKey(player) && !rewarded.containsKey(player) && !resets.containsKey(player)) {
             return null;
         }
         long[] br = bonusAndRankedAt.getOrDefault(player, new long[2]);
         long[] se = seasons.getOrDefault(player, new long[3]);
-        return new PlayerRow(player, Map.copyOf(counts.getOrDefault(player, Map.of())), br[0], ranks.get(player), br[1], pending.get(player), (int) se[0], se[1], se[2], rewarded.get(player), ladders.get(player));
+        return new PlayerRow(player, Map.copyOf(counts.getOrDefault(player, Map.of())), br[0], ranks.get(player), br[1], pending.get(player), (int) se[0], se[1], se[2], rewarded.get(player), ladders.get(player),
+                resets.getOrDefault(player, 0));
+    }
+
+    @Override
+    public synchronized Map<UUID, PlayerRow> loadAllPlayers() throws Exception {
+        check();
+        java.util.Set<UUID> ids = new java.util.LinkedHashSet<>();
+        ids.addAll(counts.keySet());
+        ids.addAll(bonusAndRankedAt.keySet());
+        ids.addAll(ranks.keySet());
+        ids.addAll(pending.keySet());
+        ids.addAll(seasons.keySet());
+        ids.addAll(rewarded.keySet());
+        ids.addAll(ladders.keySet());
+        ids.addAll(resets.keySet());
+        Map<UUID, PlayerRow> out = new java.util.LinkedHashMap<>();
+        for (UUID id : ids) {
+            PlayerRow row = loadPlayer(id);
+            if (row != null) {
+                out.put(id, row);
+            }
+        }
+        return out;
     }
 
     /** A count as stored, for tests. */

@@ -381,3 +381,19 @@ Nothing changed in RankUp. Velocity Additions now leaves the tab-list name a bac
 - [ ] With a player on another server watching the tab list, rank someone up: their new prefix image and suffix show there within about 8 s.
 - [ ] That watching player sees the other server's players with their prefix images and suffix icons, not text prefixes from the proxy.
 - [ ] Switch OPTIONS "PREFIXES AND SUFFIXES" off: the proxy's text format fills those names in instead; switch it on again: RankUp's images come back.
+
+
+## The season reset (2026-11-24, BSP-Core's SR12)
+
+Version 0.6.2. Headless: `SeasonResetGameTests` (3): the reset flags read by reflection (an older BSP-Core's event reads as no reset); a reset typed here starts an online player and a player away over in the ledger (only the seasons survived kept, one more; the permanent award kept, the seasonal one taken back) and in LuckPerms (back to the first rung, b and the seasonal award off, the permanent award and a group off the ladders kept, b's title off, the permanent award's title back), a second hearing changes nothing, and the next check climbs again with the rewards again; on a network a server that only heard of it writes nothing and starts a stale row over as it reads it, the origin rewrites the rows (tried again after a database failure, a second pass changes nothing, a row from after the reset is left alone) and moves a player only the rows know in LuckPerms; a write from a server that has not heard of the reset is refused by the row; a player whose LuckPerms move was lost is put right at their login. Needs a BSP-Core with `/bsp season reset` for the in-game run. Not seen in game, on the Bukkit route of LuckPerms, or on a real MySQL with two backends.
+
+Set up first: a ladder of three rungs (the first at 0 points, one with a title, one seasonal), a permanent award and a seasonal award with titles, and a test account in a group off the ladders (`vip`). Earn the awards and a rung or two with two accounts; log one out.
+
+- [ ] `/bsp season reset` (BSP-Core). Log back in: `/rank` shows you on the first rung, your counts at zero but seasons survived one more than before, the permanent award still reached, the seasonal one not.
+- [ ] `/lp user <you> info`: the ladder's groups are gone but the first rung; `vip` and the permanent award's group are still there; the seasonal award's group is gone. The rung's title is gone; the award title shown is the permanent award's.
+- [ ] `/lp user <the account that was offline> info` before it logs in again: moved the same way.
+- [ ] Earn the second rung again: its rewards come again (items, coins, title), and the announcement as usual.
+- [ ] The season winners' prize groups (BSP-Core's `/bsp season prizegroup`) are still on the winners.
+- [ ] On the network (two backends, MySQL): type the reset on one. Log in on the other: the same as above; nothing from before the reset comes back (rank, counts, seasonal award), there or after switching servers. The log of the server it was typed on has "shared rows started over".
+- [ ] Restart the server it was typed on: nothing is done twice (seasons survived not counted again).
+

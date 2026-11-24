@@ -30,7 +30,7 @@ public final class Holders {
     public static void init() {
         ProgressLedger.onChange(c -> {
             switch (c.kind()) {
-                case RANK, AWARD, SEASON, LOAD, RESET -> {
+                case RANK, AWARD, SEASON, LOAD, RESET, START_OVER -> {
                     synchronized (COUNTED) {
                         COUNTED.clear();
                     }

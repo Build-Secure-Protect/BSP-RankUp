@@ -4,6 +4,16 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-24
+
+On a network, update every backend together: the shared players table gains a `reset_season` column, and an older RankUp neither reads nor respects it.
+
+### Added (2026-11-24, the season reset, BSP-Core's SR12)
+- **BSP-Core's `/bsp season reset` starts every player over in RankUp too.** When it reaches a server (`SeasonEvent.Ended` with `isSeasonReset()`, read by reflection, so RankUp still builds and runs against an older BSP-Core, where nothing changes), every player goes back to the bottom of every ladder: counts, bonus and every rung gone, waiting rewards dropped, and every rung and award gives its rewards again when it is reached again. Seasonal awards are taken back. Kept: permanent awards, awards an admin took, and the seasons survived, which go up by one for every player who played that season.
+- LuckPerms follows for every player RankUp knows, offline players too, from the server the reset was typed on (LuckPerms is shared, so once is enough); any server puts a player right at their next login there if that move failed or never reached them: each ladder's rungs come off, the first rung (or whichever the kept points reach) goes on with its title, seasonal awards come off and a title of theirs gives way to the latest permanent award's. No group off the ladders is touched: VIP, bug hunter, staff, store ranks and the season winners' groups stay. RankUp's own check then gives the rung's rewards when the player next plays.
+- On a network the server the reset was typed on rewrites the shared rows, in batches, and tries again every 30 seconds and at its next start if the database fails; its own new writes wait until that is done. Each row now remembers the last season reset it was started over for (a new `reset_season` column, added to the players table at the first start), and a server that has not heard of that reset yet writes nothing onto it. Every other server forgets its own copies and the changes it had not written yet. A server that reads a row still from before the reset (a player who logged in before the rewrite reached them) starts it over, writes it so, and moves that player in LuckPerms; the rewrite then leaves that row alone, so nobody is started over twice. A second hearing of the same reset does nothing.
+- A season reset posts no `RankChangedEvent`; listen for BSP-Core's `SeasonEvent.Ended` instead.
+
 ## [0.6.1] - 2026-11-24
 
 ### Changed

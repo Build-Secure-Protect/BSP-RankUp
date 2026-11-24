@@ -571,6 +571,87 @@ public final class LuckPermsBridge {
         return modifyUser(player, edit).thenApply(v -> ok.get());
     }
 
+    /**
+     * What a season reset does to one player in LuckPerms (owner decision SR12): the groups of {@code off} taken away
+     * (every ladder's rungs but the one each ladder starts the player on again, the seasonal awards taken back); the
+     * groups of {@code on} added (that starting rung, when the points the player keeps reach one); the prefix at each
+     * priority of {@code titles} set to its value (empty: none), as the rung's title; and the prefix at {@code
+     * awardPriority}, when it is the title of one of the awards taken back ({@code awardTitlesGone}), replaced by
+     * {@code awardTitleNext} (null: none). Nothing else is touched: no group off the ladders (VIP, bug hunter, staff,
+     * store ranks, the season winners'), no other prefix.
+     */
+    public record StartOver(Set<String> off, List<String> on, Map<Integer, Optional<String>> titles, int awardPriority, Set<String> awardTitlesGone,
+                            @Nullable String awardTitleNext) {
+        public StartOver {
+            off = Set.copyOf(off);
+            on = List.copyOf(on);
+            titles = Map.copyOf(titles);
+            awardTitlesGone = Set.copyOf(awardTitlesGone);
+        }
+    }
+
+    /**
+     * Applies a {@link StartOver} in one edit, for a player online or not. A stored primary group taken away becomes
+     * the first group of {@code on}, or {@code default}. Runs on a LuckPerms thread; false when LuckPerms is absent
+     * or the edit failed.
+     */
+    public static CompletableFuture<Boolean> startOver(UUID player, StartOver plan) {
+        if (!isPresent()) {
+            return CompletableFuture.completedFuture(false);
+        }
+        AtomicBoolean ok = new AtomicBoolean(false);
+        Consumer<Object> edit = user -> {
+            try {
+                Object data = call(user, "data");
+                boolean awardTitleGone = false;
+                String awardHead = "prefix." + plan.awardPriority() + ".";
+                for (Object n : new ArrayList<>(nodesOf(user))) {
+                    String key = (String) call(n, "getKey");
+                    if (key.startsWith("group.")) {
+                        if (plan.off().contains(key.substring("group.".length()))) {
+                            call(data, "remove", n);
+                        }
+                        continue;
+                    }
+                    for (Integer priority : plan.titles().keySet()) {
+                        if (key.startsWith("prefix." + priority + ".")) {
+                            call(data, "remove", n);
+                        }
+                    }
+                    if (!plan.titles().containsKey(plan.awardPriority()) && key.startsWith(awardHead)
+                            && plan.awardTitlesGone().contains(unescape(key.substring(awardHead.length())))) {
+                        call(data, "remove", n);
+                        awardTitleGone = true;
+                    }
+                }
+                for (String group : plan.on()) {
+                    call(data, "add", call(callStatic(INHERITANCE_NODE, "builder", group), "build"));
+                }
+                for (Map.Entry<Integer, Optional<String>> t : plan.titles().entrySet()) {
+                    if (t.getValue().isPresent()) {
+                        call(data, "add", call(callStatic(PREFIX_NODE, "builder", t.getValue().get(), t.getKey()), "build"));
+                    }
+                }
+                if (awardTitleGone && plan.awardTitleNext() != null) {
+                    call(data, "add", call(callStatic(PREFIX_NODE, "builder", plan.awardTitleNext(), plan.awardPriority()), "build"));
+                }
+                Object primary = call(user, "getPrimaryGroup");
+                if (primary instanceof String p && plan.off().contains(p)) {
+                    call(user, "setPrimaryGroup", plan.on().isEmpty() ? "default" : plan.on().get(0));
+                }
+                ok.set(true);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                warn("season reset", e);
+            }
+        };
+        try {
+            return modifyUser(player, edit).thenApply(v -> ok.get());
+        } catch (RuntimeException e) {
+            warn("season reset", e);
+            return CompletableFuture.completedFuture(false);
+        }
+    }
+
     /** Takes the player off every group of the track (a season's end below the first permanent rung). */
     public static CompletableFuture<Boolean> clearTrack(UUID player, String track) {
         if (!isPresent()) {

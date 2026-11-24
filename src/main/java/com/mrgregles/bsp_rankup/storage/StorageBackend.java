@@ -13,7 +13,15 @@ import java.util.UUID;
  */
 public interface StorageBackend {
     /** One player's row as stored. */
-    record PlayerRow(UUID player, Map<String, Long> counts, long bonus, @Nullable String rank, long rankedAt, @Nullable String pendingJson, int season, long seasonBase, long scorePeak, @Nullable String rewarded, @Nullable LadderValue ladders) {
+    /**
+     * {@code resetSeason}: the season ended by the last season reset this row was started over for, or written from
+     * scratch after (0: none). Only the season reset's writes and a row's first write set it (owner decision SR12).
+     */
+    record PlayerRow(UUID player, Map<String, Long> counts, long bonus, @Nullable String rank, long rankedAt, @Nullable String pendingJson, int season, long seasonBase, long scorePeak, @Nullable String rewarded, @Nullable LadderValue ladders,
+                     int resetSeason) {
+        public PlayerRow(UUID player, Map<String, Long> counts, long bonus, @Nullable String rank, long rankedAt, @Nullable String pendingJson, int season, long seasonBase, long scorePeak, @Nullable String rewarded, @Nullable LadderValue ladders) {
+            this(player, counts, bonus, rank, rankedAt, pendingJson, season, seasonBase, scorePeak, rewarded, ladders, 0);
+        }
     }
 
     /**
@@ -99,17 +107,51 @@ public interface StorageBackend {
 
     /**
      * One player's changes since the last write, merged: a delete first when the player was reset, then count and
-     * bonus deltas added, then the values set outright (null: unchanged, last write wins).
+     * bonus deltas added, then the values set outright (null: unchanged, last write wins). {@code resetSeason} is the
+     * last season reset the writing server had heard of; {@code startOver} marks the season reset's own rewrite of the row.
      */
     record PlayerWrite(UUID player, boolean delete, Map<String, Long> counts, long bonus, @Nullable RankValue rank, @Nullable Text pending, @Nullable SeasonValue season, @Nullable Text rewarded,
-                       @Nullable LadderValue ladders) {
+                       @Nullable LadderValue ladders, int resetSeason, boolean startOver) {
+        public PlayerWrite(UUID player, boolean delete, Map<String, Long> counts, long bonus, @Nullable RankValue rank, @Nullable Text pending, @Nullable SeasonValue season, @Nullable Text rewarded,
+                           @Nullable LadderValue ladders) {
+            this(player, delete, counts, bonus, rank, pending, season, rewarded, ladders, 0, false);
+        }
+    }
+
+    /**
+     * Whether a write may go onto a row whose reset marker is {@code rowReset} (-1: no row at all). A server that has
+     * not heard of the season reset the row was started over for writes nothing onto it (its copy is from before);
+     * the season reset's rewrite of a row already started over for that reset (by a server that read it) is left out.
+     */
+    static boolean admits(int rowReset, PlayerWrite w) {
+        if (rowReset < 0) {
+            return true;
+        }
+        if (rowReset > w.resetSeason()) {
+            return false;
+        }
+        return !w.startOver() || rowReset < w.resetSeason();
+    }
+
+    /** Whether a write starts the row afresh, so it carries the writer's reset marker: a delete, or a row that did not exist. */
+    static boolean marks(int rowReset, PlayerWrite w) {
+        return w.resetSeason() > 0 && (w.delete() || rowReset < 0);
     }
 
     void init() throws Exception;
 
-    /** Writes every player's changes, all or none: a backend with transactions overrides this with one. */
-    default void write(List<PlayerWrite> writes) throws Exception {
+    /**
+     * Writes every player's changes, all or none, and says whose were written: a write {@link #admits} refuses is
+     * left out. A backend with transactions overrides this to decide and write under one lock.
+     */
+    default List<UUID> write(List<PlayerWrite> writes) throws Exception {
+        List<UUID> written = new java.util.ArrayList<>();
         for (PlayerWrite w : writes) {
+            PlayerRow now = loadPlayer(w.player());
+            int rowReset = now == null ? -1 : now.resetSeason();
+            if (!admits(rowReset, w)) {
+                continue;
+            }
             if (w.delete()) {
                 deletePlayer(w.player());
             }
@@ -134,8 +176,16 @@ public interface StorageBackend {
             if (w.ladders() != null) {
                 setLadders(w.player(), w.ladders());
             }
+            if (marks(rowReset, w)) {
+                markReset(w.player(), w.resetSeason());
+            }
+            written.add(w.player());
         }
+        return written;
     }
+
+    /** Raises the row's reset marker to {@code season} (never lowers it), making the row if there is none. */
+    void markReset(UUID player, int season) throws Exception;
 
     void addCount(UUID player, String signal, long delta) throws Exception;
 
@@ -157,6 +207,12 @@ public interface StorageBackend {
 
     @Nullable
     PlayerRow loadPlayer(UUID player) throws Exception;
+
+    /**
+     * Every player's row at once (counts-only rows too), by player: the season reset's pass over the shared rows
+     * (owner decision SR12) reads them in one go rather than one player at a time.
+     */
+    Map<UUID, PlayerRow> loadAllPlayers() throws Exception;
 
     void saveSettings(String json, long version) throws Exception;
 

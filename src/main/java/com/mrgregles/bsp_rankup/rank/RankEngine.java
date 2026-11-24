@@ -273,7 +273,7 @@ public final class RankEngine {
         // rank, pending, season, rewarded and award writes come from the engine itself: reacting to them would rank a player twice
         ProgressLedger.Kind k = change.kind();
         if (change.server() != null && k != ProgressLedger.Kind.RANK && k != ProgressLedger.Kind.PENDING && k != ProgressLedger.Kind.SEASON
-                && k != ProgressLedger.Kind.REWARDED && k != ProgressLedger.Kind.AWARD) {
+                && k != ProgressLedger.Kind.REWARDED && k != ProgressLedger.Kind.AWARD && k != ProgressLedger.Kind.START_OVER) {
             check(change.server(), change.player());
         }
     }
@@ -322,6 +322,7 @@ public final class RankEngine {
     public static void onLogin(ServerPlayer player) {
         Settings settings = SettingsLedger.settings(player.server);
         Rewards.givePending(player, settings);
+        SeasonReset.atLogin(player.server, player.getUUID()); // LuckPerms put right after a season reset, before any rank-up
         check(player.server, player.getUUID());
     }
 
@@ -463,11 +464,15 @@ public final class RankEngine {
             return;
         }
         Rank to = ladder.ranks().get(target);
+        int reset = SeasonReset.generation();
         CompletableFuture<Boolean> apply = LuckPermsBridge.isPresent()
                 ? LuckPermsBridge.setGroup(player, ladder.track(), to.group())
                 : CompletableFuture.completedFuture(true);
         apply.whenComplete((ok, err) -> server.execute(() -> {
             IN_FLIGHT.remove(key);
+            if (reset != SeasonReset.generation()) {
+                return; // judged on points a season reset has since taken away: the next check judges again
+            }
             if (err != null || ok == null || !ok) {
                 warn("LuckPerms did not put " + Players.name(server, player) + " on group '" + to.group() + "' of track '" + ladder.track() + "'; the rank-up waits. Does the track hold that group?");
                 return;
@@ -564,11 +569,18 @@ public final class RankEngine {
             return;
         }
         ProgressLedger ledger = ProgressLedger.get(server);
+        int reset = SeasonReset.generation();
         CompletableFuture<LuckPermsBridge.Added> apply = LuckPermsBridge.isPresent()
                 ? LuckPermsBridge.addGroup(player, award.group())
                 : CompletableFuture.completedFuture(LuckPermsBridge.Added.ADDED);
         apply.whenComplete((added, err) -> server.execute(() -> {
             IN_FLIGHT.remove(key);
+            if (reset != SeasonReset.generation() && award.seasonal()) {
+                if (added == LuckPermsBridge.Added.ADDED && LuckPermsBridge.isPresent()) {
+                    LuckPermsBridge.removeGroup(player, award.group()); // reached on last season's points: taken back as the reset did
+                }
+                return; // a permanent award reached before the reset is kept, so it is recorded below
+            }
             if (err != null || added == null || added == LuckPermsBridge.Added.FAILED) {
                 warn("LuckPerms did not add group '" + award.group() + "' to " + Players.name(server, player) + "; the award waits. Does the group exist?");
                 return;

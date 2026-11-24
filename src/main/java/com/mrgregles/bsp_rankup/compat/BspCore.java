@@ -39,7 +39,28 @@ public final class BspCore {
     }
 
     private static void onSeasonEnded(SeasonEvent.Ended event) {
-        Seasons.endSeason(event.getServer(), event.getEndedNumber());
+        if (flag(event, "isSeasonReset")) {
+            com.mrgregles.bsp_rankup.rank.SeasonReset.apply(event.getServer(), event.getEndedNumber(), flag(event, "isOrigin"));
+        } else {
+            Seasons.endSeason(event.getServer(), event.getEndedNumber());
+        }
+    }
+
+    /**
+     * A boolean getter of a BSP-Core event, read by reflection so this mod builds and runs against a BSP-Core that
+     * lacks it ({@code SeasonEvent.Ended#isSeasonReset} and {@code #isOrigin} came after 1.24.1): false when the
+     * event has no such public method, or it fails.
+     */
+    public static boolean flag(Object event, String getter) {
+        try {
+            java.lang.reflect.Method m = event.getClass().getMethod(getter);
+            return (m.getReturnType() == boolean.class || m.getReturnType() == Boolean.class) && Boolean.TRUE.equals(m.invoke(event));
+        } catch (NoSuchMethodException e) {
+            return false; // an older BSP-Core
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            BSPRankUp.LOGGER.warn("BSP-Core's {} could not be read: {}", getter, e.toString());
+            return false;
+        }
     }
 
     private static void onStealEnded(TotemEvent.StealEnded event) {

@@ -114,11 +114,12 @@ public final class Seasons {
         if (active) {
             ledger.add(player, Signal.SEASONS_SURVIVED, 1);
         }
+        int reset = SeasonReset.generation();
         List<CompletableFuture<?>> moves = new ArrayList<>();
         for (Ladder ladder : settings.ladders()) {
             int current = held.get(ladder.name());
             if (current >= 0 && ladder.ranks().get(current).seasonal()) {
-                moves.add(fall(server, player, season, settings, ladder, current));
+                moves.add(fall(server, player, season, settings, ladder, current, reset));
             }
         }
         for (Award award : takenBack) {
@@ -127,6 +128,9 @@ public final class Seasons {
                     : CompletableFuture.completedFuture(true);
             moves.add(remove.handle((ok, err) -> {
                 server.execute(() -> {
+                    if (reset != SeasonReset.generation()) {
+                        return; // a season reset came meanwhile and did it
+                    }
                     if (err == null && ok != null && ok) {
                         ledger.setAward(player, award.group(), false, 0);
                         dropAwardTitle(server, settings, player, award);
@@ -181,7 +185,7 @@ public final class Seasons {
     }
 
     /** Moves the player off a seasonal rung to the highest permanent rung below it on the same ladder (or off it). */
-    private static CompletableFuture<?> fall(MinecraftServer server, UUID player, int season, Settings settings, Ladder ladder, int current) {
+    private static CompletableFuture<?> fall(MinecraftServer server, UUID player, int season, Settings settings, Ladder ladder, int current, int reset) {
         int target = -1;
         for (int i = current - 1; i >= 0; i--) {
             if (!ladder.ranks().get(i).seasonal()) {
@@ -200,6 +204,9 @@ public final class Seasons {
         }
         return move.handle((ok, err) -> {
             server.execute(() -> {
+                if (reset != SeasonReset.generation()) {
+                    return; // a season reset came meanwhile: it moved the player itself
+                }
                 if (err != null || ok == null || !ok) {
                     BSPRankUp.LOGGER.warn("Season {}: LuckPerms did not move {} off the seasonal rung of {}; they keep it until the next login", season, Players.name(server, player), ladder.name());
                     return;

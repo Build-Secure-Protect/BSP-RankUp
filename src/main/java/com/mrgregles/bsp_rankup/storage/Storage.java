@@ -4,9 +4,11 @@ import com.mrgregles.bsp_rankup.BSPRankUp;
 import com.mrgregles.bsp_rankup.RankUpConfig;
 import com.mrgregles.bsp_rankup.RankUpNetworkConfig;
 import com.mrgregles.bsp_rankup.compat.RegionGuard;
+import com.mrgregles.bsp_rankup.progress.Progress;
 import com.mrgregles.bsp_rankup.progress.ProgressLedger;
 import com.mrgregles.bsp_rankup.progress.Signal;
 import com.mrgregles.bsp_rankup.rank.RankEngine;
+import com.mrgregles.bsp_rankup.rank.SeasonReset;
 import com.mrgregles.bsp_rankup.settings.Settings;
 import com.mrgregles.bsp_rankup.settings.SettingsFiles;
 import com.mrgregles.bsp_rankup.settings.SettingsLedger;
@@ -108,12 +110,28 @@ public final class Storage {
     private volatile boolean writeSoon;
     /** The worker's write and prune timers (worker thread, or a test's drain). */
     private long nextWriteMs, backoffMs, lastPruneMs;
+    /**
+     * Counts the season resets heard while this storage runs: a row read before one is read again, and a batch
+     * taken before one is not put back when its write fails, so nothing from before a reset comes back from here.
+     */
+    private volatile int resetGeneration;
+    /** The last season reset this server heard of: every write carries it, so a row started over for a later one refuses it. */
+    private volatile int resetSeason;
+    /** A season reset typed here whose pass over the shared rows waits or failed (0: none), with the settings at the reset. */
+    private volatile int sharedResetSeason;
+    @Nullable
+    private volatile Settings sharedResetSettings;
+    private volatile long nextSharedResetMs;
+    private static final long SHARED_RESET_RETRY_MS = 30_000;
+    /** Rows written per transaction by the season reset's pass. */
+    static final int SHARED_RESET_BATCH = 500;
 
     private Storage(MinecraftServer server, StorageBackend backend, String serverId, int pollSeconds, boolean threaded) {
         this.server = server;
         this.backend = backend;
         this.serverId = serverId;
         this.pollSeconds = pollSeconds;
+        this.resetSeason = ProgressLedger.get(server).lastResetSeason();
         ProgressLedger.onChange(changeListener);
         SettingsLedger.onChange(settingsListener);
         RankEngine.onRankUp(rankUpListener);
@@ -158,6 +176,11 @@ public final class Storage {
             BSPRankUp.LOGGER.info("RankUp storage connected: {} (this server is '{}')", backend.describe(), s.serverId);
         });
         s.loadSettingsFromShared();
+        int pendingReset = ProgressLedger.get(server).pendingSharedReset();
+        if (pendingReset > 0) {
+            BSPRankUp.LOGGER.warn("The season reset of season {} was typed here but the shared rows were not all started over: trying again", pendingReset);
+            s.startOverShared(pendingReset, SettingsLedger.settings(server));
+        }
         if (RankUpConfig.getOr(RankUpConfig.REDIS_ENABLED, false)) {
             s.safetyPollSeconds = RankUpConfig.getOr(RankUpConfig.REDIS_SAFETY_POLL_SECONDS, 30);
             s.connectRedis(new RedisLink.Settings(
@@ -283,7 +306,12 @@ public final class Storage {
                     r.run();
                 }
             }
-            writeUnsent();
+            if (sharedResetSeason != 0) {
+                runSharedReset();
+            }
+            if (sharedResetSeason == 0) {
+                writeUnsent(); // changes made since the reset wait until its pass is written, or the pass would undo them
+            }
         } while (!work.isEmpty()); // a reset's notice, queued after its delete was written
     }
 
@@ -303,8 +331,11 @@ public final class Storage {
                     r.run();
                 }
                 long now = System.currentTimeMillis();
-                if (now >= nextWriteMs || (writeSoon && backoffMs == 0)) {
-                    writeUnsent();
+                if (sharedResetSeason != 0 && now >= nextSharedResetMs) {
+                    runSharedReset();
+                }
+                if (sharedResetSeason == 0 && (now >= nextWriteMs || (writeSoon && backoffMs == 0))) {
+                    writeUnsent(); // held while a season reset's pass waits: it would undo them
                 }
                 if (now - lastPruneMs >= PRUNE_EVERY_MS) {
                     lastPruneMs = now;
@@ -375,8 +406,8 @@ public final class Storage {
                 record(player, Unsent::reset); // what came before is wiped; the notice goes out once the delete is written
                 writeSoon = true;
             }
-            case LOAD -> {
-                // came from here
+            case LOAD, START_OVER -> {
+                // came from here, or a season reset, whose shared rows only the server it was typed on rewrites
             }
         }
     }
@@ -398,18 +429,26 @@ public final class Storage {
      */
     private void writeUnsent() {
         Map<UUID, Unsent> batch;
+        int generation;
+        int marker;
         synchronized (unsent) {
             if (unsent.isEmpty()) {
                 return;
             }
             batch = new HashMap<>(unsent);
             unsent.clear();
+            generation = resetGeneration;
+            marker = resetSeason;
         }
         writeSoon = false;
         List<StorageBackend.PlayerWrite> writes = new ArrayList<>(batch.size());
-        batch.forEach((player, u) -> writes.add(u.toWrite(player)));
+        batch.forEach((player, u) -> writes.add(u.toWrite(player, marker)));
         try {
-            backend.write(writes);
+            List<UUID> written = backend.write(writes);
+            if (written.size() < writes.size()) {
+                BSPRankUp.LOGGER.info("RankUp storage: {} players' changes were left out: their rows were started over by a season reset this server has not heard of yet",
+                        writes.size() - written.size());
+            }
             backoffMs = 0;
             nextWriteMs = System.currentTimeMillis() + WRITE_EVERY_MS;
             // a reset, or a rank, reward or bonus written for a player who is not here (an admin's points, a totem of theirs
@@ -425,6 +464,10 @@ public final class Storage {
                 }));
             }
         } catch (Exception e) {
+            if (generation != resetGeneration) {
+                failed(e); // changes from before a season reset: dropped, not tried again
+                return;
+            }
             synchronized (unsent) {
                 batch.forEach((player, older) -> {
                     Unsent newer = unsent.get(player);
@@ -450,6 +493,8 @@ public final class Storage {
     /** One player's changes not yet written: count and bonus deltas merged, the latest of each set value (null: unchanged). */
     private static final class Unsent {
         boolean delete;
+        /** The season reset's rewrite of the row: refused by a row already started over for that reset. */
+        boolean startOver;
         final Map<String, Long> counts = new HashMap<>();
         long bonus;
         @Nullable
@@ -464,6 +509,7 @@ public final class Storage {
         /** The player was reset: everything before is dropped and the row is deleted first. */
         void reset() {
             delete = true;
+            startOver = false;
             counts.clear();
             bonus = 0;
             rank = null;
@@ -495,6 +541,9 @@ public final class Storage {
             if (newer.ladders != null) {
                 ladders = newer.ladders;
             }
+            if (newer.startOver) {
+                startOver = true;
+            }
         }
 
         Unsent copy() {
@@ -503,14 +552,14 @@ public final class Storage {
             return u;
         }
 
-        StorageBackend.PlayerWrite toWrite(UUID player) {
+        StorageBackend.PlayerWrite toWrite(UUID player, int resetSeason) {
             Map<String, Long> deltas = new HashMap<>();
             counts.forEach((key, n) -> {
                 if (n != 0) {
                     deltas.put(key, n);
                 }
             });
-            return new StorageBackend.PlayerWrite(player, delete, deltas, bonus, rank, pending, season, rewarded, ladders);
+            return new StorageBackend.PlayerWrite(player, delete, deltas, bonus, rank, pending, season, rewarded, ladders, resetSeason, startOver);
         }
     }
 
@@ -581,6 +630,130 @@ public final class Storage {
         }
     }
 
+    // ------------------------------------------------------------------ season reset (owner decision SR12)
+
+    /**
+     * A season reset reached this server: the changes not yet written are forgotten (they are from before it), and
+     * a row being read now is read again once it arrives. Server thread.
+     */
+    public void startOver(int endedSeason) {
+        boolean deletes = false;
+        synchronized (unsent) {
+            Map<UUID, Unsent> kept = new HashMap<>();
+            unsent.forEach((player, u) -> {
+                if (u.delete) {
+                    Unsent d = new Unsent(); // an admin's reset of the player waits to be written: it still deletes the row
+                    d.reset();
+                    kept.put(player, d);
+                }
+            });
+            unsent.clear();
+            unsent.putAll(kept);
+            deletes = !kept.isEmpty();
+            resetGeneration++;
+            resetSeason = Math.max(resetSeason, endedSeason);
+        }
+        writeSoon = deletes;
+    }
+
+    /**
+     * The season reset was typed here: every shared row from before it is started over ({@link Progress#startedOver})
+     * on the worker, in batches, and each batch's players are moved in LuckPerms once written. A row already started
+     * over (a second try) is left as it is, so a failed pass is simply tried again, every
+     * {@value #SHARED_RESET_RETRY_MS} ms and at the next start.
+     */
+    public void startOverShared(int endedSeason, Settings settings) {
+        sharedResetSettings = settings;
+        sharedResetSeason = endedSeason;
+        nextSharedResetMs = 0;
+    }
+
+    /** Whether a season reset's pass over the shared rows waits (tests). */
+    public boolean sharedResetWaiting() {
+        return sharedResetSeason != 0;
+    }
+
+    private void runSharedReset() {
+        int season = sharedResetSeason;
+        Settings settings = sharedResetSettings;
+        if (season == 0 || settings == null) {
+            return;
+        }
+        Set<String> seasonal = SeasonReset.seasonalAwards(settings);
+        try {
+            Map<UUID, StorageBackend.PlayerRow> rows = backend.loadAllPlayers();
+            List<StorageBackend.PlayerWrite> writes = new ArrayList<>();
+            List<SeasonReset.Restart> restarts = new ArrayList<>();
+            for (StorageBackend.PlayerRow row : rows.values()) {
+                if (row.resetSeason() >= season) {
+                    continue; // started over already
+                }
+                Progress before = progressOf(row);
+                Progress after = before.startedOver(season, seasonal);
+                Unsent u = startedOver(after);
+                writes.add(u.toWrite(row.player(), season));
+                restarts.add(new SeasonReset.Restart(row.player(), before, after));
+            }
+            int started = 0;
+            for (int from = 0; from < writes.size(); from += SHARED_RESET_BATCH) {
+                int to = Math.min(writes.size(), from + SHARED_RESET_BATCH);
+                Set<UUID> written = Set.copyOf(backend.write(writes.subList(from, to)));
+                started += written.size();
+                List<SeasonReset.Restart> done = restarts.subList(from, to).stream().filter(r -> written.contains(r.player())).toList();
+                server.execute(() -> SeasonReset.sharedWritten(server, season, settings, done));
+            }
+            if (sharedResetSeason == season) {
+                sharedResetSeason = 0;
+            }
+            Set<UUID> inRows = Set.copyOf(rows.keySet());
+            int startedOver = started;
+            server.execute(() -> SeasonReset.sharedDone(server, season, settings, inRows, startedOver));
+        } catch (Exception e) {
+            nextSharedResetMs = System.currentTimeMillis() + SHARED_RESET_RETRY_MS;
+            failed(e);
+            BSPRankUp.LOGGER.warn("RankUp storage: the season reset's pass over the shared rows failed ({}); trying again in {} s", e.toString(), SHARED_RESET_RETRY_MS / 1000);
+        }
+    }
+
+    /** The write that puts a row where a season reset leaves it: deleted, then {@code after}'s values set. */
+    private static Unsent startedOver(Progress after) {
+        Unsent u = new Unsent();
+        fillStartedOver(u, after);
+        return u;
+    }
+
+    private static void fillStartedOver(Unsent u, Progress after) {
+        u.reset();
+        u.startOver = true;
+        long survived = after.count(Signal.SEASONS_SURVIVED);
+        if (survived > 0) {
+            u.counts.put(Signal.SEASONS_SURVIVED.key(), survived);
+        }
+        u.rank = new StorageBackend.RankValue(null, 0);
+        u.pending = new StorageBackend.Text(null);
+        u.rewarded = new StorageBackend.Text(null);
+        u.season = new StorageBackend.SeasonValue(after.season(), 0, 0);
+        u.ladders = StorageBackend.LadderValue.of(after);
+    }
+
+    /** A shared row as progress (its waiting rewards left out). */
+    private static Progress progressOf(StorageBackend.PlayerRow row) {
+        Map<Signal, Long> counts = new EnumMap<>(Signal.class);
+        row.counts().forEach((key, n) -> {
+            Signal s = Signal.byKey(key);
+            if (s != null && n > 0) {
+                counts.put(s, n);
+            }
+        });
+        Set<String> rewarded = new java.util.LinkedHashSet<>();
+        if (row.rewarded() != null && !row.rewarded().isBlank()) {
+            rewarded.addAll(List.of(row.rewarded().split(",")));
+        }
+        StorageBackend.LadderValue l = row.ladders();
+        return Progress.restored(counts, row.bonus(), row.rank(), row.rankedAt(), row.season(), row.seasonBase(), row.scorePeak(), rewarded,
+                l == null ? Map.of() : l.rankMap(), l == null ? Map.of() : l.baseMap(), l == null ? Map.of() : l.awardMap());
+    }
+
     // ------------------------------------------------------------------ reads
 
     /** Forwards a login to the active storage. */
@@ -618,6 +791,7 @@ public final class Storage {
     public void loadPlayer(UUID player) {
         work.add(() -> {
             StorageBackend.PlayerRow row;
+            int generation = resetGeneration;
             try {
                 row = backend.loadPlayer(player);
             } catch (Exception e) {
@@ -636,6 +810,20 @@ public final class Storage {
                 reading.computeIfAbsent(player, k -> new ArrayList<>()).add(since);
             }
             server.execute(() -> {
+                if (generation != resetGeneration) {
+                    // a season reset came while the row travelled: it may be from before it, so it is read again
+                    synchronized (unsent) {
+                        List<Unsent> reads = reading.get(player);
+                        if (reads != null) {
+                            reads.remove(since);
+                            if (reads.isEmpty()) {
+                                reading.remove(player);
+                            }
+                        }
+                    }
+                    loadPlayer(player);
+                    return;
+                }
                 apply(row, before, since);
                 readDone(player);
             });
@@ -679,7 +867,25 @@ public final class Storage {
             if (rewardedCsv != null && !rewardedCsv.isBlank()) {
                 rewarded.addAll(List.of(rewardedCsv.split(",")));
             }
-            ProgressLedger.get(server).load(row.player(), counts, bonus, rank, rankedAt, PendingJson.fromJson(pending), season, seasonBase, scorePeak, rewarded,
+            ProgressLedger ledger = ProgressLedger.get(server);
+            int resetSeason = ledger.lastResetSeason();
+            if (!extra.delete && row.resetSeason() < resetSeason) {
+                // a row from before the last season reset (the pass over the rows is not there yet): started over as read
+                Progress read = Progress.restored(counts, bonus, rank, rankedAt, season, seasonBase, scorePeak, rewarded,
+                        ladders == null ? Map.of() : ladders.rankMap(), ladders == null ? Map.of() : ladders.baseMap(), ladders == null ? Map.of() : ladders.awardMap());
+                Settings settings = SettingsLedger.settings(server);
+                Progress after = read.startedOver(resetSeason, SeasonReset.seasonalAwards(settings));
+                ledger.startOver(row.player(), after);
+                // the pass leaves this row alone from now on, so this server moves the player in LuckPerms (before any rank-up of theirs)
+                SeasonReset.moveLuckPerms(server, resetSeason, settings, List.of(new SeasonReset.Restart(row.player(), read, after)), Players.name(server, row.player()));
+                // and put right in the shared row, as the pass would (it leaves a row put right alone), or every later read
+                // would start the player over again
+                record(row.player(), u -> fillStartedOver(u, after));
+                writeSoon = true;
+                BSPRankUp.LOGGER.info("RankUp storage: {}'s row was still from before the season reset of season {}: started over as read", Players.name(server, row.player()), resetSeason);
+                return;
+            }
+            ledger.load(row.player(), counts, bonus, rank, rankedAt, PendingJson.fromJson(pending), season, seasonBase, scorePeak, rewarded,
                     ladders == null ? null : ladders.rankMap(), ladders == null ? null : ladders.baseMap(), ladders == null ? null : ladders.awardMap());
         } finally {
             applying = false;

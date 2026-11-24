@@ -232,6 +232,59 @@ public final class Progress {
         rewarded.addAll(groups);
     }
 
+    /**
+     * A copy of the parts a shared row holds (everything but the waiting rewards), for the season reset's pass over
+     * the rows: {@code awardMarks} as {@link #awardMarks()} gives them (a negative time: taken by an admin).
+     */
+    public static Progress restored(Map<Signal, Long> counts, long bonus, @Nullable String rank, long rankedAtMs, int season, long seasonBase, long scorePeak,
+                                    Set<String> rewarded, Map<String, Held> otherRanks, Map<String, Long> otherBases, Map<String, Long> awardMarks) {
+        Progress p = new Progress();
+        counts.forEach(p::set);
+        p.setBonus(bonus);
+        p.setRank(rank, rankedAtMs);
+        p.setSeason(season, seasonBase);
+        p.setScorePeak(scorePeak);
+        p.setRewarded(rewarded);
+        otherRanks.forEach((ladder, held) -> p.setOtherRank(ladder, held.group(), held.atMs()));
+        p.setOtherBases(otherBases);
+        p.awards.putAll(awardMarks);
+        return p;
+    }
+
+    /**
+     * True when the player has anything to show for the season a reset ends: a count other than the seasons
+     * survived, a bonus or a rung. Such a player has survived it; one whose only count is the seasons survived (they
+     * have not played since the last reset) has not.
+     */
+    public boolean isActive() {
+        for (Signal s : counts.keySet()) {
+            if (s != Signal.SEASONS_SURVIVED) {
+                return true;
+            }
+        }
+        return bonus != 0 || rank != null || !otherRanks.isEmpty();
+    }
+
+    /**
+     * What a season reset ({@code /bsp season reset}, owner decision SR12) leaves of this player, as a new object:
+     * every count at zero but the seasons survived, kept and one more for an {@link #isActive() active} player; no
+     * bonus; no rung on any ladder; no waiting rewards; no rung or award rewarded yet, so each rewards again; the
+     * season that ended recorded with every base and the score peak at zero; the permanent awards kept, and every
+     * award an admin took kept as taken; the seasonal awards ({@code seasonalAwards}, by group) gone, to be earned again.
+     */
+    public Progress startedOver(int endedSeason, Set<String> seasonalAwards) {
+        Progress p = new Progress();
+        long survived = count(Signal.SEASONS_SURVIVED) + (isActive() ? 1 : 0);
+        p.set(Signal.SEASONS_SURVIVED, survived);
+        p.setSeason(endedSeason, 0);
+        awards.forEach((group, at) -> {
+            if (at < 0 || !seasonalAwards.contains(group)) {
+                p.awards.put(group, at);
+            }
+        });
+        return p;
+    }
+
     public boolean isEmpty() {
         return counts.isEmpty() && bonus == 0 && rank == null && pending.isEmpty() && season == 0 && scorePeak == 0 && rewarded.isEmpty()
                 && otherRanks.isEmpty() && otherBases.isEmpty() && awards.isEmpty();

@@ -56,7 +56,7 @@ Package `com.mrgregles.bsp_rankup.api.event`, posted on `MinecraftForge.EVENT_BU
 
 | Event | When |
 |---|---|
-| `RankChangedEvent` | a player's rank changed on this server, on one ladder: `getPlayer()`, `getLadder()` (the ladder's name, version 2), `getFrom()` (null for none), `getTo()` (null when the player now holds none), `getCause()` (`EARNED` through points, `ADMIN` through `/rankup set` or the admin screen, `SEASON` at a season's end), `isPromotion()`. A jump over several rungs fires one event per rung, in order. The LuckPerms group has already changed when it fires. |
+| `RankChangedEvent` | a player's rank changed on this server, on one ladder: `getPlayer()`, `getLadder()` (the ladder's name, version 2), `getFrom()` (null for none), `getTo()` (null when the player now holds none), `getCause()` (`EARNED` through points, `ADMIN` through `/rankup set` or the admin screen, `SEASON` at a season's end), `isPromotion()`. A jump over several rungs fires one event per rung, in order. The LuckPerms group has already changed when it fires. A season reset (BSP-Core's `/bsp season reset`) moves every player back to the bottom without an event per player: listen for BSP-Core's `SeasonEvent.Ended` with `isSeasonReset()`. |
 
 ## Ranks in LuckPerms
 

@@ -30,7 +30,9 @@ public final class ProgressLedger extends SavedData {
     public static final String NAME = "bsp_rankup_progress";
 
     /** What kind of change happened. */
-    public enum Kind { COUNT, BONUS, RANK, PENDING, SEASON, REWARDED, AWARD, RESET, LOAD }
+    public enum Kind { COUNT, BONUS, RANK, PENDING, SEASON, REWARDED, AWARD, RESET, LOAD,
+        /** A season reset replaced the player's progress ({@link #startOver}): the shared storage and the ladder engine leave it alone. */
+        START_OVER }
 
     /**
      * What changed: the server (null for a ledger loaded outside a server, as in tests), the player, the kind, the
@@ -44,6 +46,10 @@ public final class ProgressLedger extends SavedData {
     private final Map<UUID, Progress> players = new HashMap<>();
     /** The number of the last season that ended on this server (0: none since this ledger began). */
     private int lastEndedSeason;
+    /** The number of the season ended by the last season reset heard here (0: none); a shared row from before it is stale. */
+    private int lastResetSeason;
+    /** A season reset typed here whose pass over the shared rows is not written yet (0: none): tried again at the next start. */
+    private int pendingSharedReset;
     @Nullable
     private MinecraftServer server;
 
@@ -276,6 +282,52 @@ public final class ProgressLedger extends SavedData {
         return out;
     }
 
+    public int lastResetSeason() {
+        return lastResetSeason;
+    }
+
+    public void setLastResetSeason(int season) {
+        if (season > lastResetSeason) {
+            lastResetSeason = season;
+            setDirty();
+        }
+    }
+
+    /**
+     * Tests: forgets the season resets heard, as a world that never had one, so the other tests' rows (season 0)
+     * are not taken for rows from before a reset. The game test world persists between runs.
+     */
+    public void forgetResetsForTests() {
+        lastResetSeason = 0;
+        pendingSharedReset = 0;
+        setDirty();
+    }
+
+    public int pendingSharedReset() {
+        return pendingSharedReset;
+    }
+
+    public void setPendingSharedReset(int season) {
+        if (season != pendingSharedReset) {
+            pendingSharedReset = season;
+            setDirty();
+        }
+    }
+
+    /**
+     * Replaces the player's progress with what a season reset leaves ({@link Progress#startedOver}). One START_OVER
+     * change tells the listeners: the shared storage writes nothing for it and the ladder engine checks nothing.
+     */
+    public void startOver(UUID player, Progress after) {
+        if (after.isEmpty()) {
+            players.remove(player);
+        } else {
+            players.put(player, after);
+        }
+        setDirty();
+        notify(new Change(server, player, Kind.START_OVER, null, 0, after));
+    }
+
     /** Forgets everything about the player: counts, bonus and rank. */
     public void reset(UUID player) {
         players.remove(player);
@@ -301,12 +353,20 @@ public final class ProgressLedger extends SavedData {
         });
         tag.put("Players", list);
         tag.putInt("LastEndedSeason", lastEndedSeason);
+        if (lastResetSeason != 0) {
+            tag.putInt("LastResetSeason", lastResetSeason);
+        }
+        if (pendingSharedReset != 0) {
+            tag.putInt("PendingSharedReset", pendingSharedReset);
+        }
         return tag;
     }
 
     public static ProgressLedger load(CompoundTag tag) {
         ProgressLedger ledger = new ProgressLedger();
         ledger.lastEndedSeason = tag.getInt("LastEndedSeason");
+        ledger.lastResetSeason = tag.getInt("LastResetSeason");
+        ledger.pendingSharedReset = tag.getInt("PendingSharedReset");
         ListTag list = tag.getList("Players", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
             CompoundTag entry = list.getCompound(i);
