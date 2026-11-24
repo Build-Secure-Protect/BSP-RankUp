@@ -4,7 +4,14 @@ All notable changes to BSP RankUp. Format follows Keep a Changelog; versions fol
 
 ## [Unreleased]
 
-To be 0.6.0 (D133). The network protocol stays 4 (the settings reach the admin screen as NBT), so 0.5.0 clients still join; an admin needs 0.6.0 in their pack to see the new switch.
+## [0.6.1] - 2026-11-24
+
+### Changed
+- Built against BSP-Core 1.23.0, so the older BSP-Core jars are no longer needed to build it. It still runs with the BSP-Core versions it ran with before.
+
+## [0.6.0] - 2026-11-07
+
+0.6.0 (D133). The network protocol stays 4 (the settings reach the admin screen as NBT), so 0.5.0 clients still join; an admin needs 0.6.0 in their pack to see the new switch.
 
 ### Art (2026-11-22, D135 to D139)
 - Two supporter images in `docs/prefix_images/`: `vip.png`, a royal purple banner edged and lettered in gold (a prefix before the name), and `bug_hunter.png`, a red ladybird on the grey disc of the achievement icons (a suffix after the name), for players who paid to help fix a bug. Drawn by `tools/prefix_art/gen_supporter_art.py`; `commands.txt` gains their LuckPerms groups, images and hover notes.
